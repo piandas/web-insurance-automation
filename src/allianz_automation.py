@@ -100,7 +100,7 @@ async def main():
     
     # Configuración
     usuario = "CA031800"
-    contrasena = "Infondo2025*"
+    contrasena = "Agenciainfondo**"
     headless = False
     
     # Crear instancia de automatización

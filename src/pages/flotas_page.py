@@ -142,6 +142,155 @@ class FlotasPage(BasePage):
             print(f"❌ Timeout o error esperando botón Aceptar: {e}")
             return False
 
+    async def click_radio_no_asegurado(self) -> bool:
+        """Busca y hace clic en el radio button 'No' para la pregunta de asegurado."""
+        print("🔘 Buscando radio button 'No' para asegurado...")
+        
+        try:
+            # Esperar dinámicamente a que aparezca el radio button en iframe
+            print("⏳ Esperando radio button 'No' en iframe...")
+            await self.page.wait_for_function(
+                """
+                () => {
+                    const iframe = document.querySelector('iframe');
+                    const doc = iframe?.contentDocument;
+                    if (!doc) return false;
+                    
+                    // Buscar por ID
+                    const radioNo = doc.querySelector('#IntervinientesBean\\\\$esAsegurado2');
+                    if (radioNo && radioNo.offsetParent) return true;
+                    
+                    // Buscar por name con value='N'
+                    const radiosByName = doc.querySelectorAll('input[name="IntervinientesBean$esAsegurado"]');
+                    for (let radio of radiosByName) {
+                        if (radio.value === 'N' && radio.offsetParent) return true;
+                    }
+                    return false;
+                }
+                """,
+                timeout=15000
+            )
+            print("✅ Radio button 'No' detectado!")
+            
+            # Hacer clic en el radio button
+            clicked = await self.page.evaluate("""
+                () => {
+                    const iframe = document.querySelector('iframe');
+                    const doc = iframe?.contentDocument;
+                    if (!doc) return false;
+                    
+                    // Buscar el radio button con id IntervinientesBean$esAsegurado2
+                    const radioNo = doc.querySelector('#IntervinientesBean\\\\$esAsegurado2');
+                    if (radioNo) {
+                        radioNo.click();
+                        return true;
+                    }
+                    
+                    // Buscar por name si no se encuentra por ID
+                    const radiosByName = doc.querySelectorAll('input[name="IntervinientesBean$esAsegurado"]');
+                    for (let radio of radiosByName) {
+                        if (radio.value === 'N') {
+                            radio.click();
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            """)
+            if clicked:
+                print("✅ ¡Clic en radio button 'No' exitoso!")
+                return True
+            
+            print("❌ No se pudo hacer clic en el radio button")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Timeout o error esperando radio button 'No': {e}")
+            return False
+
+    async def select_tipo_documento(self, tipo_documento: str = "CEDULA_CIUDADANIA") -> bool:
+        """
+        Selecciona el tipo de documento en el dropdown.
+        """
+        # Mapeo de tipos de documento a valores del select
+        tipo_map = {
+            "NIT": " ",
+            "REG_CIVIL_NACIMIENTO": "I",
+            "NUIP": "J", 
+            "TARJETA_IDENTIDAD": "B",
+            "CEDULA_CIUDADANIA": "C",
+            "CEDULA_EXTRANJERIA": "X",
+            "PASAPORTE": "P",
+            "IDENTIFICACION_EXTRANJEROS": "L",
+            "MENOR_SIN_IDENTIFICACION": "Q",
+            "PEP": "E",
+            "OTROS_DOCUMENTOS": "S",
+            "PPT": "T",
+            "SOCIEDAD_EXTRANJERA": "W"
+        }
+        
+        if tipo_documento not in tipo_map:
+            print(f"❌ Tipo de documento '{tipo_documento}' no válido. Opciones: {list(tipo_map.keys())}")
+            return False
+            
+        valor_select = tipo_map[tipo_documento]
+        print(f"📋 Seleccionando '{tipo_documento}' en tipo de documento...")
+        
+        try:
+            # Esperar dinámicamente a que aparezca el select en iframe
+            print("⏳ Esperando dropdown de tipo de documento en iframe...")
+            await self.page.wait_for_function(
+                """
+                () => {
+                    const iframe = document.querySelector('iframe');
+                    const doc = iframe?.contentDocument;
+                    if (!doc) return false;
+                    
+                    const select = doc.querySelector('#IntervinientesBean\\\\$nifAsegurado_tipoDoc');
+                    return select && select.offsetParent && select.options.length > 0;
+                }
+                """,
+                timeout=15000
+            )
+            print("✅ Dropdown de tipo de documento detectado!")
+            
+            # Seleccionar el tipo de documento especificado
+            selected = await self.page.evaluate(f"""
+                () => {{
+                    const iframe = document.querySelector('iframe');
+                    const doc = iframe?.contentDocument;
+                    if (!doc) return false;
+                    
+                    const select = doc.querySelector('#IntervinientesBean\\\\$nifAsegurado_tipoDoc');
+                    if (select) {{
+                        // Seleccionar el tipo de documento especificado
+                        select.value = "{valor_select}";
+                        
+                        // Disparar evento change para notificar el cambio
+                        const changeEvent = new Event('change', {{ bubbles: true }});
+                        select.dispatchEvent(changeEvent);
+                        
+                        return {{
+                            success: true,
+                            newValue: select.value,
+                            selectedText: select.options[select.selectedIndex].title
+                        }};
+                    }}
+                    return {{ success: false }};
+                }}
+            """)
+            
+            if selected and selected.get('success'):
+                print(f"✅ ¡{tipo_documento} seleccionado exitosamente! Valor: {selected.get('newValue')}")
+                return True
+            
+            print(f"❌ No se pudo seleccionar {tipo_documento}")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Timeout o error seleccionando tipo de documento: {e}")
+            return False
+
     async def execute_flotas_flow(self) -> bool:
         """Ejecuta el flujo completo de la página de flotas."""
         print("🚗 Iniciando flujo de Flotas...")
@@ -163,6 +312,20 @@ class FlotasPage(BasePage):
             if not await self.click_aceptar():
                 print("⚠️ Falló clic en 'Aceptar'")
                 return False
+
+            # Paso 4: Click en radio button 'No' asegurado
+            if not await self.click_radio_no_asegurado():
+                print("⚠️ Falló clic en radio button 'No' asegurado")
+                return False
+                
+            print("✅ Opción 'No' asegurado seleccionada")
+            
+            # Paso 5: Seleccionar tipo de documento (por defecto: Cédula de ciudadanía)         
+            if not await self.select_tipo_documento("CEDULA_CIUDADANIA"):
+                print("⚠️ Falló selección de tipo de documento")
+                return False
+                
+            print("✅ Tipo de documento seleccionado")
                 
             print("✅ ¡FLUJO DE FLOTAS COMPLETADO EXITOSAMENTE!")
             return True
