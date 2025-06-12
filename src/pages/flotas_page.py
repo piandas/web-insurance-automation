@@ -291,6 +291,203 @@ class FlotasPage(BasePage):
             print(f"❌ Timeout o error seleccionando tipo de documento: {e}")
             return False
 
+    async def fill_numero_documento(self, numero_documento: str = "1026258710") -> bool:
+        """
+        Llena el campo de número de documento.
+        
+        Args:
+            numero_documento (str): Número de documento a ingresar (por defecto: "1026258710")
+        """
+        print(f"📝 Llenando número de documento: {numero_documento}...")
+        
+        try:
+            # Esperar dinámicamente a que aparezca el input en iframe
+            print("⏳ Esperando campo de número de documento en iframe...")
+            await self.page.wait_for_function(
+                """
+                () => {
+                    const iframe = document.querySelector('iframe');
+                    const doc = iframe?.contentDocument;
+                    if (!doc) return false;
+                    
+                    const input = doc.querySelector('#IntervinientesBean\\\\$nifAsegurado_doc');
+                    return input && input.offsetParent;
+                }
+                """,
+                timeout=15000
+            )
+            print("✅ Campo de número de documento detectado!")
+            
+            # Llenar el campo con el número especificado
+            filled = await self.page.evaluate(f"""
+                () => {{
+                    const iframe = document.querySelector('iframe');
+                    const doc = iframe?.contentDocument;
+                    if (!doc) return false;
+                    
+                    const input = doc.querySelector('#IntervinientesBean\\\\$nifAsegurado_doc');
+                    if (input) {{
+                        // Limpiar el campo y escribir el nuevo número
+                        input.value = '';
+                        input.value = '{numero_documento}';
+                        
+                        // Disparar eventos para notificar el cambio
+                        const inputEvent = new Event('input', {{ bubbles: true }});
+                        const changeEvent = new Event('change', {{ bubbles: true }});
+                        
+                        input.dispatchEvent(inputEvent);
+                        input.dispatchEvent(changeEvent);
+                        
+                        return {{
+                            success: true,
+                            newValue: input.value,
+                            id: input.id
+                        }};
+                    }}
+                    return {{ success: false }};
+                }}
+            """)
+            
+            if filled and filled.get('success'):
+                print(f"✅ ¡Número de documento {numero_documento} ingresado exitosamente!")
+                return True
+            
+            print(f"❌ No se pudo llenar el número de documento")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Timeout o error llenando número de documento: {e}")
+            return False
+
+    async def select_categoria_riesgo_liviano(self) -> bool:
+        """
+        Selecciona 'Liviano Particulares' del dropdown CategoriaRiesgoBean$catRiesgo.
+        """
+        print("📋 Seleccionando 'Liviano Particulares' en categoría de riesgo...")
+        
+        try:
+            # Esperar dinámicamente a que aparezca el select en iframe
+            print("⏳ Esperando dropdown de categoría de riesgo en iframe...")
+            await self.page.wait_for_function(
+                """
+                () => {
+                    const iframe = document.querySelector('iframe');
+                    const doc = iframe?.contentDocument;
+                    if (!doc) return false;
+                    
+                    const select = doc.querySelector('#CategoriaRiesgoBean\\\\$catRiesgo');
+                    return select && select.offsetParent && select.options.length > 0;
+                }
+                """,
+                timeout=15000
+            )
+            print("✅ Dropdown de categoría de riesgo detectado!")
+            
+            # Seleccionar "Liviano Particulares" (valor "L0008")
+            selected = await self.page.evaluate("""
+                () => {
+                    const iframe = document.querySelector('iframe');
+                    const doc = iframe?.contentDocument;
+                    if (!doc) return false;
+                    
+                    const select = doc.querySelector('#CategoriaRiesgoBean\\\\$catRiesgo');
+                    if (select) {
+                        // Seleccionar "Liviano Particulares" (valor L0008)
+                        select.value = "L0008";
+                        
+                        // Disparar evento change para notificar el cambio y ejecutar cargarCodigo()
+                        const changeEvent = new Event('change', { bubbles: true });
+                        select.dispatchEvent(changeEvent);
+                        
+                        // También ejecutar la función onchange directamente si existe
+                        if (typeof cargarCodigo === 'function') {
+                            cargarCodigo(select);
+                        }
+                        
+                        return {
+                            success: true,
+                            newValue: select.value,
+                            selectedText: select.options[select.selectedIndex].title
+                        };
+                    }
+                    return { success: false };
+                }
+            """)
+            
+            if selected and selected.get('success'):
+                print(f"✅ ¡'Liviano Particulares' seleccionado exitosamente! Valor: {selected.get('newValue')}")
+                return True
+            
+            print("❌ No se pudo seleccionar 'Liviano Particulares'")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Timeout o error seleccionando categoría de riesgo: {e}")
+            return False
+
+    async def click_btn_aceptar_final(self) -> bool:
+        """
+        Hace clic en el botón final #btnAceptar que ejecuta eventoSiguiente().
+        """
+        print("🔘 Buscando botón Aceptar final (#btnAceptar)...")
+        
+        try:
+            # Esperar dinámicamente a que aparezca el botón en iframe
+            print("⏳ Esperando botón Aceptar final en iframe...")
+            await self.page.wait_for_function(
+                """
+                () => {
+                    const iframe = document.querySelector('iframe');
+                    const doc = iframe?.contentDocument;
+                    if (!doc) return false;
+                    
+                    const btnAceptar = doc.querySelector('#btnAceptar');
+                    return btnAceptar && btnAceptar.offsetParent && 
+                           btnAceptar.textContent.toLowerCase().includes('aceptar');
+                }
+                """,
+                timeout=15000
+            )
+            print("✅ Botón Aceptar final detectado!")
+            
+            # Hacer clic en el botón final
+            clicked = await self.page.evaluate("""
+                () => {
+                    const iframe = document.querySelector('iframe');
+                    const doc = iframe?.contentDocument;
+                    if (!doc) return false;
+                    
+                    const btnAceptar = doc.querySelector('#btnAceptar');
+                    if (btnAceptar) {
+                        // Hacer clic en el botón (esto ejecutará eventoSiguiente())
+                        btnAceptar.click();
+                        
+                        // También ejecutar eventoSiguiente() directamente si existe
+                        if (typeof eventoSiguiente === 'function') {
+                            eventoSiguiente();
+                        }
+                        
+                        return {
+                            success: true,
+                            id: btnAceptar.id,
+                            text: btnAceptar.textContent.trim()
+                        };
+                    }
+                    return { success: false };
+                }
+            """)
+            
+            if clicked and clicked.get('success'):
+                print(f"✅ ¡Clic en botón Aceptar final exitoso! ID: {clicked.get('id')}")
+                return True
+            
+            print("❌ No se pudo hacer clic en el botón Aceptar final")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Timeout o error haciendo clic en botón Aceptar final: {e}")
+            return False
+
     async def execute_flotas_flow(self) -> bool:
         """Ejecuta el flujo completo de la página de flotas."""
         print("🚗 Iniciando flujo de Flotas...")
@@ -326,6 +523,26 @@ class FlotasPage(BasePage):
                 return False
                 
             print("✅ Tipo de documento seleccionado")
+            
+            # Paso 6: Llenar número de documento
+            if not await self.fill_numero_documento("1026258710"):
+                print("⚠️ Falló llenado de número de documento")
+                return False
+                
+            print("✅ Número de documento ingresado")
+              # Paso 7: Seleccionar categoría de riesgo 'Liviano Particulares'
+            if not await self.select_categoria_riesgo_liviano():
+                print("⚠️ Falló selección de categoría de riesgo")
+                return False
+                
+            print("✅ Categoría de riesgo seleccionada")
+            
+            # Paso 8: Click en botón Aceptar final
+            if not await self.click_btn_aceptar_final():
+                print("⚠️ Falló clic en botón Aceptar final")
+                return False
+                
+            print("✅ Botón Aceptar final presionado")
                 
             print("✅ ¡FLUJO DE FLOTAS COMPLETADO EXITOSAMENTE!")
             return True
