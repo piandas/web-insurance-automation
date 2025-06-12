@@ -34,6 +34,20 @@ class AllianzAutomation:
         stream_handler.setLevel(logging.INFO)
         stream_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
         logging.root.addHandler(stream_handler)
+        
+        # Logging a archivo
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'LOGS')
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        log_file_path = os.path.join(log_dir, 'log.log')
+        if not os.path.exists(log_file_path):
+            with open(log_file_path, 'w', encoding='utf-8') as f:
+                f.write('# Log de la automatización Allianz\n')
+        file_handler = logging.FileHandler(log_file_path, encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+        logging.root.addHandler(file_handler)
+        
         logging.root.setLevel(logging.INFO)
         self.logger = logging.getLogger('allianz')
 
