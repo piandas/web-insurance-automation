@@ -80,11 +80,11 @@ class PlacaPage(BasePage):
             self.logger.info(f"✅ Campo verificado inmediatamente con valor: '{immediate}'")
             return True
 
-        # Retry hasta 10 segundos (10 intentos de 1s)
+        # Retry hasta 10 segundos (20 intentos de 1s)
         result = await self._retry_evaluate(
             script,
             validate=lambda r: bool(r),
-            attempts=10,
+            attempts=20,
             interval_ms=1000,
             log_tag="campo de verificación"
         )
