@@ -1,7 +1,6 @@
 from playwright.async_api import Page
 from src.utils import BasePage
 import logging
-import asyncio
 
 class PlacaPage(BasePage):
     """Página para manejo de placa y comprobación."""
@@ -9,7 +8,9 @@ class PlacaPage(BasePage):
     # Selectores
     SELECTOR_INPUT_PLACA = "#DatosVehiculoIndividualBean\\$matricula"
     SELECTOR_BTN_COMPROBAR = "#btnPlaca"
-    SELECTOR_CAMPO_VERIFICACION = "#_CVH_VehicuCol\\$codigoClaveVeh"
+    SELECTOR_IFRAME = "iframe"
+    SELECTOR_INPUT_PLACA_IN_IFRAME = 'input[name="DatosVehiculoIndividualBean$matricula"]'
+    SELECTOR_CAMPO_VERIFICACION_IN_IFRAME = 'input[name="_CVH_VehicuCol$codigoClaveVeh"]'
 
     def __init__(self, page: Page):
         super().__init__(page)
@@ -27,129 +28,84 @@ class PlacaPage(BasePage):
     async def verificar_input_ready(self) -> bool:
         """Verifica que el input de placa esté listo y tenga el método getValue."""
         self.logger.info("🔍 Verificando que el input esté listo...")
-        
-        script = """
-        (() => {
-            const iframe = document.querySelector('iframe');
-            if (iframe) {
-                const input = iframe.contentDocument.querySelector('input[name="DatosVehiculoIndividualBean$matricula"]');
-                if (input) {
-                    return {
-                        hasGetValue: typeof input.getValue === 'function',
-                        value: input.value,
-                        ready: input.offsetParent !== null
-                    };
-                }
-            }
-            return null;
-        })()
+        script = f"""
+        (() => {{
+            const iframe = document.querySelector('{self.SELECTOR_IFRAME}');
+            if (!iframe) return null;
+            const input = iframe.contentDocument.querySelector('{self.SELECTOR_INPUT_PLACA_IN_IFRAME}');
+            if (!input) return null;
+            return {{
+                hasGetValue: typeof input.getValue === 'function',
+                ready: input.offsetParent !== null
+            }};
+        }})()
         """
-        
-        for attempt in range(5):  # 5 intentos
-            result = await self.evaluate(script)
-            if result and result.get('hasGetValue') and result.get('ready'):
-                self.logger.info(f"✅ Input listo con getValue: {result}")
-                return True
-            
-            self.logger.info(f"⏳ Intento {attempt + 1}/5 - Input no está listo: {result}")
-            await asyncio.sleep(1)
-        
-        self.logger.error("❌ Input no está listo después de 5 intentos")
-        return False
+        result = await self._retry_evaluate(
+            script,
+            validate=lambda r: bool(r and r.get('hasGetValue') and r.get('ready')),
+            attempts=5,
+            interval_ms=1000,
+            log_tag="input listo"
+        )
+        return bool(result)
 
     async def click_comprobar_placa(self) -> bool:
-        """Hace clic en el botón 'Comprobar' ejecutando su onclick."""
-        self.logger.info("🖱️ Preparando para ejecutar onclick del botón 'Comprobar'...")
-        
-        # Verificar que el input esté listo
+        """Hace clic en el botón 'Comprobar' usando click_in_frame."""
+        self.logger.info("🖱️ Haciendo clic en botón 'Comprobar'...")
         if not await self.verificar_input_ready():
             return False
-        
-        # Esperar un poco más para asegurar que todo esté cargado
-        await asyncio.sleep(1)
-        
-        # Ejecutar el onclick del botón directamente
-        script = """
-        (() => {
-            const iframe = document.querySelector('iframe');
-            if (iframe) {
-                const btn = iframe.contentDocument.querySelector('#btnPlaca');
-                if (btn && btn.onclick) {
-                    try {
-                        btn.onclick();
-                        return { success: true, message: 'onClick ejecutado' };
-                    } catch (error) {
-                        return { success: false, message: error.toString() };
-                    }
-                }
-            }
-            return { success: false, message: 'Botón no encontrado' };
-        })()
-        """
-        
-        result = await self.evaluate(script)
-        
-        if result and result.get('success'):
-            self.logger.info("✅ onClick ejecutado exitosamente")
-            # Esperar a que procese
-            await asyncio.sleep(3)
-            return True
-        else:
-            self.logger.error(f"❌ onClick falló: {result.get('message', 'Error desconocido')}")
+        if not await self.click_in_frame(self.SELECTOR_BTN_COMPROBAR, "botón 'Comprobar'"):
             return False
+        # Pausa breve para que se procese
+        await self.page.wait_for_timeout(2000)
+        return True
 
     async def verificar_campo_lleno(self) -> bool:
-        """Verifica que el campo de verificación no esté vacío (espera hasta 30 segundos)."""
-        self.logger.info("🔍 Verificando que el campo de verificación tenga valor (timeout 30s)...")
-        
-        script = """
-        (() => {
-            const iframe = document.querySelector('iframe');
-            if (iframe) {
-                const campo = iframe.contentDocument.querySelector('input[name="_CVH_VehicuCol$codigoClaveVeh"]');
-                if (campo && campo.value && campo.value !== '0' && campo.value.trim() !== '') {
-                    return campo.value;
-                }
-            }
+        """Verifica que el campo de verificación no esté vacío, esperando hasta 10s."""
+        self.logger.info("🔍 Verificando que el campo de verificación tenga valor...")
+        script = f"""
+        (() => {{
+            const iframe = document.querySelector('{self.SELECTOR_IFRAME}');
+            if (!iframe) return null;
+            const campo = iframe.contentDocument.querySelector('{self.SELECTOR_CAMPO_VERIFICACION_IN_IFRAME}');
+            if (campo && campo.value && campo.value.trim() !== '' && campo.value !== '0') {{
+                return campo.value;
+            }}
             return null;
-        })()
+        }})()
         """
-        
-        # Esperar hasta 30 segundos
-        for attempt in range(30):  # 30 intentos de 1 segundo cada uno
-            result = await self.evaluate(script)
-            if result:
-                self.logger.info(f"✅ Campo verificado exitosamente con valor: '{result}' (después de {attempt + 1} segundos)")
-                return True
-            
-            if attempt % 5 == 0:  # Log cada 5 segundos
-                self.logger.info(f"⏳ Esperando campo se llene... {attempt + 1}/30 segundos")
-            
-            await asyncio.sleep(1)
-        
-        self.logger.error("❌ El campo de verificación está vacío después de 30 segundos - timeout")
-        return False
+        # Verificación inmediata
+        immediate = await self.evaluate(script)
+        if immediate:
+            self.logger.info(f"✅ Campo verificado inmediatamente con valor: '{immediate}'")
+            return True
+
+        # Retry hasta 10 segundos (10 intentos de 1s)
+        result = await self._retry_evaluate(
+            script,
+            validate=lambda r: bool(r),
+            attempts=10,
+            interval_ms=1000,
+            log_tag="campo de verificación"
+        )
+        return bool(result)
 
     async def execute_placa_flow(self, placa: str = "IOS190") -> bool:
         """Ejecuta el flujo completo de placa."""
         self.logger.info(f"🚗 Iniciando flujo de placa con '{placa}'...")
-        
         steps = [
             lambda: self.esperar_y_llenar_placa(placa),
             self.click_comprobar_placa,
             self.verificar_campo_lleno
         ]
-        
         try:
             for i, step in enumerate(steps, 1):
                 self.logger.info(f"📋 Ejecutando paso {i}/{len(steps)}...")
                 if not await step():
                     self.logger.error(f"❌ Falló el paso {i}")
                     return False
-            
             self.logger.info("✅ ¡FLUJO DE PLACA COMPLETADO EXITOSAMENTE!")
             return True
-            
         except Exception as e:
             self.logger.error(f"❌ Error en flujo de placa: {e}")
             return False

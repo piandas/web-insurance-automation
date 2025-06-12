@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 from src.config import Config
+from typing import Any, Callable
 
 class BasePage:
     """Clase base con métodos genéricos para interacciones con páginas."""
@@ -74,6 +75,29 @@ class BasePage:
         except Exception as e:
             self.logger.error(f"❌ Error evaluate(): {e}")
             return False
+        
+    async def _retry_evaluate(
+        self,
+        script: str,
+        validate: Callable[[Any], bool],
+        attempts: int = 5,
+        interval_ms: int = 1000,
+        log_tag: str = ""
+    ) -> Any:
+        """
+        Ejecuta `script` en la página hasta que `validate(result)` sea True,
+        esperando `interval_ms` milisegundos entre intentos, hasta `attempts` veces.
+        Devuelve el resultado válido o None si no se logra.
+        """
+        for i in range(attempts):
+            result = await self.evaluate(script)
+            if validate(result):
+                self.logger.info(f"✅ [{log_tag}] validado en intento {i+1}: {result}")
+                return result
+            self.logger.info(f"⏳ [{log_tag}] intento {i+1}/{attempts} sin éxito: {result}")
+            await self.page.wait_for_timeout(interval_ms)
+        self.logger.error(f"❌ [{log_tag}] fallo tras {attempts} intentos")
+        return None
 
     async def click_with_js(self, script: str, success_msg: str) -> bool:
         """Click via JS y log."""
