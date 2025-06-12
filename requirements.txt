@@ -1,1 +1,4 @@
-playwright>=1.35.0
+playwright==1.35.0
+python-dotenv==1.0.1
+# Dependencias usadas en el proyecto
+# Si usas otras librerías externas, agrégalas aquí

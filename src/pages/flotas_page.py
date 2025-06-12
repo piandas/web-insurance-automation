@@ -1,5 +1,8 @@
 from playwright.async_api import Page
 from .base_functions import BasePage
+import logging
+from src.config import Config
+from typing import Optional
 
 class FlotasPage(BasePage):
     """Página de Flotas con funciones específicas para el flujo de cotización."""
@@ -17,9 +20,11 @@ class FlotasPage(BasePage):
 
     def __init__(self, page: Page):
         super().__init__(page)
+        self.logger = logging.getLogger('allianz')
 
     async def click_cell_23541048(self) -> bool:
         """Hace clic en la celda con número 23541048."""
+        self.logger.info("🔲 Haciendo clic en celda 23541048...")
         return await self.click_in_frame(
             f"{self.SELECTOR_CELL}:has-text('23541048')",
             "celda 23541048"
@@ -27,6 +32,7 @@ class FlotasPage(BasePage):
 
     async def click_livianos_particulares(self) -> bool:
         """Hace clic en 'Livianos Particulares'."""
+        self.logger.info("🚗 Haciendo clic en 'Livianos Particulares'...")
         return await self.click_in_frame(
             self.SELECTOR_LIVIANOS,
             "'Livianos Particulares'"
@@ -34,6 +40,7 @@ class FlotasPage(BasePage):
 
     async def click_aceptar(self) -> bool:
         """Hace clic en el botón 'Aceptar'."""
+        self.logger.info("✅ Haciendo clic en botón 'Aceptar'...")
         return await self.click_in_frame(
             f"{self.SELECTOR_ACEPTAR}:has-text('Aceptar')",
             "botón Aceptar"
@@ -41,6 +48,7 @@ class FlotasPage(BasePage):
 
     async def click_radio_no_asegurado(self) -> bool:
         """Hace clic en el radio button 'No' para la pregunta de asegurado."""
+        self.logger.info("🔘 Seleccionando radio 'No' (asegurado)...")
         if await self.click_in_frame(self.SELECTOR_RADIO_NO, "radio 'No' (asegurado)"):
             return True
         return await self.click_in_frame(
@@ -57,7 +65,7 @@ class FlotasPage(BasePage):
             "PEP": "E", "OTROS_DOCUMENTOS": "S", "PPT": "T", "SOCIEDAD_EXTRANJERA": "W"
         }
         if tipo_documento not in tipo_map:
-            print(f"❌ Tipo de documento '{tipo_documento}' no válido.")
+            self.logger.error(f"❌ Tipo de documento '{tipo_documento}' no válido.")
             return False
         return await self.select_in_frame(
             self.SELECTOR_DOC_TYPE,
@@ -90,7 +98,7 @@ class FlotasPage(BasePage):
 
     async def execute_flotas_flow(self) -> bool:
         """Ejecuta el flujo completo de la página de flotas."""
-        print("🚗 Iniciando flujo de Flotas...")
+        self.logger.info("🚗 Iniciando flujo de Flotas...")
         steps = [
             self.click_cell_23541048,
             self.click_livianos_particulares,
@@ -105,8 +113,8 @@ class FlotasPage(BasePage):
             for step in steps:
                 if not await step():
                     return False
-            print("✅ ¡FLUJO DE FLOTAS COMPLETADO EXITOSAMENTE!")
+            self.logger.info("✅ ¡FLUJO DE FLOTAS COMPLETADO EXITOSAMENTE!")
             return True
         except Exception as e:
-            print(f"❌ Error en flujo de flotas: {e}")
+            self.logger.error(f"❌ Error en flujo de flotas: {e}")
             return False

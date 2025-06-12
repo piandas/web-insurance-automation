@@ -1,5 +1,7 @@
 import asyncio
+import logging
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
+from src.config import Config
 from .base_functions import BasePage
 
 class DashboardPage(BasePage):
@@ -14,61 +16,54 @@ class DashboardPage(BasePage):
     
     def __init__(self, page: Page):
         super().__init__(page)
+        self.logger = logging.getLogger('allianz')
 
     async def navigate_to_flotas(self) -> bool:
         """Navega directamente a Flotas Autos y envía el formulario."""
-        print("🚗 Navegando a Flotas Autos...")
-        
+        self.logger.info("🚗 Navegando a Flotas Autos...")
         try:
             # Hacer clic en Nueva Póliza
             if not await self.safe_click(self.NEW_POLICY_LINK):
-                print("❌ Error haciendo clic en Nueva Póliza")
+                self.logger.error("❌ Error haciendo clic en Nueva Póliza")
                 return False
             
             # Esperar modal
             if not await self.wait_for_selector_safe(self.MODAL_CONTENT):
-                print("❌ Error esperando modal")
+                self.logger.error("❌ Error esperando modal")
                 return False
             
             # Expandir sección Autos
             if not await self.safe_click(self.AUTOS_EXPANSION_PANEL):
-                print("❌ Error expandiendo sección Autos")
+                self.logger.error("❌ Error expandiendo sección Autos")
                 return False
             
             # Esperar contenido expandido
             if not await self.wait_for_selector_safe(self.EXPANSION_CONTENT):
-                print("❌ Error esperando contenido expandido")
+                self.logger.error("❌ Error esperando contenido expandido")
                 return False
             
             # Esperar las cajas de opciones
             if not await self.wait_for_selector_safe(self.BOX_SELECTOR):
-                print("❌ Error esperando cajas de opciones")
+                self.logger.error("❌ Error esperando cajas de opciones")
                 return False
             
             # Hacer clic en Flotas Autos
             try:
                 await self.page.get_by_text("Flotas Autos").click()
             except Exception as e:
-                print(f"❌ Error haciendo clic en Flotas Autos: {e}")
+                self.logger.error(f"❌ Error haciendo clic en Flotas Autos: {e}")
                 return False
 
-            # Esperar navegación
-            try:
-                await self.page.wait_for_url("**/application**", timeout=30_000)
-                print(f"✅ Navegación exitosa a: {self.page.url}")
-            except PlaywrightTimeout:
-                print(f"⚠️ URL actual: {self.page.url}")
-
-            await self.wait_for_load_state_with_retry("networkidle")
+            self.logger.info("✅ Navegación a Flotas Autos exitosa")
             return True
             
         except Exception as e:
-            print(f"❌ Error en navegación a flotas: {e}")
+            self.logger.exception(f"❌ Error navegando a Flotas Autos: {e}")
             return False
 
     async def submit_application_form(self) -> bool:
         """Envía el formulario de aplicación si está presente."""
-        print("📋 Esperando formulario y enviándolo...")
+        self.logger.info("📋 Esperando formulario y enviándolo...")
         
         try:
             # Esperar más tiempo y luego verificar si existe
@@ -76,19 +71,19 @@ class DashboardPage(BasePage):
             
             if await self.is_visible_safe("#applicationForm", timeout=15000):
                 await self.page.evaluate("document.querySelector('#applicationForm').submit()")
-                print("✅ Formulario enviado")
+                self.logger.info("✅ Formulario enviado")
                 await self.wait_for_load_state_with_retry("networkidle")
                 
                 # Esperar a que aparezca contenido del iframe después del envío
                 await self.wait_for_iframe_content()
                 return True
             else:
-                print("⚠️ Formulario no encontrado, continuando...")
+                self.logger.warning("⚠️ Formulario no encontrado, continuando...")
                 # Esperar contenido del iframe de todas formas
                 await self.wait_for_iframe_content()
                 return True
         except Exception as e:
-            print(f"❌ Error enviando formulario: {e}")
+            self.logger.exception(f"❌ Error enviando formulario: {e}")
             # Intentar esperar contenido del iframe de todas formas
             await self.wait_for_iframe_content()
             return False
