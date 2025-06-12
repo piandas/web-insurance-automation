@@ -1,5 +1,29 @@
+# Byte-compiled / cache / temp files
 __pycache__/
 *.py[cod]
+
+# Entornos virtuales
 .venv/
+venv/
+
+# Archivos de configuración sensibles
+.env
+.env.*
+
+# Archivos de log y temporales
 LOGS/
+*.log
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de usuario
+*.swp
+*.swo
+
+# Otros archivos que no se deben versionar
 .vscode/
+mcp.json
+old_files/
+
