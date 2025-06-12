@@ -1,6 +1,6 @@
 import asyncio
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
-from .base_page import BasePage
+from .base_functions import BasePage
 
 class DashboardPage(BasePage):
     """Página del dashboard con navegación a Flotas Autos."""

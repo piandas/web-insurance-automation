@@ -1,5 +1,5 @@
 from playwright.async_api import Page
-from .base_page import BasePage
+from .base_functions import BasePage
 
 class LoginPage(BasePage):
     """Página de login con sus selectores y métodos específicos."""
