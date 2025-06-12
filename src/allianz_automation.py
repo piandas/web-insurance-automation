@@ -9,7 +9,7 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 from src.config import Config
 from typing import Optional
 
-from pages import LoginPage, DashboardPage, FlotasPage
+from src.pages import LoginPage, DashboardPage, FlotasPage, PlacaPage
 
 class AllianzAutomation:
     """Clase principal que orquesta todo el flujo de automatización de Allianz."""
@@ -26,6 +26,7 @@ class AllianzAutomation:
         self.login_page = None
         self.dashboard_page = None
         self.flotas_page = None
+        self.placa_page = None
 
         # Configuración de logging SOLO consola
         for handler in logging.root.handlers[:]:
@@ -62,6 +63,7 @@ class AllianzAutomation:
         self.login_page = LoginPage(self.page)
         self.dashboard_page = DashboardPage(self.page)
         self.flotas_page = FlotasPage(self.page)
+        self.placa_page = PlacaPage(self.page)  # <--- Instanciar PlacaPage
         
         self.logger.info("✅ Navegador lanzado y páginas inicializadas")
 
@@ -91,7 +93,6 @@ class AllianzAutomation:
     async def run_complete_flow(self) -> bool:
         """Ejecuta el flujo completo de automatización."""
         self.logger.info("🎬 Iniciando flujo completo de automatización...")
-        
         try:
             # Paso 1: Login
             if not await self.execute_login_flow():
@@ -107,6 +108,17 @@ class AllianzAutomation:
             if not await self.execute_flotas_flow():
                 self.logger.error("❌ Falló el flujo de flotas")
                 return False
+
+            # Paso 4: Interacción con PlacaPage
+            self.logger.info("🔎 Probando flujo de placa...")
+            placa = "IOS190" # Puedes cambiar la placa aquí
+            if not await self.placa_page.esperar_y_llenar_placa(placa):
+                self.logger.error("❌ Falló al llenar el input de placa")
+                return False
+            if not await self.placa_page.click_comprobar_placa():
+                self.logger.error("❌ Falló al hacer clic en 'Comprobar' de placa")
+                return False
+            self.logger.info("✅ Flujo de placa ejecutado correctamente")
 
             self.logger.info("🎉 ¡PROCESO COMPLETO EJECUTADO EXITOSAMENTE!")
             return True
@@ -147,7 +159,7 @@ async def main():
             logging.info("✅ ¡AUTOMATIZACIÓN COMPLETADA!")
             # Espera para revisar resultados
             logging.info("⏱️ Esperando 15 segundos para revisión...")
-            await asyncio.sleep(15)
+            await asyncio.sleep(500)
         else:
             logging.error("❌ La automatización falló")
             await asyncio.sleep(15)
