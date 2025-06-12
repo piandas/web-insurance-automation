@@ -1,5 +1,5 @@
 from playwright.async_api import Page
-from .base_functions import BasePage
+from src.utils import BasePage
 from src.config import Config
 import logging
 from typing import Optional

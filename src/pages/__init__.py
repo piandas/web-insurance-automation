@@ -1,6 +1,6 @@
 """Páginas del proyecto Allianz Automation."""
 
-from .base_functions import BasePage
+from src.utils import BasePage
 from .login_page import LoginPage
 from .dashboard_page import DashboardPage
 from .flotas_page import FlotasPage

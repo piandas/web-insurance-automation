@@ -2,7 +2,7 @@ import asyncio
 import logging
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 from src.config import Config
-from .base_functions import BasePage
+from src.utils import BasePage
 
 class DashboardPage(BasePage):
     """Página del dashboard con navegación a Flotas Autos."""
