@@ -90,6 +90,11 @@ class AllianzAutomation:
         self.logger.info("🚗 Ejecutando flujo de flotas...")
         return await self.flotas_page.execute_flotas_flow()
 
+    async def execute_placa_flow(self) -> bool:
+        """Ejecuta el flujo específico de placa."""
+        self.logger.info("🔎 Ejecutando flujo de placa...")
+        return await self.placa_page.execute_placa_flow()
+
     async def run_complete_flow(self) -> bool:
         """Ejecuta el flujo completo de automatización."""
         self.logger.info("🎬 Iniciando flujo completo de automatización...")
@@ -107,18 +112,12 @@ class AllianzAutomation:
             # Paso 3: Flujo de flotas
             if not await self.execute_flotas_flow():
                 self.logger.error("❌ Falló el flujo de flotas")
+                return False            
+            
+            # Paso 4: Flujo de placa
+            if not await self.execute_placa_flow():
+                self.logger.error("❌ Falló el flujo de placa")
                 return False
-
-            # Paso 4: Interacción con PlacaPage
-            self.logger.info("🔎 Probando flujo de placa...")
-            placa = "IOS190" # Puedes cambiar la placa aquí
-            if not await self.placa_page.esperar_y_llenar_placa(placa):
-                self.logger.error("❌ Falló al llenar el input de placa")
-                return False
-            if not await self.placa_page.click_comprobar_placa():
-                self.logger.error("❌ Falló al hacer clic en 'Comprobar' de placa")
-                return False
-            self.logger.info("✅ Flujo de placa ejecutado correctamente")
 
             self.logger.info("🎉 ¡PROCESO COMPLETO EJECUTADO EXITOSAMENTE!")
             return True
@@ -159,7 +158,7 @@ async def main():
             logging.info("✅ ¡AUTOMATIZACIÓN COMPLETADA!")
             # Espera para revisar resultados
             logging.info("⏱️ Esperando 15 segundos para revisión...")
-            await asyncio.sleep(500)
+            await asyncio.sleep(15)
         else:
             logging.error("❌ La automatización falló")
             await asyncio.sleep(15)
