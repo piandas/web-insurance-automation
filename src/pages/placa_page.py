@@ -10,10 +10,15 @@ class PlacaPage(BasePage):
     SELECTOR_BTN_COMPROBAR = "#btnPlaca"
     SELECTOR_IFRAME = "iframe"
     SELECTOR_INPUT_PLACA_IN_IFRAME = 'input[name="DatosVehiculoIndividualBean$matricula"]'
-    SELECTOR_CAMPO_VERIFICACION_IN_IFRAME = 'input[name="_CVH_VehicuCol$codigoClaveVeh"]'
-    # Selectores para datos del asegurado
+    SELECTOR_CAMPO_VERIFICACION_IN_IFRAME = 'input[name="_CVH_VehicuCol$codigoClaveVeh"]'    # Selectores para datos del asegurado
     SELECTOR_FECHA_NACIMIENTO = "#DatosAseguradoAutosBean\\$fechaNacimiento"
     SELECTOR_GENERO = "#DatosAseguradoAutosBean\\$idSexo"
+    # Selectores para buscador de poblaciones
+    SELECTOR_DEPARTAMENTO = "#idCity_1_node1"
+    SELECTOR_BTN_BUSCAR_CIUDAD = "#idCity_1_node2AjaxFinderImg"
+    SELECTOR_INPUT_CIUDAD = "#idCity_1_node2"
+    SELECTOR_CODIGO_CIUDAD = "#idFinderCod"
+    SELECTOR_LISTA_CIUDADES = "#div_loc_idCity_1"
 
     def __init__(self, page: Page):
         super().__init__(page)
@@ -30,27 +35,14 @@ class PlacaPage(BasePage):
 
     async def verificar_input_ready(self) -> bool:
         """Verifica que el input de placa esté listo y tenga el método getValue."""
-        self.logger.info("🔍 Verificando que el input esté listo...")
-        script = f"""
-        (() => {{
-            const iframe = document.querySelector('{self.SELECTOR_IFRAME}');
-            if (!iframe) return null;
-            const input = iframe.contentDocument.querySelector('{self.SELECTOR_INPUT_PLACA_IN_IFRAME}');
-            if (!input) return null;
-            return {{
-                hasGetValue: typeof input.getValue === 'function',
-                ready: input.offsetParent !== null
-            }};
-        }})()
-        """
-        result = await self._retry_evaluate(
-            script,
-            validate=lambda r: bool(r and r.get('hasGetValue') and r.get('ready')),
+        return await self.verify_element_value_in_frame(
+            self.SELECTOR_INPUT_PLACA_IN_IFRAME,
+            "input listo",
+            condition="has_method_getValue",
             attempts=5,
             interval_ms=1000,
-            log_tag="input listo"
+            immediate_check=False
         )
-        return bool(result)
 
     async def click_comprobar_placa(self) -> bool:
         """Hace clic en el botón 'Comprobar' usando click_in_frame."""
@@ -65,33 +57,14 @@ class PlacaPage(BasePage):
 
     async def verificar_campo_lleno(self) -> bool:
         """Verifica que el campo de verificación no esté vacío, esperando hasta 10s."""
-        self.logger.info("🔍 Verificando que el campo de verificación tenga valor...")
-        script = f"""
-        (() => {{
-            const iframe = document.querySelector('{self.SELECTOR_IFRAME}');
-            if (!iframe) return null;
-            const campo = iframe.contentDocument.querySelector('{self.SELECTOR_CAMPO_VERIFICACION_IN_IFRAME}');
-            if (campo && campo.value && campo.value.trim() !== '' && campo.value !== '0') {{
-                return campo.value;
-            }}
-            return null;
-        }})()
-        """
-        # Verificación inmediata
-        immediate = await self.evaluate(script)
-        if immediate:
-            self.logger.info(f"✅ Campo verificado inmediatamente con valor: '{immediate}'")
-            return True
-
-        # Retry hasta 10 segundos (20 intentos de 1s)
-        result = await self._retry_evaluate(
-            script,
-            validate=lambda r: bool(r),
+        return await self.verify_element_value_in_frame(
+            self.SELECTOR_CAMPO_VERIFICACION_IN_IFRAME,
+            "campo de verificación",
+            condition="value_not_empty",
             attempts=20,
             interval_ms=1000,
-            log_tag="campo de verificación"
+            immediate_check=True
         )
-        return bool(result)
     
     async def llenar_datos_asegurado(self, fecha_nacimiento: str = "01/06/1999", genero: str = "M") -> bool:
         """
@@ -132,15 +105,93 @@ class PlacaPage(BasePage):
             self.logger.error(f"❌ Error al llenar datos del asegurado: {e}")
             return False
 
+    async def buscador_poblaciones(self, departamento: str = "ANTIOQUIA", ciudad: str = "BELLO") -> bool:
+        """
+        Busca y selecciona una población específica.
+        
+        Args:
+            departamento (str): Nombre del departamento (default: "ANTIOQUIA")
+            ciudad (str): Nombre de la ciudad (default: "BELLO")
+        
+        Returns:
+            bool: True si se seleccionó la población correctamente, False en caso contrario
+        """
+        self.logger.info(f"🏙️ Buscando población - Departamento: {departamento}, Ciudad: {ciudad}")
+        
+        try:
+            # Paso 1: Seleccionar departamento por texto
+            if not await self.select_by_text_in_frame(
+                self.SELECTOR_DEPARTAMENTO,
+                departamento,
+                f"departamento ({departamento})"
+            ):
+                self.logger.error("❌ Error al seleccionar departamento")
+                return False
+            
+            # Pausa breve para que se procese la selección
+            await self.page.wait_for_timeout(1000)
+            
+            # Paso 2: Hacer clic en el botón de búsqueda
+            if not await self.click_in_frame(
+                self.SELECTOR_BTN_BUSCAR_CIUDAD,
+                "botón de búsqueda de ciudad"
+            ):
+                self.logger.error("❌ Error al hacer clic en botón de búsqueda")
+                return False
+            
+            # Paso 3: Llenar el campo de ciudad
+            if not await self.fill_in_frame(
+                self.SELECTOR_INPUT_CIUDAD,
+                ciudad,
+                f"campo de ciudad ({ciudad})"
+            ):
+                self.logger.error("❌ Error al llenar campo de ciudad")
+                return False
+            
+            # Pausa para que aparezca la lista
+            await self.page.wait_for_timeout(2000)
+              
+            # Paso 4: Buscar y hacer clic en la ciudad en la lista desplegable
+            if not await self.click_by_text_in_frame(
+                ciudad,
+                f"ciudad '{ciudad}' en la lista"
+            ):
+                self.logger.error(f"❌ No se pudo encontrar la ciudad '{ciudad}' en la lista")
+                return False
+            
+            # Pausa para que se procese la selección
+            await self.page.wait_for_timeout(2000)
+            
+            # Paso 5: Verificar que se llenó el código de ciudad
+            codigo_resultado = await self.verify_element_value_in_frame(
+                self.SELECTOR_CODIGO_CIUDAD,
+                "código de ciudad",
+                condition="value_not_empty",
+                attempts=5,
+                interval_ms=1000,
+                immediate_check=False
+            )
+            
+            if codigo_resultado:
+                self.logger.info(f"✅ Población seleccionada correctamente")
+                return True
+            else:
+                self.logger.error("❌ No se encontró código de ciudad después de la selección")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error en buscador de poblaciones: {e}")
+            return False
 
-    async def execute_placa_flow(self, placa: str = "IOS190", fecha_nacimiento: str = "01/06/1999", genero: str = "M") -> bool:
-        """Ejecuta el flujo completo de placa y datos del asegurado."""
-        self.logger.info(f"🚗 Iniciando flujo completo con placa '{placa}'...")
+    async def execute_placa_flow(self, placa: str = "IOS190", fecha_nacimiento: str = "01/06/1989", genero: str = "M", departamento: str = "ANTIOQUIA", ciudad: str = "BELLO") -> bool:
+        """Ejecuta el flujo completo de placa, datos del asegurado y selección de población."""
+        self.logger.info(f"🚗 Iniciando flujo completo con placa '{placa}', ciudad '{ciudad}'...")
         steps = [
             lambda: self.esperar_y_llenar_placa(placa),
             self.click_comprobar_placa,
             self.verificar_campo_lleno,
-            lambda: self.llenar_datos_asegurado(fecha_nacimiento, genero)
+            lambda: self.llenar_datos_asegurado(fecha_nacimiento, genero),
+            lambda: self.buscador_poblaciones(departamento, ciudad)
         ]
         try:
             for i, step in enumerate(steps, 1):

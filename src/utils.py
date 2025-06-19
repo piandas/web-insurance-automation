@@ -193,3 +193,121 @@ class BasePage:
         except Exception as e:
             self.logger.error(f"❌ select_in_frame('{selector}'): {e}")
             return False
+
+    async def select_by_text_in_frame(self, selector: str, text: str, description: str, timeout: int = 15000) -> bool:
+        """Espera y selecciona un valor de dropdown por texto dentro del iframe."""
+        self.logger.info(f"⏳ Esperando dropdown {description} en iframe...")
+        try:
+            el = self._frame.locator(selector)
+            await el.wait_for(timeout=timeout)
+            await el.select_option(label=text)
+            # disparamos change
+            await el.evaluate("e => e.dispatchEvent(new Event('change',{bubbles:true}))")
+            self.logger.info(f"✅ {description} seleccionado: {text}")
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ select_by_text_in_frame('{selector}'): {e}")
+            return False
+
+    async def click_by_text_in_frame(self, text: str, description: str, timeout: int = 15000) -> bool:
+        """Espera y hace clic en un elemento por texto exacto dentro del iframe."""
+        self.logger.info(f"⏳ Esperando texto exacto '{text}' en iframe...")
+        try:
+            # Usar exact=True para coincidir exactamente con el texto
+            el = self._frame.get_by_text(text, exact=True)
+            await el.wait_for(timeout=timeout)
+            await el.click()
+            self.logger.info(f"✅ Clic en {description} exitoso!")
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ click_by_text_in_frame('{text}'): {e}")
+            return False
+
+    async def verify_element_value_in_frame(
+        self, 
+        selector: str, 
+        description: str, 
+        condition: str = "value_not_empty",
+        attempts: int = 5,
+        interval_ms: int = 1000,
+        immediate_check: bool = True
+    ) -> bool:
+        """
+        Verifica que un elemento dentro del iframe cumpla una condición específica.
+        
+        Args:
+            selector (str): Selector CSS del elemento a verificar
+            description (str): Descripción para logging
+            condition (str): Tipo de condición - "value_not_empty", "has_method", "is_visible", etc.
+            attempts (int): Número de intentos
+            interval_ms (int): Intervalo entre intentos en ms
+            immediate_check (bool): Si hacer verificación inmediata antes de retry
+            
+        Returns:
+            bool: True si la verificación fue exitosa
+        """
+        self.logger.info(f"🔍 Verificando {description}...")
+        
+        # Script base que busca el elemento en iframe
+        base_script = f"""
+        (() => {{
+            const iframe = document.querySelector('{self.IFRAME_SELECTOR}');
+            if (!iframe) return null;
+            const element = iframe.contentDocument.querySelector('{selector}');
+            if (!element) return null;
+        """
+        
+        # Diferentes condiciones de verificación
+        if condition == "value_not_empty":
+            condition_script = """
+            if (element.value && element.value.trim() !== '' && element.value !== '0') {
+                return element.value;
+            }
+            return null;
+            """
+        elif condition == "has_method_getValue":
+            condition_script = """
+            return {
+                hasGetValue: typeof element.getValue === 'function',
+                ready: element.offsetParent !== null
+            };
+            """
+        elif condition == "is_visible":
+            condition_script = """
+            return element.offsetParent !== null;
+            """
+        else:
+            # Condición personalizada
+            condition_script = f"""
+            {condition}
+            """
+        
+        script = base_script + condition_script + "\n})();"
+        
+        # Verificación inmediata si está habilitada
+        if immediate_check:
+            immediate = await self.evaluate(script)
+            if self._validate_verification_result(immediate, condition):
+                self.logger.info(f"✅ {description} verificado inmediatamente: {immediate}")
+                return True
+        
+        # Retry con _retry_evaluate
+        result = await self._retry_evaluate(
+            script,
+            validate=lambda r: self._validate_verification_result(r, condition),
+            attempts=attempts,
+            interval_ms=interval_ms,
+            log_tag=description
+        )
+        return bool(result)
+    
+    def _validate_verification_result(self, result, condition: str) -> bool:
+        """Valida el resultado de la verificación según la condición."""
+        if condition == "value_not_empty":
+            return bool(result)
+        elif condition == "has_method_getValue":
+            return bool(result and result.get('hasGetValue') and result.get('ready'))
+        elif condition == "is_visible":
+            return bool(result)
+        else:
+            return bool(result)
