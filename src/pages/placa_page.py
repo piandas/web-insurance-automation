@@ -319,64 +319,29 @@ class PlacaPage(BasePage):
                 self.logger.error("❌ Error al hacer clic en 'Estudio de Seguro'")
                 return False          
             
-        # Paso 10: Descargar PDF directamente desde la URL
-            try:
-                self.logger.info("📁 Configurando descarga del PDF...")
-                
-                # Esperar y capturar la nueva ventana con el PDF
-                async with self.page.expect_popup(timeout=15000) as popup_info:
-                    pass
-                popup = await popup_info.value
-                self.logger.info("✅ Nueva ventana detectada")
-                
-                # Esperar a que cargue el PDF
-                await popup.wait_for_load_state("networkidle", timeout=10000)
-                
-                # Obtener la URL del PDF
-                pdf_url = popup.url
-                self.logger.info(f"📥 URL del PDF: {pdf_url}")
-                
-                # Verificar que es una URL de PDF
-                if "PDFServlet" not in pdf_url:
-                    self.logger.error(f"❌ La URL no parece ser un PDF: {pdf_url}")
-                    await popup.close()
-                    return False
-                
-                # Preparar nombre y carpeta de descarga
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"estudio_seguro_{timestamp}.pdf"
-                downloads_dir = "./downloads"
-                os.makedirs(downloads_dir, exist_ok=True)
-                
-                # Descargar usando requests
-                import requests
-                self.logger.info(f"⬇️ Descargando PDF desde: {pdf_url}")
-                
-                try:
-                    response = requests.get(pdf_url, timeout=30)
-                    
-                    if response.status_code == 200:
-                        with open(os.path.join(downloads_dir, filename), 'wb') as f:
-                            f.write(response.content)
-                        
-                        self.logger.info(f"✅ PDF descargado exitosamente: {filename}")
-                        await popup.close()
-                        
-                        self.logger.info("✅ Proceso completo finalizado exitosamente - PDF descargado")
-                        return True
-                    else:
-                        self.logger.error(f"❌ Error HTTP al descargar PDF: {response.status_code}")
-                        await popup.close()
-                        return False
-                        
-                except requests.RequestException as e:
-                    self.logger.error(f"❌ Error de conexión al descargar PDF: {e}")
-                    await popup.close()
-                    return False
-                    
-            except Exception as e:
-                self.logger.error(f"❌ Error en descarga de PDF: {e}")
+            # Paso 10: Descargar PDF directamente desde la URL
+            self.logger.info("🌐 Detectando nueva pestaña con el PDF...")
+            nuevo_popup = await self.page.context.wait_for_event("page")
+            await nuevo_popup.wait_for_load_state("networkidle")
+
+            pdf_url = nuevo_popup.url
+            self.logger.info(f"🔗 URL del PDF: {pdf_url}")
+
+            # Descargar vía API de Playwright (más fiable que interactuar con el visor)
+            response = await self.page.context.request.get(pdf_url)
+            if not response.ok:
+                self.logger.error(f"❌ Falló la descarga del PDF (status {response.status})")
                 return False
+
+            nombre = f"Cotizacion_Allianz_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            downloads_dir = os.path.join(os.getcwd(), "downloads")
+            os.makedirs(downloads_dir, exist_ok=True)
+            ruta = os.path.join(downloads_dir, nombre)
+            with open(ruta, "wb") as f:
+                f.write(await response.body())
+            self.logger.info(f"✅ PDF guardado en {ruta}")
+
+            return True
             
         except Exception as e:
             self.logger.error(f"❌ Error en consulta y finalización: {e}")
