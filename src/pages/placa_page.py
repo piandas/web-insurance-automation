@@ -1,6 +1,8 @@
 from playwright.async_api import Page
 from src.utils import BasePage
 import logging
+import datetime
+import os
 
 class PlacaPage(BasePage):
     """Página para manejo de placa y comprobación."""
@@ -22,6 +24,8 @@ class PlacaPage(BasePage):
     SELECTOR_POLIZA_ANTECEDENTES = 'input[name="AntecedentesBean$poliza"]'
     SELECTOR_BTN_ACEPTAR = "#btnAceptar"
     SELECTOR_BTN_ARCHIVAR = "#btnArchivar"
+    SELECTOR_BTN_ARCHIVAR_SEGUNDO = "#o_2"
+    SELECTOR_ESTUDIO_SEGURO = "#doc0"
 
     def __init__(self, page: Page):
         super().__init__(page)
@@ -255,8 +259,124 @@ class PlacaPage(BasePage):
                 self.logger.error("❌ El botón 'Archivar' no apareció")
                 return False
             
-            self.logger.info("✅ Consulta DTO y finalización completada exitosamente")
-            return True
+            # Paso 6: Hacer clic en el primer botón "Archivar"
+            if not await self.click_in_frame(
+                self.SELECTOR_BTN_ARCHIVAR,
+                "primer botón 'Archivar'"
+            ):
+                self.logger.error("❌ Error al hacer clic en primer botón 'Archivar'")
+                return False
+            
+            # Pausa para que aparezca el segundo botón
+            await self.page.wait_for_timeout(3000)
+            
+            # Paso 7: Esperar y hacer clic en el segundo botón "Archivar"
+            if not await self.verify_element_value_in_frame(
+                self.SELECTOR_BTN_ARCHIVAR_SEGUNDO,
+                "segundo botón 'Archivar'",
+                condition="is_visible",
+                attempts=10,
+                interval_ms=1000,
+                immediate_check=False
+            ):
+                self.logger.error("❌ El segundo botón 'Archivar' no apareció")
+                return False
+            
+            if not await self.click_in_frame(
+                self.SELECTOR_BTN_ARCHIVAR_SEGUNDO,
+                "segundo botón 'Archivar'"
+            ):
+                self.logger.error("❌ Error al hacer clic en segundo botón 'Archivar'")
+                return False
+            
+            # Paso 8: Manejar alert de confirmación
+            try:
+                await self.page.wait_for_timeout(2000)  # Esperar que aparezca el alert
+                # Aceptar el alert automáticamente
+                await self.page.on("dialog", lambda dialog: dialog.accept())
+                self.logger.info("✅ Alert de confirmación aceptado")
+            except Exception as e:
+                self.logger.warning(f"⚠️ No se detectó alert o ya fue manejado: {e}")
+            
+            # Paso 9: Esperar y hacer clic en "Estudio de Seguro"
+            await self.page.wait_for_timeout(3000)
+            
+            if not await self.verify_element_value_in_frame(
+                self.SELECTOR_ESTUDIO_SEGURO,
+                "enlace 'Estudio de Seguro'",
+                condition="is_visible",
+                attempts=15,
+                interval_ms=1000,
+                immediate_check=False
+            ):
+                self.logger.error("❌ El enlace 'Estudio de Seguro' no apareció")
+                return False
+            
+            if not await self.click_in_frame(
+                self.SELECTOR_ESTUDIO_SEGURO,
+                "enlace 'Estudio de Seguro'"
+            ):
+                self.logger.error("❌ Error al hacer clic en 'Estudio de Seguro'")
+                return False          
+            
+        # Paso 10: Descargar PDF directamente desde la URL
+            try:
+                self.logger.info("📁 Configurando descarga del PDF...")
+                
+                # Esperar y capturar la nueva ventana con el PDF
+                async with self.page.expect_popup(timeout=15000) as popup_info:
+                    pass
+                popup = await popup_info.value
+                self.logger.info("✅ Nueva ventana detectada")
+                
+                # Esperar a que cargue el PDF
+                await popup.wait_for_load_state("networkidle", timeout=10000)
+                
+                # Obtener la URL del PDF
+                pdf_url = popup.url
+                self.logger.info(f"📥 URL del PDF: {pdf_url}")
+                
+                # Verificar que es una URL de PDF
+                if "PDFServlet" not in pdf_url:
+                    self.logger.error(f"❌ La URL no parece ser un PDF: {pdf_url}")
+                    await popup.close()
+                    return False
+                
+                # Preparar nombre y carpeta de descarga
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"estudio_seguro_{timestamp}.pdf"
+                downloads_dir = "./downloads"
+                os.makedirs(downloads_dir, exist_ok=True)
+                
+                # Descargar usando requests
+                import requests
+                self.logger.info(f"⬇️ Descargando PDF desde: {pdf_url}")
+                
+                try:
+                    response = requests.get(pdf_url, timeout=30)
+                    
+                    if response.status_code == 200:
+                        with open(os.path.join(downloads_dir, filename), 'wb') as f:
+                            f.write(response.content)
+                        
+                        self.logger.info(f"✅ PDF descargado exitosamente: {filename}")
+                        await popup.close()
+                        
+                        self.logger.info("✅ Proceso completo finalizado exitosamente - PDF descargado")
+                        return True
+                    else:
+                        self.logger.error(f"❌ Error HTTP al descargar PDF: {response.status_code}")
+                        await popup.close()
+                        return False
+                        
+                except requests.RequestException as e:
+                    self.logger.error(f"❌ Error de conexión al descargar PDF: {e}")
+                    await popup.close()
+                    return False
+                    
+            except Exception as e:
+                self.logger.error(f"❌ Error en descarga de PDF: {e}")
+                return False
             
         except Exception as e:
             self.logger.error(f"❌ Error en consulta y finalización: {e}")
