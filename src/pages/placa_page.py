@@ -12,13 +12,16 @@ class PlacaPage(BasePage):
     SELECTOR_INPUT_PLACA_IN_IFRAME = 'input[name="DatosVehiculoIndividualBean$matricula"]'
     SELECTOR_CAMPO_VERIFICACION_IN_IFRAME = 'input[name="_CVH_VehicuCol$codigoClaveVeh"]'    # Selectores para datos del asegurado
     SELECTOR_FECHA_NACIMIENTO = "#DatosAseguradoAutosBean\\$fechaNacimiento"
-    SELECTOR_GENERO = "#DatosAseguradoAutosBean\\$idSexo"
-    # Selectores para buscador de poblaciones
+    SELECTOR_GENERO = "#DatosAseguradoAutosBean\\$idSexo"    # Selectores para buscador de poblaciones
     SELECTOR_DEPARTAMENTO = "#idCity_1_node1"
     SELECTOR_BTN_BUSCAR_CIUDAD = "#idCity_1_node2AjaxFinderImg"
     SELECTOR_INPUT_CIUDAD = "#idCity_1_node2"
     SELECTOR_CODIGO_CIUDAD = "#idFinderCod"
-    SELECTOR_LISTA_CIUDADES = "#div_loc_idCity_1"
+    SELECTOR_LISTA_CIUDADES = "#div_loc_idCity_1"    # Selectores para consulta y finalización
+    SELECTOR_BTN_CONSULTAR_DTO = "#consultaWsBtn"
+    SELECTOR_POLIZA_ANTECEDENTES = 'input[name="AntecedentesBean$poliza"]'
+    SELECTOR_BTN_ACEPTAR = "#btnAceptar"
+    SELECTOR_BTN_ARCHIVAR = "#btnArchivar"
 
     def __init__(self, page: Page):
         super().__init__(page)
@@ -66,7 +69,7 @@ class PlacaPage(BasePage):
             immediate_check=True
         )
     
-    async def llenar_datos_asegurado(self, fecha_nacimiento: str = "01/06/1999", genero: str = "M") -> bool:
+    async def llenar_datos_asegurado(self, fecha_nacimiento: str = "01/06/1989", genero: str = "M") -> bool:
         """
         Llena los datos del asegurado: fecha de nacimiento y género.
         
@@ -183,15 +186,92 @@ class PlacaPage(BasePage):
             self.logger.error(f"❌ Error en buscador de poblaciones: {e}")
             return False
 
-    async def execute_placa_flow(self, placa: str = "IOS190", fecha_nacimiento: str = "01/06/1989", genero: str = "M", departamento: str = "ANTIOQUIA", ciudad: str = "BELLO") -> bool:
-        """Ejecuta el flujo completo de placa, datos del asegurado y selección de población."""
+    async def consultar_y_finalizar(self) -> bool:
+        """
+        Ejecuta la secuencia de consulta DTO y finalización del proceso.
+        
+        Returns:
+            bool: True si se ejecutó la secuencia correctamente, False en caso contrario
+        """
+        self.logger.info("📋 Iniciando consulta DTO y finalización...")
+        
+        try:
+            # Paso 1: Hacer clic en "Consultar Dto"
+            if not await self.click_in_frame(
+                self.SELECTOR_BTN_CONSULTAR_DTO,
+                "botón 'Consultar Dto'"
+            ):
+                self.logger.error("❌ Error al hacer clic en 'Consultar Dto'")
+                return False
+            
+            # Pausa para que se procese la consulta
+            await self.page.wait_for_timeout(3000)
+            
+            # Paso 2: Verificar que el campo de póliza tenga valor
+            if not await self.verify_element_value_in_frame(
+                self.SELECTOR_POLIZA_ANTECEDENTES,
+                "campo de póliza antecedentes",
+                condition="value_not_empty",
+                attempts=10,
+                interval_ms=1000,
+                immediate_check=False
+            ):
+                self.logger.error("❌ El campo de póliza no se llenó después de la consulta")
+                return False
+            
+            # Paso 3: Primer clic en "Siguiente"
+            if not await self.click_in_frame(
+                self.SELECTOR_BTN_ACEPTAR,
+                "botón 'Siguiente' (primera vez)"
+            ):
+                self.logger.error("❌ Error al hacer clic en primer 'Siguiente'")
+                return False
+            
+            # Pausa para que cargue el frame
+            await self.page.wait_for_timeout(3000)
+            await self.wait_for_iframe_content()
+            
+            # Paso 4: Segundo clic en "Siguiente"
+            if not await self.click_in_frame(
+                self.SELECTOR_BTN_ACEPTAR,
+                "botón 'Siguiente' (segunda vez)"
+            ):
+                self.logger.error("❌ Error al hacer clic en segundo 'Siguiente'")
+                return False
+            
+            # Pausa para que aparezca el botón Archivar
+            await self.page.wait_for_timeout(3000)
+            await self.wait_for_iframe_content()
+            
+            # Paso 5: Verificar que aparezca el botón "Archivar"
+            if not await self.verify_element_value_in_frame(
+                self.SELECTOR_BTN_ARCHIVAR,
+                "botón 'Archivar'",
+                condition="is_visible",
+                attempts=10,
+                interval_ms=1000,
+                immediate_check=False
+            ):
+                self.logger.error("❌ El botón 'Archivar' no apareció")
+                return False
+            
+            self.logger.info("✅ Consulta DTO y finalización completada exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error en consulta y finalización: {e}")
+            return False
+        
+    async def execute_placa_flow(self, placa: str = "IOS190", fecha_nacimiento: str = "01061989", genero: str = "M", departamento: str = "ANTIOQUIA", ciudad: str = "BELLO") -> bool:
+        """Ejecuta el flujo completo desde placa hasta finalización."""
         self.logger.info(f"🚗 Iniciando flujo completo con placa '{placa}', ciudad '{ciudad}'...")
         steps = [
             lambda: self.esperar_y_llenar_placa(placa),
             self.click_comprobar_placa,
             self.verificar_campo_lleno,
             lambda: self.llenar_datos_asegurado(fecha_nacimiento, genero),
-            lambda: self.buscador_poblaciones(departamento, ciudad)
+            lambda: self.buscador_poblaciones(departamento, ciudad),
+            self.consultar_y_finalizar
         ]
         try:
             for i, step in enumerate(steps, 1):
