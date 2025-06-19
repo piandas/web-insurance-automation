@@ -11,6 +11,9 @@ class PlacaPage(BasePage):
     SELECTOR_IFRAME = "iframe"
     SELECTOR_INPUT_PLACA_IN_IFRAME = 'input[name="DatosVehiculoIndividualBean$matricula"]'
     SELECTOR_CAMPO_VERIFICACION_IN_IFRAME = 'input[name="_CVH_VehicuCol$codigoClaveVeh"]'
+    # Selectores para datos del asegurado
+    SELECTOR_FECHA_NACIMIENTO = "#DatosAseguradoAutosBean\\$fechaNacimiento"
+    SELECTOR_GENERO = "#DatosAseguradoAutosBean\\$idSexo"
 
     def __init__(self, page: Page):
         super().__init__(page)
@@ -89,14 +92,55 @@ class PlacaPage(BasePage):
             log_tag="campo de verificación"
         )
         return bool(result)
+    
+    async def llenar_datos_asegurado(self, fecha_nacimiento: str = "01/06/1999", genero: str = "M") -> bool:
+        """
+        Llena los datos del asegurado: fecha de nacimiento y género.
+        
+        Args:
+            fecha_nacimiento (str): Fecha en formato dd/mm/yyyy (default: "01/06/1999")
+            genero (str): Género - M (Masculino), F (Femenino), J (Jurídico) (default: "M")
+        
+        Returns:
+            bool: True si se llenaron los datos correctamente, False en caso contrario
+        """
+        self.logger.info(f"👤 Llenando datos del asegurado - Fecha: {fecha_nacimiento}, Género: {genero}")
+        
+        try:
+            # Llenar fecha de nacimiento
+            if not await self.fill_in_frame(
+                self.SELECTOR_FECHA_NACIMIENTO,
+                fecha_nacimiento,
+                "fecha de nacimiento"
+            ):
+                self.logger.error("❌ Error al llenar fecha de nacimiento")
+                return False
+            
+            # Seleccionar género
+            if not await self.select_in_frame(
+                self.SELECTOR_GENERO,
+                genero,
+                "género"
+            ):
+                self.logger.error("❌ Error al seleccionar género")
+                return False
+            
+            self.logger.info("✅ Datos del asegurado llenados correctamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error al llenar datos del asegurado: {e}")
+            return False
 
-    async def execute_placa_flow(self, placa: str = "IOS190") -> bool:
-        """Ejecuta el flujo completo de placa."""
-        self.logger.info(f"🚗 Iniciando flujo de placa con '{placa}'...")
+
+    async def execute_placa_flow(self, placa: str = "IOS190", fecha_nacimiento: str = "01/06/1999", genero: str = "M") -> bool:
+        """Ejecuta el flujo completo de placa y datos del asegurado."""
+        self.logger.info(f"🚗 Iniciando flujo completo con placa '{placa}'...")
         steps = [
             lambda: self.esperar_y_llenar_placa(placa),
             self.click_comprobar_placa,
-            self.verificar_campo_lleno
+            self.verificar_campo_lleno,
+            lambda: self.llenar_datos_asegurado(fecha_nacimiento, genero)
         ]
         try:
             for i, step in enumerate(steps, 1):
@@ -104,8 +148,8 @@ class PlacaPage(BasePage):
                 if not await step():
                     self.logger.error(f"❌ Falló el paso {i}")
                     return False
-            self.logger.info("✅ ¡FLUJO DE PLACA COMPLETADO EXITOSAMENTE!")
+            self.logger.info("✅ ¡FLUJO COMPLETO EXITOSO!")
             return True
         except Exception as e:
-            self.logger.error(f"❌ Error en flujo de placa: {e}")
+            self.logger.error(f"❌ Error en flujo completo: {e}")
             return False
