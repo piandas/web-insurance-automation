@@ -1,5 +1,6 @@
 from playwright.async_api import Page
 from src.utils import BasePage
+from src.config import Config
 import logging
 import datetime
 import os
@@ -31,8 +32,12 @@ class PlacaPage(BasePage):
         super().__init__(page)
         self.logger = logging.getLogger('allianz')
 
-    async def esperar_y_llenar_placa(self, placa: str = "IOS190") -> bool:
+    async def esperar_y_llenar_placa(self, placa: str = None) -> bool:
         """Espera el input de placa y lo llena."""
+        # Usar el valor del config si no se proporciona uno específico
+        if placa is None:
+            placa = Config.PLACA_VEHICULO
+            
         self.logger.info(f"📝 Esperando y llenando input de placa con '{placa}'...")
         return await self.fill_in_frame(
             self.SELECTOR_INPUT_PLACA,
@@ -70,27 +75,34 @@ class PlacaPage(BasePage):
             condition="value_not_empty",
             attempts=20,
             interval_ms=1000,
-            immediate_check=True
-        )
+            immediate_check=True        )
     
-    async def llenar_datos_asegurado(self, fecha_nacimiento: str = "01/06/1989", genero: str = "M") -> bool:
+    async def llenar_datos_asegurado(self, fecha_nacimiento: str = None, genero: str = None) -> bool:
         """
         Llena los datos del asegurado: fecha de nacimiento y género.
         
         Args:
-            fecha_nacimiento (str): Fecha en formato dd/mm/yyyy (default: "01/06/1999")
-            genero (str): Género - M (Masculino), F (Femenino), J (Jurídico) (default: "M")
+            fecha_nacimiento (str): Fecha en formato dd/mm/yyyy (default: valor de Config.FECHA_NACIMIENTO)
+            genero (str): Género - M (Masculino), F (Femenino), J (Jurídico) (default: valor de Config.GENERO_ASEGURADO)
         
         Returns:
             bool: True si se llenaron los datos correctamente, False en caso contrario
-        """
-        self.logger.info(f"👤 Llenando datos del asegurado - Fecha: {fecha_nacimiento}, Género: {genero}")
+        """        # Usar valores del config si no se proporcionan específicos
+        if fecha_nacimiento is None:
+            fecha_nacimiento = Config.FECHA_NACIMIENTO
+        if genero is None:
+            genero = Config.GENERO_ASEGURADO
+        
+        # Limpiar fecha de nacimiento: remover caracteres especiales como / - espacios
+        fecha_limpia = fecha_nacimiento.replace('/', '').replace('-', '').replace(' ', '')
+            
+        self.logger.info(f"👤 Llenando datos del asegurado - Fecha: {fecha_limpia}, Género: {genero}")
         
         try:
             # Llenar fecha de nacimiento
             if not await self.fill_in_frame(
                 self.SELECTOR_FECHA_NACIMIENTO,
-                fecha_nacimiento,
+                fecha_limpia,
                 "fecha de nacimiento"
             ):
                 self.logger.error("❌ Error al llenar fecha de nacimiento")
@@ -112,17 +124,23 @@ class PlacaPage(BasePage):
             self.logger.error(f"❌ Error al llenar datos del asegurado: {e}")
             return False
 
-    async def buscador_poblaciones(self, departamento: str = "ANTIOQUIA", ciudad: str = "BELLO") -> bool:
+    async def buscador_poblaciones(self, departamento: str = None, ciudad: str = None) -> bool:
         """
         Busca y selecciona una población específica.
         
         Args:
-            departamento (str): Nombre del departamento (default: "ANTIOQUIA")
-            ciudad (str): Nombre de la ciudad (default: "BELLO")
+            departamento (str): Nombre del departamento (default: valor de Config.DEPARTAMENTO)
+            ciudad (str): Nombre de la ciudad (default: valor de Config.CIUDAD)
         
         Returns:
             bool: True si se seleccionó la población correctamente, False en caso contrario
         """
+        # Usar valores del config si no se proporcionan específicos
+        if departamento is None:
+            departamento = Config.DEPARTAMENTO
+        if ciudad is None:
+            ciudad = Config.CIUDAD
+            
         self.logger.info(f"🏙️ Buscando población - Departamento: {departamento}, Ciudad: {ciudad}")
         
         try:
@@ -347,15 +365,27 @@ class PlacaPage(BasePage):
             self.logger.error(f"❌ Error en consulta y finalización: {e}")
             return False
         
-    async def execute_placa_flow(self, placa: str = "IOS190", fecha_nacimiento: str = "01061989", genero: str = "M", departamento: str = "ANTIOQUIA", ciudad: str = "BELLO") -> bool:
+    async def execute_placa_flow(self, placa: str = None, fecha_nacimiento: str = None, genero: str = None, departamento: str = None, ciudad: str = None) -> bool:
         """Ejecuta el flujo completo desde placa hasta finalización."""
+        # Usar valores del config si no se proporcionan específicos
+        if placa is None:
+            placa = Config.PLACA_VEHICULO
+        if fecha_nacimiento is None:
+            fecha_nacimiento = Config.FECHA_NACIMIENTO
+        if genero is None:
+            genero = Config.GENERO_ASEGURADO
+        if departamento is None:
+            departamento = Config.DEPARTAMENTO
+        if ciudad is None:
+            ciudad = Config.CIUDAD
+            
         self.logger.info(f"🚗 Iniciando flujo completo con placa '{placa}', ciudad '{ciudad}'...")
         steps = [
-            lambda: self.esperar_y_llenar_placa(placa),
+            self.esperar_y_llenar_placa,
             self.click_comprobar_placa,
             self.verificar_campo_lleno,
-            lambda: self.llenar_datos_asegurado(fecha_nacimiento, genero),
-            lambda: self.buscador_poblaciones(departamento, ciudad),
+            self.llenar_datos_asegurado,
+            self.buscador_poblaciones,
             self.consultar_y_finalizar
         ]
         try:

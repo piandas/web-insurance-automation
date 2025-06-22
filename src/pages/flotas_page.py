@@ -22,20 +22,20 @@ class FlotasPage(BasePage):
         super().__init__(page)
         self.logger = logging.getLogger('allianz')
 
-    async def click_cell_23541048(self) -> bool:
-        """Hace clic en la celda con número 23541048."""
-        self.logger.info("🔲 Haciendo clic en celda 23541048...")
+    async def click_policy_cell(self) -> bool:
+        """Hace clic en la celda con el número de póliza configurado."""
+        self.logger.info(f"🔲 Haciendo clic en celda {Config.POLICY_NUMBER}...")
         return await self.click_in_frame(
-            f"{self.SELECTOR_CELL}:has-text('23541048')",
-            "celda 23541048"
+            f"{self.SELECTOR_CELL}:has-text('{Config.POLICY_NUMBER}')",
+            f"celda {Config.POLICY_NUMBER}"
         )
 
-    async def click_livianos_particulares(self) -> bool:
-        """Hace clic en 'Livianos Particulares'."""
-        self.logger.info("🚗 Haciendo clic en 'Livianos Particulares'...")
+    async def click_ramos_asociados(self) -> bool:
+        """Hace clic en el ramo de seguro configurado."""
+        self.logger.info(f"🚗 Haciendo clic en '{Config.RAMO_SEGURO}'...")
         return await self.click_in_frame(
-            self.SELECTOR_LIVIANOS,
-            "'Livianos Particulares'"
+            f"text={Config.RAMO_SEGURO}",
+            f"'{Config.RAMO_SEGURO}'"
         )
 
     async def click_aceptar(self) -> bool:
@@ -51,13 +51,16 @@ class FlotasPage(BasePage):
         self.logger.info("🔘 Seleccionando radio 'No' (asegurado)...")
         if await self.click_in_frame(self.SELECTOR_RADIO_NO, "radio 'No' (asegurado)"):
             return True
-        return await self.click_in_frame(
-            "input[name='IntervinientesBean$esAsegurado'][value='N']",
+        return await self.click_in_frame(            "input[name='IntervinientesBean$esAsegurado'][value='N']",
             "radio 'No' (asegurado)"
         )
 
-    async def select_tipo_documento(self, tipo_documento: str = "CEDULA_CIUDADANIA") -> bool:
+    async def select_tipo_documento(self, tipo_documento: str = None) -> bool:
         """Selecciona el tipo de documento en el dropdown."""
+        # Usar el valor del config si no se proporciona uno específico
+        if tipo_documento is None:
+            tipo_documento = Config.TIPO_DOCUMENTO
+            
         tipo_map = {
             "NIT": " ", "REG_CIVIL_NACIMIENTO": "I", "NUIP": "J",
             "TARJETA_IDENTIDAD": "B", "CEDULA_CIUDADANIA": "C", "CEDULA_EXTRANJERIA": "X",
@@ -68,13 +71,16 @@ class FlotasPage(BasePage):
             self.logger.error(f"❌ Tipo de documento '{tipo_documento}' no válido.")
             return False
         return await self.select_in_frame(
-            self.SELECTOR_DOC_TYPE,
-            tipo_map[tipo_documento],
+            self.SELECTOR_DOC_TYPE,            tipo_map[tipo_documento],
             f"tipo de documento '{tipo_documento}'"
         )
 
-    async def fill_numero_documento(self, numero_documento: str = "1026258710") -> bool:
+    async def fill_numero_documento(self, numero_documento: str = None) -> bool:
         """Llena el campo de número de documento."""
+        # Usar el valor del config si no se proporciona uno específico
+        if numero_documento is None:
+            numero_documento = Config.NUMERO_DOCUMENTO
+            
         return await self.fill_in_frame(
             self.SELECTOR_DOC_NUM,
             numero_documento,
@@ -100,11 +106,11 @@ class FlotasPage(BasePage):
         """Ejecuta el flujo completo de la página de flotas."""
         self.logger.info("🚗 Iniciando flujo de Flotas...")
         steps = [
-            self.click_cell_23541048,
-            self.click_livianos_particulares,
+            self.click_policy_cell,
+            self.click_ramos_asociados,
             self.click_aceptar,
             self.click_radio_no_asegurado,
-            lambda: self.select_tipo_documento("CEDULA_CIUDADANIA"),
+            self.select_tipo_documento,
             self.fill_numero_documento,
             self.select_categoria_riesgo_liviano,
             self.click_btn_aceptar_final
