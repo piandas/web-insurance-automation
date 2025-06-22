@@ -28,9 +28,8 @@ old_files/
 prompt.txt
 
 # Carpetas de descargas - ignorar archivos pero mantener carpetas
-downloads/allianz/*
-downloads/sura/*
+downloads/
+
 
 # Carpetas de logs - ignorar archivos pero mantener carpetas  
-LOGS/allianz/*
-LOGS/sura/*
+LOGS/

@@ -32,12 +32,8 @@ class SuraAutomation(BaseAutomation):
     async def launch(self) -> bool:
         """Inicializa Playwright y abre el navegador."""
         if not await super().launch():
-            return False
-          # Inicializar páginas específicas de Sura
+            return False        # Inicializar páginas específicas de Sura
         self.login_page = LoginPage(self.page)
-        # TODO: Implementar DashboardPage y QuotePage
-        # self.dashboard_page = DashboardPage(self.page)
-        # self.quote_page = QuotePage(self.page)
         
         self.logger.info("✅ Páginas de Sura inicializadas")
         return True
@@ -46,25 +42,30 @@ class SuraAutomation(BaseAutomation):
         """Ejecuta el flujo de login específico de Sura."""
         self.logger.info("🔐 Ejecutando flujo de login Sura...")
         
-        # TODO: Implementar login de Sura
-        self.logger.warning("⚠️ Login de Sura pendiente de implementación")
+        if not self.usuario or not self.contrasena:
+            self.logger.error("❌ Credenciales de Sura no configuradas")
+            return False
+        
         return await self.login_page.login(self.usuario, self.contrasena)
 
     async def execute_navigation_flow(self) -> bool:
         """Ejecuta el flujo de navegación específico de Sura."""
         self.logger.info("🧭 Ejecutando flujo de navegación Sura...")
-        
-        # TODO: Implementar navegación de Sura
         self.logger.warning("⚠️ Navegación de Sura pendiente de implementación")
-        return await self.dashboard_page.navigate_to_quotes()
+        
+        # Placeholder - en desarrollo
+        await asyncio.sleep(2)
+        return True
 
     async def execute_quote_flow(self) -> bool:
         """Ejecuta el flujo de cotización específico de Sura."""
         self.logger.info("💰 Ejecutando flujo de cotización Sura...")
-        
-        # TODO: Implementar cotización de Sura
         self.logger.warning("⚠️ Cotización de Sura pendiente de implementación")
-        return await self.quote_page.create_quote()
+        
+        # Placeholder - en desarrollo
+        await asyncio.sleep(2)
+        return True
+
 
 # Función principal para compatibilidad
 async def main():

@@ -165,49 +165,7 @@ results = await manager.run_parallel(['allianz', 'sura'])
 - **Páginas**: ⏳ Esqueleto básico (pendiente implementación real)
 - **Implementación**: ⏳ Pendiente según especificaciones de Sura
 
-## � Migración desde Versión Anterior
-
-### Cambios Principales
-1. **Estructura modular**: Código reorganizado por compañías
-2. **Configuración expandida**: Variables específicas por aseguradora
-3. **Logging mejorado**: Logs separados por compañía
-4. **Interfaces múltiples**: CLI preparada para futuras interfaces web
-
-### Compatibilidad
-- **Variables originales**: Mantenidas para compatibilidad
-- **Funcionalidad Allianz**: 100% funcional
-- **Configuraciones**: Se mantienen valores por defecto
-
-## 🛠️ Desarrollo y Extensión
-
-### Agregar Nueva Compañía
-
-1. **Crear estructura**:
-```bash
-src/companies/nueva_compania/
-├── __init__.py
-├── nueva_automation.py
-└── pages/
-    ├── __init__.py
-    ├── login_page.py
-    └── quote_page.py
-```
-
-2. **Configuración**:
-```python
-# src/config/nueva_config.py
-class NuevaConfig(BaseConfig):
-    USUARIO = os.getenv('NUEVA_USUARIO', '')
-    # ... otras configuraciones
-```
-
-3. **Registrar en factory**:
-```python
-# src/factory/automation_factory.py
-elif company_lower == 'nueva':
-    from ..companies.nueva.nueva_automation import NuevaAutomation
-    return NuevaAutomation(...)
-```
+## 🛠️ Desarrollo y Extensió
 
 ### Personalizar Flujos
 
