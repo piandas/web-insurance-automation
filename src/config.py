@@ -17,11 +17,11 @@ class Config:
     # CONFIGURACIONES DE FLOTAS PAGE
     # ==========================================
     
-    # Número de póliza para desarrollo (usado en click_policy_cell)
+    # Número de póliza (usado en click_policy_cell)
     POLICY_NUMBER: str = '23541048'
     
     # Tipo de ramo/seguro (usado en click_ramos_asociados)
-    # Ejemplos: "Livianos Particulares", "Motos", etc.
+    # Opciones: "Livianos Particulares", "Motos", etc.
     RAMO_SEGURO: str = 'Livianos Particulares'
     
     # Tipo de documento del asegurado
