@@ -1,12 +1,11 @@
+"""Página de flotas específica para Allianz."""
+
 from playwright.async_api import Page
-from src.utils import BasePage
-import logging
-from src.config import Config
-from typing import Optional
+from ....shared.base_page import BasePage
+from ....config.allianz_config import AllianzConfig
 
 class FlotasPage(BasePage):
-    """Página de Flotas con funciones específicas para el flujo de cotización."""
-    FRAME_IFRAME = "iframe"
+    """Página de Flotas con funciones específicas para el flujo de cotización de Allianz."""
 
     # Selectores centralizados
     SELECTOR_CELL               = "#tableFlotas_7_1"
@@ -19,23 +18,23 @@ class FlotasPage(BasePage):
     SELECTOR_BTN_ACEPTAR_FINAL  = "#btnAceptar"
 
     def __init__(self, page: Page):
-        super().__init__(page)
-        self.logger = logging.getLogger('allianz')
+        super().__init__(page, 'allianz')
+        self.config = AllianzConfig()
 
     async def click_policy_cell(self) -> bool:
         """Hace clic en la celda con el número de póliza configurado."""
-        self.logger.info(f"🔲 Haciendo clic en celda {Config.POLICY_NUMBER}...")
+        self.logger.info(f"🔲 Haciendo clic en celda {self.config.POLICY_NUMBER}...")
         return await self.click_in_frame(
-            f"{self.SELECTOR_CELL}:has-text('{Config.POLICY_NUMBER}')",
-            f"celda {Config.POLICY_NUMBER}"
+            f"{self.SELECTOR_CELL}:has-text('{self.config.POLICY_NUMBER}')",
+            f"celda {self.config.POLICY_NUMBER}"
         )
 
     async def click_ramos_asociados(self) -> bool:
         """Hace clic en el ramo de seguro configurado."""
-        self.logger.info(f"🚗 Haciendo clic en '{Config.RAMO_SEGURO}'...")
+        self.logger.info(f"🚗 Haciendo clic en '{self.config.RAMO_SEGURO}'...")
         return await self.click_in_frame(
-            f"text={Config.RAMO_SEGURO}",
-            f"'{Config.RAMO_SEGURO}'"
+            f"text={self.config.RAMO_SEGURO}",
+            f"'{self.config.RAMO_SEGURO}'"
         )
 
     async def click_aceptar(self) -> bool:
@@ -51,7 +50,8 @@ class FlotasPage(BasePage):
         self.logger.info("🔘 Seleccionando radio 'No' (asegurado)...")
         if await self.click_in_frame(self.SELECTOR_RADIO_NO, "radio 'No' (asegurado)"):
             return True
-        return await self.click_in_frame(            "input[name='IntervinientesBean$esAsegurado'][value='N']",
+        return await self.click_in_frame(
+            "input[name='IntervinientesBean$esAsegurado'][value='N']",
             "radio 'No' (asegurado)"
         )
 
@@ -59,7 +59,7 @@ class FlotasPage(BasePage):
         """Selecciona el tipo de documento en el dropdown."""
         # Usar el valor del config si no se proporciona uno específico
         if tipo_documento is None:
-            tipo_documento = Config.TIPO_DOCUMENTO
+            tipo_documento = self.config.TIPO_DOCUMENTO
             
         tipo_map = {
             "NIT": " ", "REG_CIVIL_NACIMIENTO": "I", "NUIP": "J",
@@ -71,7 +71,8 @@ class FlotasPage(BasePage):
             self.logger.error(f"❌ Tipo de documento '{tipo_documento}' no válido.")
             return False
         return await self.select_in_frame(
-            self.SELECTOR_DOC_TYPE,            tipo_map[tipo_documento],
+            self.SELECTOR_DOC_TYPE,
+            tipo_map[tipo_documento],
             f"tipo de documento '{tipo_documento}'"
         )
 
@@ -79,7 +80,7 @@ class FlotasPage(BasePage):
         """Llena el campo de número de documento."""
         # Usar el valor del config si no se proporciona uno específico
         if numero_documento is None:
-            numero_documento = Config.NUMERO_DOCUMENTO
+            numero_documento = self.config.NUMERO_DOCUMENTO
             
         return await self.fill_in_frame(
             self.SELECTOR_DOC_NUM,
@@ -103,8 +104,8 @@ class FlotasPage(BasePage):
         )
 
     async def execute_flotas_flow(self) -> bool:
-        """Ejecuta el flujo completo de la página de flotas."""
-        self.logger.info("🚗 Iniciando flujo de Flotas...")
+        """Ejecuta el flujo completo de la página de flotas de Allianz."""
+        self.logger.info("🚗 Iniciando flujo de Flotas Allianz...")
         steps = [
             self.click_policy_cell,
             self.click_ramos_asociados,
@@ -119,8 +120,8 @@ class FlotasPage(BasePage):
             for step in steps:
                 if not await step():
                     return False
-            self.logger.info("✅ ¡FLUJO DE FLOTAS COMPLETADO EXITOSAMENTE!")
+            self.logger.info("✅ ¡FLUJO DE FLOTAS ALLIANZ COMPLETADO EXITOSAMENTE!")
             return True
         except Exception as e:
-            self.logger.error(f"❌ Error en flujo de flotas: {e}")
+            self.logger.error(f"❌ Error en flujo de flotas Allianz: {e}")
             return False

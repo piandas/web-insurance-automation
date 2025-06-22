@@ -1,346 +1,253 @@
-# 🚗 Automatización Allianz - Sistema de Cotizaciones
+# 🚗 Sistema de Automatización Multi-Compañía - Cotizaciones de Seguros
 
 ## 📋 Descripción del Proyecto
 
-Este proyecto automatiza el proceso completo de cotización de seguros en el sistema web de Allianz, desde el login hasta la generación y descarga del PDF de cotización. Utiliza **Playwright** para la automatización web y sigue el patrón **Page Object Model** para una estructura de código mantenible y escalable.
+Sistema modular y escalable para automatizar procesos de cotización en múltiples aseguradoras. Actualmente soporta **Allianz** (completamente implementado) y **Sura** (estructura base preparada). Utiliza **Playwright** para automatización web y sigue patrones de diseño escalables.
 
-## 🏗️ Estructura del Proyecto
+## 🏗️ Estructura del Proyecto (Nueva Arquitectura)
 
 ```
 MCP/
-├── src/
-│   ├── pages/
-│   │   ├── __init__.py           # Configuración del paquete
-│   │   ├── login_page.py         # 🔐 Manejo de autenticación
-│   │   ├── dashboard_page.py     # 🏠 Navegación en dashboard
-│   │   ├── flotas_page.py        # 🚗 Gestión de flotas y documentos
-│   │   └── placa_page.py         # 📋 Proceso de placa y cotización
-│   ├── allianz_automation.py     # 🎯 Orquestador principal
-│   ├── config.py                 # ⚙️ Configuraciones centralizadas
-│   └── utils.py                  # 🛠️ Utilidades y clase base
-├── tests/
-│   └── test_flujo_allianz.py     # 🧪 Pruebas automatizadas
-├── downloads/                    # 📁 PDFs generados
-├── LOGS/                         # 📝 Logs del sistema
-├── .env.example                  # 🔑 Plantilla de variables sensibles
-├── requirements.txt              # 📦 Dependencias del proyecto
-└── README.md                     # 📚 Documentación
-
-## 🔧 Descripción de Componentes
-
-### 📋 `config.py` - Configuración Centralizada
-**Configuraciones sensibles** (desde variables de entorno):
-- Credenciales de usuario y contraseña
-- Configuración del navegador (headless, timeout)
-- URL base del sistema
-
-**Configuraciones de negocio** (valores directos):
-```python
-# Configuraciones de Flotas
-POLICY_NUMBER = '123456'           # Número de póliza
-RAMO_SEGURO = 'Livianos Particulares' # Tipo de seguro
-TIPO_DOCUMENTO = 'CEDULA_CIUDADANIA' # Tipo de documento
-NUMERO_DOCUMENTO = '123456'      # Número de documento
-
-# Configuraciones de Placa
-PLACA_VEHICULO = 'ABC123'           # Placa del vehículo
-FECHA_NACIMIENTO = '01/01/1999'     # Fecha (se limpia automáticamente)
-GENERO_ASEGURADO = 'M'              # M, F, J
-DEPARTAMENTO = 'ANTIOQUIA'          # Departamento
-CIUDAD = 'MEDELLIN'                    # Ciudad
+├── main.py                          # 🎯 Punto de entrada principal
+├── requirements.txt                 # � Dependencias
+├── .env                            # � Variables de entorno
+├── downloads/                      # � PDFs generados
+│   ├── allianz/                   # PDFs de Allianz
+│   └── sura/                      # PDFs de Sura
+├── LOGS/                          # � Logs del sistema
+│   ├── allianz/                   # Logs de Allianz
+│   └── sura/                      # Logs de Sura
+└── src/
+    ├── __init__.py                # Módulo principal
+    ├── core/                      # 🏛️ Núcleo del sistema
+    │   ├── base_automation.py     # Clase base abstracta
+    │   ├── automation_manager.py  # Orquestador principal
+    │   ├── logger_factory.py      # Factory de loggers
+    │   └── constants.py           # Constantes globales
+    ├── config/                    # ⚙️ Configuraciones
+    │   ├── base_config.py         # Configuración base
+    │   ├── allianz_config.py      # Config específica Allianz
+    │   └── sura_config.py         # Config específica Sura
+    ├── shared/                    # 🔄 Recursos compartidos
+    │   ├── base_page.py           # Página base común
+    │   ├── utils.py               # Utilidades generales
+    │   └── exceptions.py          # Excepciones personalizadas
+    ├── companies/                 # 🏢 Módulos por compañía
+    │   ├── allianz/              # Implementación Allianz
+    │   │   ├── allianz_automation.py
+    │   │   └── pages/            # Páginas específicas
+    │   │       ├── login_page.py
+    │   │       ├── dashboard_page.py
+    │   │       ├── flotas_page.py
+    │   │       └── placa_page.py
+    │   └── sura/                 # Implementación Sura (base)
+    │       ├── sura_automation.py
+    │       └── pages/            # Páginas específicas
+    │           ├── login_page.py
+    │           ├── dashboard_page.py
+    │           └── quote_page.py
+    ├── factory/                  # 🏭 Factories
+    │   ├── automation_factory.py # Factory de automatizaciones
+    │   └── config_factory.py     # Factory de configuraciones
+    └── interfaces/               # 🖥️ Interfaces de usuario
+        └── cli_interface.py      # Interfaz línea de comandos
 ```
 
-### 🛠️ `utils.py` - Clase BasePage
-Contiene métodos genéricos reutilizables:
-- **Gestión de iframes**: `wait_for_iframe_content()`, `click_in_frame()`
-- **Interacciones avanzadas**: `fill_in_frame()`, `select_in_frame()`, `click_by_text_in_frame()`
-- **Verificaciones**: `verify_element_value_in_frame()` con múltiples condiciones
-- **Utilidades**: `wait_for_element_with_text()`, manejo de timeouts
+## ✨ Características Destacadas
 
-### 🔐 `pages/login_page.py` - LoginPage
-Maneja todo el proceso de autenticación:
-- Navegación a la URL de login
-- Llenado de credenciales desde configuración
-- Envío del formulario y validación
-- Método `login()` que orquesta el proceso completo
+### 🎯 **Arquitectura Modular**
+- **Separación por compañías**: Cada aseguradora en su propio módulo
+- **Código reutilizable**: Clases base compartidas
+- **Fácil extensión**: Agregar nuevas aseguradoras sin afectar código existente
 
-### 🏠 `pages/dashboard_page.py` - DashboardPage
-Navegación en el panel principal:
-- Clic en "Nueva Póliza"
-- Expansión de sección "Autos"
-- Selección de "Flotas Autos"
-- Transición a página de aplicación
+### ⚡ **Ejecución Flexible**
+- **Secuencial**: Una compañía tras otra
+- **Paralelo**: Múltiples compañías simultáneamente
+- **Selectiva**: Elegir qué compañías ejecutar
 
-### 🚗 `pages/flotas_page.py` - FlotasPage
-Gestión completa del proceso de flotas:
-- **`click_policy_cell()`**: Selecciona póliza configurada
-- **`click_ramos_asociados()`**: Selecciona tipo de seguro
-- **`select_tipo_documento()`**: Selecciona tipo de documento
-- **`fill_numero_documento()`**: Llena número de documento
-- **`execute_flotas_flow()`**: Ejecuta flujo completo automatizado
+### � **Configuración Avanzada**
+- **Variables por compañía**: Configuraciones independientes
+- **Compatibilidad hacia atrás**: Mantiene configuración original de Allianz
+- **Fácil personalización**: Sobrescribir configuraciones via CLI
 
-### 📋 `pages/placa_page.py` - PlacaPage
-Proceso completo de cotización:
-- **`esperar_y_llenar_placa()`**: Ingresa placa del vehículo
-- **`llenar_datos_asegurado()`**: Fecha y género (limpia formato automáticamente)
-- **`buscador_poblaciones()`**: Selecciona departamento y ciudad
-- **`consultar_y_finalizar()`**: Genera y descarga PDF de cotización
-- **`execute_placa_flow()`**: Orquesta proceso completo
-
-### 🎯 `allianz_automation.py` - Orquestador Principal
-Clase principal que coordina todo el flujo:
-- Inicialización del navegador Playwright
-- Configuración de logging (consola + archivo)
-- Instanciación de todas las páginas
-- Ejecución del flujo completo de automatización
-- Manejo de errores y limpieza de recursos
+### 📊 **Logging Inteligente**
+- **Logs separados**: Cada compañía tiene su propio log
+- **Dual output**: Consola + archivo
+- **Factory pattern**: Gestión centralizada de loggers
 
 ## 🚀 Instalación y Configuración
 
-### 1. Clonar e Instalar Dependencias
+### 1. Dependencias
 ```bash
-# Clonar el repositorio
-git clone <tu-repositorio>
-cd MCP
-
-# Instalar dependencias de Python
+# Instalar dependencias
 pip install -r requirements.txt
 
 # Instalar navegadores de Playwright
 playwright install
 ```
 
-### 2. Configurar Variables de Entorno
-```bash
-# Copiar plantilla de configuración
-copy .env.example .env
+### 2. Configuración de Variables
+Edita el archivo `.env` con tus credenciales:
 
-# Editar .env con tus credenciales
-USUARIO=tu_usuario_allianz
-CONTRASENA=tu_contraseña_allianz
-HEADLESS=False
-BASE_URL=https://www.allia2net.com.co
-TIMEOUT=30000
-```
+```env
+# Configuración Allianz
+ALLIANZ_USUARIO=tu_usuario_allianz
+ALLIANZ_CONTRASENA=tu_contraseña_allianz
 
-### 3. Personalizar Configuraciones
-Edita `src/config.py` para ajustar valores según tus necesidades:
-```python
-# Cambiar datos de prueba
-POLICY_NUMBER = '12345678'        # Tu número de póliza
-RAMO_SEGURO = 'Motos'            # Tipo de seguro deseado
-PLACA_VEHICULO = 'ABC123'        # Placa a cotizar
-NUMERO_DOCUMENTO = '123456'   # Documento del asegurado
-DEPARTAMENTO = 'CUNDINAMARCA'    # Tu departamento
-CIUDAD = 'BOGOTA'                # Tu ciudad
+# Configuración Sura (cuando esté disponible)
+SURA_USUARIO=tu_usuario_sura
+SURA_CONTRASENA=tu_contraseña_sura
+
+# Configuración general
+HEADLESS=False  # True para ejecutar sin ventana
 ```
 
 ## 🎯 Uso del Sistema
 
-### Ejecución Básica
+### Interfaz de Línea de Comandos
+
+#### Comandos Básicos
 ```bash
-cd src
-python allianz_automation.py
+# Ejecutar solo Allianz
+python -m src.interfaces.cli_interface --companies allianz
+
+# Ejecutar en paralelo (cuando Sura esté listo)
+python -m src.interfaces.cli_interface --companies allianz sura --parallel
+
+# Ejecutar en modo headless
+python -m src.interfaces.cli_interface --companies allianz --headless
+
+# Ver compañías disponibles
+python -m src.interfaces.cli_interface --list-companies
+```
+
+#### Configuraciones Personalizadas
+```bash
+# Con credenciales específicas
+python -m src.interfaces.cli_interface --companies allianz --user mi_usuario --password mi_pass
+
+# Modo verbose
+python -m src.interfaces.cli_interface --companies allianz --verbose
 ```
 
 ### Uso Programático
+
 ```python
-from src.allianz_automation import AllianzAutomation
+from src.factory.automation_factory import AutomationFactory
+from src.core.automation_manager import AutomationManager
 
-async def main():
-    # Usar configuración por defecto
-    automation = AllianzAutomation()
-    
-    # O personalizar parámetros
-    automation = AllianzAutomation(
-        usuario="mi_usuario",
-        contrasena="mi_contraseña",
-        headless=True  # Ejecutar sin ventana
-    )
-    
-    await automation.launch()
-    success = await automation.run_complete_automation()
-    await automation.close()
-    
-    return success
+# Crear automatización específica
+automation = AutomationFactory.create('allianz')
+await automation.launch()
+success = await automation.run_complete_flow()
+await automation.close()
 
-# Ejecutar
-import asyncio
-result = asyncio.run(main())
+# Usar el manager para múltiples compañías
+manager = AutomationManager()
+results = await manager.run_parallel(['allianz', 'sura'])
 ```
 
-### Ejecución de Pruebas
+## 🏢 Estado de las Compañías
+
+### ✅ Allianz - COMPLETAMENTE FUNCIONAL
+- **Login**: ✅ Implementado
+- **Navegación**: ✅ Dashboard → Flotas
+- **Flotas**: ✅ Selección de póliza, ramo, documentos
+- **Placa**: ✅ Verificación, datos asegurado, ubicación
+- **Cotización**: ✅ Generación y descarga de PDF
+- **Logs**: ✅ Separados en `LOGS/allianz/`
+- **Descargas**: ✅ Separadas en `downloads/allianz/`
+
+### � Sura - ESTRUCTURA BASE PREPARADA
+- **Arquitectura**: ✅ Estructura modular creada
+- **Configuración**: ✅ Variables de entorno preparadas
+- **Logging**: ✅ Logger específico configurado
+- **Páginas**: ⏳ Esqueleto básico (pendiente implementación real)
+- **Implementación**: ⏳ Pendiente según especificaciones de Sura
+
+## � Migración desde Versión Anterior
+
+### Cambios Principales
+1. **Estructura modular**: Código reorganizado por compañías
+2. **Configuración expandida**: Variables específicas por aseguradora
+3. **Logging mejorado**: Logs separados por compañía
+4. **Interfaces múltiples**: CLI preparada para futuras interfaces web
+
+### Compatibilidad
+- **Variables originales**: Mantenidas para compatibilidad
+- **Funcionalidad Allianz**: 100% funcional
+- **Configuraciones**: Se mantienen valores por defecto
+
+## 🛠️ Desarrollo y Extensión
+
+### Agregar Nueva Compañía
+
+1. **Crear estructura**:
 ```bash
-# Ejecutar pruebas automatizadas
-cd tests
-python test_flujo_allianz.py
+src/companies/nueva_compania/
+├── __init__.py
+├── nueva_automation.py
+└── pages/
+    ├── __init__.py
+    ├── login_page.py
+    └── quote_page.py
 ```
 
-## ✨ Características Destacadas
-
-### 🎯 **Configuración Centralizada**
-- **Datos sensibles**: Credenciales en `.env`
-- **Configuraciones de negocio**: Valores directos en `config.py`
-- **Flexibilidad**: Cambiar valores sin tocar código
-
-### 🔄 **Automatización Inteligente**
-- **Limpieza automática**: Fechas con formato `01/06/1989` → `01061989`
-- **Manejo de iframes**: Detección y trabajo automático con frames
-- **Verificaciones robustas**: Múltiples condiciones de validación
-- **Timeouts configurables**: Esperas adaptables según necesidad
-
-### 📊 **Logging Avanzado**
-- **Dual output**: Consola + archivo de log
-- **Niveles de detalle**: Info, errores, advertencias
-- **Ubicación**: Logs guardados en `LOGS/log.log`
-- **Formato**: Timestamp + nivel + mensaje
-
-### 🛡️ **Manejo de Errores**
-- **Recuperación automática**: Reintentos en operaciones críticas
-- **Logging detallado**: Errores con contexto completo
-- **Limpieza de recursos**: Cierre automático del navegador
-
-### 📁 **Gestión de Archivos**
-- **Descarga automática**: PDFs guardados en `downloads/`
-- **Nomenclatura clara**: `Cotizacion_Allianz_YYYYMMDD_HHMMSS.pdf`
-- **Verificación**: Validación de descarga exitosa
-
-## 🔧 Ventajas de la Arquitectura
-
-### 📐 **Patrón Page Object Model**
-- **Separación clara**: Cada página maneja su responsabilidad
-- **Reutilización**: Métodos genéricos en `BasePage`
-- **Mantenibilidad**: Cambios localizados por página
-- **Testabilidad**: Cada componente puede probarse independientemente
-
-### 🔄 **Escalabilidad**
-- **Nuevas páginas**: Fácil agregar siguiendo el patrón
-- **Nuevas funciones**: Extensión sin afectar código existente
-- **Configuraciones**: Agregar nuevos valores sin cambios de código
-
-### 🎨 **Legibilidad**
-- **Nombres descriptivos**: Funciones autoexplicativas
-- **Documentación**: Docstrings detallados
-- **Comentarios**: Explicaciones en código complejo
-- **Estructura lógica**: Organización intuitive
-
-## 🚀 Flujo de Automatización
-
-### 1. **Inicialización**
-```
-🔧 Configurar navegador Playwright
-📝 Configurar sistema de logging
-🎯 Instanciar páginas (Login, Dashboard, Flotas, Placa)
+2. **Configuración**:
+```python
+# src/config/nueva_config.py
+class NuevaConfig(BaseConfig):
+    USUARIO = os.getenv('NUEVA_USUARIO', '')
+    # ... otras configuraciones
 ```
 
-### 2. **Autenticación**
-```
-🌐 Navegar a URL de login
-🔐 Llenar credenciales desde config
-✅ Validar acceso exitoso
-```
-
-### 3. **Navegación Dashboard**
-```
-🏠 Acceder a "Nueva Póliza"
-🚗 Expandir sección "Autos"
-📋 Seleccionar "Flotas Autos"
+3. **Registrar en factory**:
+```python
+# src/factory/automation_factory.py
+elif company_lower == 'nueva':
+    from ..companies.nueva.nueva_automation import NuevaAutomation
+    return NuevaAutomation(...)
 ```
 
-### 4. **Proceso de Flotas**
-```
-🔢 Seleccionar póliza configurada
-🚗 Elegir tipo de seguro
-📄 Configurar tipo de documento
-✏️ Llenar número de documento
-```
+### Personalizar Flujos
 
-### 5. **Proceso de Placa**
-```
-🚗 Ingresar placa del vehículo
-👤 Completar datos del asegurado
-🏙️ Seleccionar ubicación
-📋 Generar cotización
-```
+Cada compañía implementa los métodos base:
+- `execute_login_flow()`
+- `execute_navigation_flow()`
+- `execute_quote_flow()`
 
-### 6. **Finalización**
-```
-📄 Generar PDF de cotización
-💾 Descargar archivo automáticamente
-🗂️ Guardar en carpeta downloads/
-✅ Confirmar proceso exitoso
-```
+## � Comandos Útiles
 
-## 🛠️ Desarrollo y Contribución
-
-### Estructura de Desarrollo
 ```bash
-# Crear nueva página
-src/pages/nueva_page.py     # Siguiendo patrón existente
-# Agregar import en
-src/pages/__init__.py       # Para exportar la nueva página
-# Instanciar en
-src/allianz_automation.py  # En el constructor
+# Ver ayuda completa
+python main.py --help
+
+# Ejecutar con máximo detalle
+python main.py --companies allianz --verbose
+
+# Verificar configuración
+python -c "from src.config.allianz_config import AllianzConfig; print(AllianzConfig.USUARIO)"
+
+# Probar factory
+python -c "from src.factory.automation_factory import AutomationFactory; print(AutomationFactory.get_supported_companies())"
 ```
 
-### Agregar Nueva Configuración
-```python
-# En config.py
-NUEVA_CONFIG: str = 'valor_por_defecto'
+## 🎯 Flujo de Automatización Allianz
 
-# Usar en cualquier página
-from src.config import Config
-valor = Config.NUEVA_CONFIG
-```
+1. **🔧 Inicialización**: Configurar navegador específico para Allianz
+2. **🔐 Login**: Autenticación en portal Allianz
+3. **🧭 Navegación**: Dashboard → Nueva Póliza → Autos → Flotas
+4. **🚗 Flotas**: Seleccionar póliza, ramo, tipo documento
+5. **🔍 Placa**: Verificar vehículo, datos asegurado, ubicación
+6. **💰 Cotización**: Generar y descargar PDF
+7. **📁 Archivo**: Guardar en `downloads/allianz/`
 
-### Debugging
-```python
-# Para debugging, cambiar en config.py o al instanciar
-HEADLESS = False  # Ver navegador en acción
-
-# Logs detallados en
-LOGS/log.log
-```
-
-## 📞 Soporte y Documentación
-
-### Archivos de Referencia
-- **`CAMBIOS_CONFIGURACION.md`**: Historial de cambios de configuración  
-- **`.env.example`**: Plantilla de variables de entorno
-- **`LOGS/log.log`**: Logs detallados de ejecución
-
-### Solución de Problemas Comunes
-
-**❌ Error de credenciales**
-```bash
-# Verificar archivo .env
-USUARIO=tu_usuario_correcto
-CONTRASENA=tu_contraseña_correcta
-```
-
-**❌ Timeout en elementos**
-```python
-# Aumentar timeout en config.py
-TIMEOUT = 60000  # 60 segundos
-```
-
-**❌ Error de navegador**
-```bash
-# Reinstalar navegadores
-playwright install
-```
-
-**❌ Placa/documento no válido**
-```python
-# Verificar configuraciones en config.py
-PLACA_VEHICULO = 'ABC123'  # Formato válido
-NUMERO_DOCUMENTO = '1234567890'  # Solo números
-```
+## 🔮 Roadmap
 
 ---
 
-### 🌟 **¡Sistema de Automatización de Cotizaciones Allianz Listo!**
+### 🌟 **Sistema Modular de Automatización Multi-Compañía**
 
-**Desarrollado con ❤️ usando Playwright + Python**
+**Desarrollado para Infondo Agencias de Seguros por el Ingeniero Santiago Bustos usando Playwright + Python**
 
-*Configuración centralizada • Arquitectura escalable • Logging avanzado • Manejo de errores robusto*
+*Arquitectura escalable • Logging avanzado • Configuración flexible • Ejecución paralela*

@@ -1,22 +1,26 @@
+"""Clase base para todas las páginas de automatización."""
+
 import logging
-from typing import Optional
+from typing import Optional, Any, Callable
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
-from src.config import Config
-from typing import Any, Callable
+
+from ..core.constants import Constants
 
 class BasePage:
     """Clase base con métodos genéricos para interacciones con páginas."""
+    
     IFRAME_SELECTOR: str = "iframe"
 
-    def __init__(self, page: Page):
+    def __init__(self, page: Page, company: str = "generic"):
         self.page: Page = page
+        self.company = company
         self._frame = self.page.frame_locator(self.IFRAME_SELECTOR)
-        self.logger = logging.getLogger('allianz')
+        self.logger = logging.getLogger(company)
 
     async def wait_for_element_with_text(self, text: str, timeout: Optional[int] = None) -> bool:
         """Espera un texto en el main o en el iframe."""
         lower = text.lower()
-        timeout = timeout or Config.TIMEOUT
+        timeout = timeout or Constants.DEFAULT_TIMEOUT
         self.logger.info(f"⏳ Esperando texto '{text}' (<= {timeout/1000}s)...")
         fn = f"""
         () => {{
@@ -38,7 +42,7 @@ class BasePage:
 
     async def wait_for_iframe_content(self, timeout: Optional[int] = None) -> bool:
         """Espera a que el iframe tenga hijos en su body."""
-        timeout = timeout or Config.TIMEOUT
+        timeout = timeout or Constants.DEFAULT_TIMEOUT
         self.logger.info(f"⏳ Esperando contenido de iframe (<= {timeout/1000}s)...")
         try:
             await self.page.wait_for_function(
@@ -53,7 +57,7 @@ class BasePage:
 
     async def wait_for_element_by_id_in_iframe(self, element_id: str, timeout: Optional[int] = None) -> bool:
         """Espera un elemento por ID dentro del iframe."""
-        timeout = timeout or Config.TIMEOUT
+        timeout = timeout or Constants.DEFAULT_TIMEOUT
         sel = f"#{element_id}"
         self.logger.info(f"⏳ Esperando '{sel}' en iframe (<= {timeout/1000}s)...")
         try:
@@ -68,7 +72,7 @@ class BasePage:
             self.logger.error(f"❌ Timeout esperando '{sel}' en iframe: {e}")
             return False
 
-    async def evaluate(self, script: str) -> bool:
+    async def evaluate(self, script: str) -> Any:
         """Ejecuta un script en el contexto de la página."""
         try:
             return await self.page.evaluate(script)
@@ -101,7 +105,8 @@ class BasePage:
 
     async def click_with_js(self, script: str, success_msg: str) -> bool:
         """Click via JS y log."""
-        if await self.evaluate(script):
+        result = await self.evaluate(script)
+        if result:
             self.logger.info(success_msg)
             return True
         return False

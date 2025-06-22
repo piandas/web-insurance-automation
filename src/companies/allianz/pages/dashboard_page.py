@@ -1,11 +1,11 @@
+"""Página del dashboard específica para Allianz."""
+
 import asyncio
-import logging
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
-from src.config import Config
-from src.utils import BasePage
+from playwright.async_api import Page
+from ....shared.base_page import BasePage
 
 class DashboardPage(BasePage):
-    """Página del dashboard con navegación a Flotas Autos."""
+    """Página del dashboard con navegación a Flotas Autos en Allianz."""
     
     # Selectores
     NEW_POLICY_LINK = "#link_new_policy"
@@ -15,12 +15,11 @@ class DashboardPage(BasePage):
     BOX_SELECTOR = "app-box .box"
     
     def __init__(self, page: Page):
-        super().__init__(page)
-        self.logger = logging.getLogger('allianz')
+        super().__init__(page, 'allianz')
 
     async def navigate_to_flotas(self) -> bool:
         """Navega directamente a Flotas Autos y envía el formulario."""
-        self.logger.info("🚗 Navegando a Flotas Autos...")
+        self.logger.info("🚗 Navegando a Flotas Autos en Allianz...")
         try:
             # Hacer clic en Nueva Póliza
             if not await self.safe_click(self.NEW_POLICY_LINK):
@@ -63,7 +62,7 @@ class DashboardPage(BasePage):
 
     async def submit_application_form(self) -> bool:
         """Envía el formulario de aplicación si está presente."""
-        self.logger.info("📋 Esperando formulario y enviándolo...")
+        self.logger.info("📋 Esperando formulario de Allianz y enviándolo...")
         
         try:
             # Esperar más tiempo y luego verificar si existe
@@ -71,19 +70,19 @@ class DashboardPage(BasePage):
             
             if await self.is_visible_safe("#applicationForm", timeout=15000):
                 await self.page.evaluate("document.querySelector('#applicationForm').submit()")
-                self.logger.info("✅ Formulario enviado")
+                self.logger.info("✅ Formulario de Allianz enviado")
                 await self.wait_for_load_state_with_retry("networkidle")
                 
                 # Esperar a que aparezca contenido del iframe después del envío
                 await self.wait_for_iframe_content()
                 return True
             else:
-                self.logger.warning("⚠️ Formulario no encontrado, continuando...")
+                self.logger.warning("⚠️ Formulario de Allianz no encontrado, continuando...")
                 # Esperar contenido del iframe de todas formas
                 await self.wait_for_iframe_content()
                 return True
         except Exception as e:
-            self.logger.exception(f"❌ Error enviando formulario: {e}")
+            self.logger.exception(f"❌ Error enviando formulario de Allianz: {e}")
             # Intentar esperar contenido del iframe de todas formas
             await self.wait_for_iframe_content()
             return False

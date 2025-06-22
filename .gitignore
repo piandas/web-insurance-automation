@@ -11,7 +11,6 @@ venv/
 .env.*
 
 # Archivos de log y temporales
-LOGS/
 *.log
 
 # Archivos del sistema
@@ -27,4 +26,11 @@ Thumbs.db
 mcp.json
 old_files/
 prompt.txt
-downloads/
+
+# Carpetas de descargas - ignorar archivos pero mantener carpetas
+downloads/allianz/*
+downloads/sura/*
+
+# Carpetas de logs - ignorar archivos pero mantener carpetas  
+LOGS/allianz/*
+LOGS/sura/*
