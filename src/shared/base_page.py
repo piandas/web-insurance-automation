@@ -1,6 +1,7 @@
 """Clase base para todas las páginas de automatización."""
 
 import logging
+import asyncio
 from typing import Optional, Any, Callable
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
@@ -316,3 +317,56 @@ class BasePage:
             return bool(result)
         else:
             return bool(result)
+        
+    ##############
+    # Funciones para Sura
+    ##############
+
+    async def retry_action(
+        self,
+        action_func: Callable,
+        description: str,
+        max_attempts: int = 5,
+        delay_seconds: float = 1.0,
+        *args,
+        **kwargs
+    ) -> bool:
+        """
+        Ejecuta una acción con reintentos automáticos.
+        
+        Args:
+            action_func: Función async a ejecutar (ej: self.safe_click, self.is_visible_safe)
+            description: Descripción de la acción para logging
+            max_attempts: Número máximo de intentos
+            delay_seconds: Segundos de espera entre intentos
+            *args, **kwargs: Argumentos para la función
+            
+        Returns:
+            bool: True si la acción fue exitosa, False en caso contrario
+        """
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self.logger.info(f"🔄 [{description}] Intento {attempt}/{max_attempts}...")
+                
+                # Ejecutar la acción
+                result = await action_func(*args, **kwargs)
+                
+                if result:
+                    self.logger.info(f"✅ [{description}] Exitoso en intento {attempt}")
+                    return True
+                    
+                # Si no es el último intento, esperar
+                if attempt < max_attempts:
+                    self.logger.warning(f"⚠️ [{description}] Intento {attempt} fallido. Esperando {delay_seconds}s...")
+                    await asyncio.sleep(delay_seconds)
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️ [{description}] Error en intento {attempt}: {e}")
+                if attempt < max_attempts:
+                    await asyncio.sleep(delay_seconds)
+                else:
+                    self.logger.error(f"❌ [{description}] Falló después de {max_attempts} intentos")
+                    
+        self.logger.error(f"❌ [{description}] No se pudo completar después de {max_attempts} intentos")
+        return False
