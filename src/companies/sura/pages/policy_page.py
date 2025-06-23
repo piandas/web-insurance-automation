@@ -13,13 +13,16 @@ class PolicyPage(BasePage):
     POLIZA_INPUT = "input[aria-labelledby='paper-input-label-23']"  # Basado en el HTML que mostraste
     FECHA_INPUT = "input[placeholder='DD/MM/YYYY']"
     CONSULTAR_BUTTON = "paper-button#botonConsultarPoliza"
-    
-    # Elementos que indican que la página está cargada
+      # Elementos que indican que la página está cargada
     PAGE_READY_SELECTORS = [
         "input[aria-labelledby='paper-input-label-23']",
         "input[placeholder='DD/MM/YYYY']",
         "paper-button#botonConsultarPoliza"
     ]
+      # Nuevos selectores para la página de selección de planes
+    PLAN_SELECTION_INDICATOR = "span.self-center:has-text('Seleccione el plan')"
+    PLAN_SELECTOR_TEMPLATE = "div.nombre-plan:has-text('{plan_name}')"  # Selector correcto basado en HTML real
+    VIGENCIA_FECHA_INPUT = "input[aria-labelledby='paper-input-label-27']"  # Selector específico para fecha de vigencia
 
     def __init__(self, page: Page):
         super().__init__(page, 'sura')
@@ -140,9 +143,8 @@ class PolicyPage(BasePage):
                 
                 # Verificar que el valor se estableció correctamente
                 actual_value = await self.page.input_value(selector)
-                
-                # Para el campo de fecha, aceptar tanto formato limpio como formateado
-                is_date_field = "placeholder='DD/MM/YYYY'" in selector
+                  # Para el campo de fecha, aceptar tanto formato limpio como formateado
+                is_date_field = "placeholder='DD/MM/YYYY'" in selector or "aria-labelledby='paper-input-label-27'" in selector
                 if is_date_field:
                     # Si es campo de fecha, verificar si contiene la fecha esperada (con o sin formato)
                     expected_clean = value  # ej: "23062025"
@@ -151,10 +153,16 @@ class PolicyPage(BasePage):
                         if actual_value == expected_clean or actual_value == expected_formatted:
                             self.logger.info(f"✅ {field_name} verificado correctamente: '{actual_value}' (formato aceptado)")
                             return True
-                    else:
-                        if actual_value == value:
-                            self.logger.info(f"✅ {field_name} verificado correctamente: '{actual_value}'")
-                            return True
+                    # También aceptar si ya está en formato con barras
+                    elif "/" in value and actual_value == value:
+                        self.logger.info(f"✅ {field_name} verificado correctamente: '{actual_value}' (formato con barras)")
+                        return True
+                    # Verificación flexible adicional: si el valor actual contiene los mismos números
+                    clean_actual = actual_value.replace("/", "").replace("-", "").replace(" ", "")
+                    clean_expected = expected_clean.replace("/", "").replace("-", "").replace(" ", "")
+                    if clean_actual == clean_expected:
+                        self.logger.info(f"✅ {field_name} verificado correctamente: '{actual_value}' (formato flexible)")
+                        return True
                 else:
                     # Para otros campos, verificación exacta
                     if actual_value == value:
@@ -191,8 +199,7 @@ class PolicyPage(BasePage):
             
             # Esperar un poco para que procese la consulta
             await self.page.wait_for_timeout(3000)
-            
-            # Verificar si hay algún cambio en la página o navegación
+              # Verificar si hay algún cambio en la página o navegación
             new_url = self.page.url
             if new_url != current_url:
                 self.logger.info(f"🔄 Navegación detectada - Nueva URL: {new_url}")
@@ -203,6 +210,103 @@ class PolicyPage(BasePage):
                 
         except Exception as e:
             self.logger.error(f"❌ Error haciendo clic en Consultar: {e}")
+            return False
+
+    async def wait_for_plan_selection(self) -> bool:
+        """Espera a que aparezca la pantalla de selección de planes."""
+        self.logger.info("⏳ Esperando pantalla de selección de planes...")
+        
+        try:
+            # Esperar a que aparezca el indicador de selección de plan
+            await self.page.wait_for_selector(
+                self.PLAN_SELECTION_INDICATOR, 
+                timeout=15000,
+                state='visible'
+            )
+            
+            self.logger.info("✅ Pantalla de selección de planes detectada")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error esperando pantalla de selección de planes: {e}")
+            return False
+
+    async def select_plan(self, plan_name: str) -> bool:
+        """Selecciona un plan específico."""
+        self.logger.info(f"🎯 Seleccionando plan: {plan_name}")
+        
+        try:
+            # Crear el selector específico para el plan
+            plan_selector = self.PLAN_SELECTOR_TEMPLATE.format(plan_name=plan_name)
+            
+            # Esperar a que el plan esté disponible
+            await self.page.wait_for_selector(plan_selector, timeout=10000)
+            
+            # Hacer clic en el plan usando safe_click
+            if not await self.safe_click(plan_selector, timeout=5000):
+                self.logger.error(f"❌ No se pudo hacer clic en el plan: {plan_name}")
+                return False
+            
+            self.logger.info(f"✅ Plan '{plan_name}' seleccionado exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error seleccionando plan '{plan_name}': {e}")
+            return False
+
+    async def fill_vigencia_date(self) -> bool:
+        """Llena la fecha de inicio de vigencia con la fecha de hoy."""
+        self.logger.info("📅 Llenando fecha de inicio de vigencia...")
+        
+        try:
+            # Obtener fecha de hoy en formato DDMMYYYY
+            today = datetime.datetime.now()
+            fecha_hoy = today.strftime("%d%m%Y")  # Formato: 23062025
+            
+            self.logger.info(f"📅 Fecha de hoy: {fecha_hoy}")
+            
+            # Llenar y verificar el campo de fecha de vigencia
+            if not await self._fill_and_verify_field(
+                selector=self.VIGENCIA_FECHA_INPUT,
+                value=fecha_hoy,
+                field_name="Fecha de Vigencia",
+                max_attempts=3
+            ):
+                self.logger.error("❌ No se pudo llenar el campo de fecha de vigencia")
+                return False
+            
+            self.logger.info("✅ Fecha de vigencia llenada exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error llenando fecha de vigencia: {e}")
+            return False
+
+    async def process_plan_selection(self) -> bool:
+        """Procesa la selección del plan y llenado de fecha de vigencia."""
+        self.logger.info("🎯 Procesando selección de plan...")
+        
+        try:
+            # 1. Esperar a que aparezca la pantalla de selección de planes
+            if not await self.wait_for_plan_selection():
+                self.logger.error("❌ No se pudo cargar la pantalla de selección de planes")
+                return False
+            
+            # 2. Seleccionar el plan configurado
+            if not await self.select_plan(self.config.SELECTED_PLAN):
+                self.logger.error(f"❌ No se pudo seleccionar el plan: {self.config.SELECTED_PLAN}")
+                return False
+            
+            # 3. Llenar la fecha de inicio de vigencia
+            if not await self.fill_vigencia_date():
+                self.logger.error("❌ No se pudo llenar la fecha de vigencia")
+                return False
+            
+            self.logger.info("🎉 Selección de plan y fecha de vigencia completada exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error procesando selección de plan: {e}")
             return False
 
     async def process_policy_page(self) -> bool:
@@ -220,14 +324,18 @@ class PolicyPage(BasePage):
             # 2. Llenar datos de póliza
             if not await self.fill_policy_data():
                 self.logger.error("❌ No se pudieron llenar los datos de póliza")
-                return False
-
+                return False            
             # 3. Hacer clic en Consultar
             if not await self.click_consultar():
                 self.logger.error("❌ No se pudo hacer clic en Consultar")
                 return False
             
-            self.logger.info("🎉 Proceso de consulta de póliza completado exitosamente")
+            # 4. Procesar selección de plan y fecha de vigencia
+            if not await self.process_plan_selection():
+                self.logger.error("❌ No se pudo procesar la selección de plan")
+                return False
+            
+            self.logger.info("🎉 Proceso completo de consulta de póliza y selección de plan completado exitosamente")
             return True
 
         except Exception as e:

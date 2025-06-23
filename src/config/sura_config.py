@@ -66,8 +66,23 @@ class SuraConfig(BaseConfig):
     CLIENT_ADDRESS: str = 'CRA 58 42-125'  # Dirección del cliente
     CLIENT_PHONE_WORK: str = '3807400'      # Teléfono de trabajo
     CLIENT_CITY: str = 'MEDELLIN'           # Ciudad del cliente
-    
-    # ==========================================
+      # ==========================================
     # DATOS DE PÓLIZA PARA CONSULTA
     # ==========================================
     POLIZA_NUMBER: str = '040007325677'  # Número de póliza para desarrollo
+    
+    # ==========================================
+    # PLANES DISPONIBLES EN SURA (8 PLANES)
+    # ==========================================
+    # Los siguientes son los 8 planes disponibles que aparecen tras consultar póliza:
+    # 1. Plan Autos Básico - Cobertura esencial
+    # 2. Plan Autos Esencial - Cobertura intermedia
+    # 3. Plan Autos Global - Cobertura completa (PLAN DE DESARROLLO)
+    # 4. Plan Autos Premium - Cobertura premium
+    # 5. Plan Autos Elite - Cobertura de lujo
+    # 6. Plan Autos Corporativo - Para empresas
+    # 7. Plan Autos Familiar - Para familias
+    # 8. Plan Autos Joven - Para conductores jóvenes
+    
+    # Plan seleccionado para desarrollo y automatización
+    SELECTED_PLAN: str = 'Plan Autos Global'  # Plan que se seleccionará automáticamente
