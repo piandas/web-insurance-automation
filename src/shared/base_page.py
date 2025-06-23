@@ -367,6 +367,108 @@ class BasePage:
                     
         self.logger.error(f"❌ [{description}] No se pudo completar después de {max_attempts} intentos")
         return False
+    
+    
+    async def fill_and_verify_field_flexible(
+        self, 
+        selector: str, 
+        value: str, 
+        field_name: str = "",
+        max_attempts: int = 3,
+        timeout: int = 5000
+    ) -> bool:
+        """
+        Llena un campo y verifica que el valor se haya establecido correctamente.
+        Incluye validación flexible para campos de fecha.
+        
+        Args:
+            selector: Selector CSS del campo
+            value: Valor a insertar
+            field_name: Nombre del campo para logging
+            max_attempts: Número máximo de intentos
+            timeout: Timeout en milisegundos
+            
+        Returns:
+            True si el campo se llenó y verificó correctamente
+        """
+        field_desc = field_name or f"campo '{selector}'"
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self.logger.info(f"📝 {field_desc} - Intento {attempt}/{max_attempts}")
+                
+                # Limpiar y llenar el campo
+                await self.page.fill(selector, "", timeout=timeout)
+                await self.page.wait_for_timeout(200)
+                await self.page.fill(selector, value, timeout=timeout)
+                await self.page.wait_for_timeout(300)
+                
+                # Verificar el valor
+                actual_value = await self.page.input_value(selector)
+                  # Detectar si es campo de fecha
+                is_date_field = (
+                    "placeholder='DD/MM/YYYY'" in selector or 
+                    "aria-labelledby='paper-input-label-27'" in selector or
+                    ("aria-labelledby" in selector and "fecha" in selector.lower()) or
+                    "vigencia" in field_name.lower() or
+                    "fecha" in field_name.lower()
+                )
+                
+                if is_date_field:
+                    # Validación flexible para fechas
+                    if self._validate_date_field(value, actual_value):
+                        self.logger.info(f"✅ {field_desc} verificado: '{actual_value}' (formato de fecha aceptado)")
+                        return True
+                else:
+                    # Validación exacta para otros campos
+                    if actual_value == value:
+                        self.logger.info(f"✅ {field_desc} verificado: '{actual_value}'")
+                        return True
+                
+                self.logger.warning(f"⚠️ {field_desc} - Esperado: '{value}', Actual: '{actual_value}'")
+                
+                if attempt < max_attempts:
+                    self.logger.info(f"🔄 {field_desc} - Reintentando...")
+                    await self.page.wait_for_timeout(500)
+                        
+            except Exception as e:
+                self.logger.warning(f"⚠️ {field_desc} - Error en intento {attempt}: {e}")
+                if attempt < max_attempts:
+                    await self.page.wait_for_timeout(500)
+        
+        self.logger.error(f"❌ {field_desc} - No se pudo llenar después de {max_attempts} intentos")
+        return False
+
+    def _validate_date_field(self, expected: str, actual: str) -> bool:
+        """
+        Valida campos de fecha con múltiples formatos aceptados.
+        
+        Args:
+            expected: Valor esperado (puede ser DDMMYYYY o DD/MM/YYYY)
+            actual: Valor actual del campo
+            
+        Returns:
+            True si los valores coinciden en cualquier formato válido
+        """
+        # Normalizar valores removiendo espacios
+        expected_clean = expected.strip()
+        actual_clean = actual.strip()
+        
+        # Verificación directa
+        if actual_clean == expected_clean:
+            return True
+          # Si el expected es formato DDMMYYYY (8 dígitos)
+        if len(expected_clean) == 8 and expected_clean.isdigit():
+            # Formato con barras: DD/MM/YYYY
+            expected_formatted = f"{expected_clean[:2]}/{expected_clean[2:4]}/{expected_clean[4:]}"
+            if actual_clean == expected_formatted:
+                return True
+        
+        # Verificación flexible: comparar solo números
+        actual_numbers = ''.join(filter(str.isdigit, actual_clean))
+        expected_numbers = ''.join(filter(str.isdigit, expected_clean))
+        
+        return actual_numbers == expected_numbers
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # FUNCIONES PARA ALLIANZ
@@ -671,4 +773,3 @@ class BasePage:
             return bool(result)
         else:
             return bool(result)
-        

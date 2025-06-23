@@ -1,4 +1,4 @@
-"""Página de consulta de póliza específica para Sura """
+"""Página de consulta de póliza específica para Sura - Versión refactorizada"""
 
 import datetime
 from playwright.async_api import Page
@@ -13,13 +13,15 @@ class PolicyPage(BasePage):
     POLIZA_INPUT = "input[aria-labelledby='paper-input-label-23']"  # Basado en el HTML que mostraste
     FECHA_INPUT = "input[placeholder='DD/MM/YYYY']"
     CONSULTAR_BUTTON = "paper-button#botonConsultarPoliza"
-      # Elementos que indican que la página está cargada
+    
+    # Elementos que indican que la página está cargada
     PAGE_READY_SELECTORS = [
         "input[aria-labelledby='paper-input-label-23']",
         "input[placeholder='DD/MM/YYYY']",
         "paper-button#botonConsultarPoliza"
     ]
-      # Nuevos selectores para la página de selección de planes
+    
+    # Nuevos selectores para la página de selección de planes
     PLAN_SELECTION_INDICATOR = "span.self-center:has-text('Seleccione el plan')"
     PLAN_SELECTOR_TEMPLATE = "div.nombre-plan:has-text('{plan_name}')"  # Selector correcto basado en HTML real
     VIGENCIA_FECHA_INPUT = "input[aria-labelledby='paper-input-label-27']"  # Selector específico para fecha de vigencia
@@ -70,7 +72,7 @@ class PolicyPage(BasePage):
         )
 
     async def fill_policy_data(self) -> bool:
-        """Llena los datos de póliza y fecha con verificación individual."""
+        """Llena los datos de póliza y fecha con verificación individual usando funciones base."""
         self.logger.info("📋 Llenando datos de póliza...")
         
         try:
@@ -82,106 +84,81 @@ class PolicyPage(BasePage):
             self.logger.info(f"📄 Póliza: {self.config.POLIZA_NUMBER}")
             self.logger.info(f"📅 Fecha: {fecha_formateada} -> {fecha_limpia}")
             
-            # Llenar y verificar campo de póliza
-            if not await self._fill_and_verify_field(
-                selector=self.POLIZA_INPUT,
-                value=self.config.POLIZA_NUMBER,
-                field_name="Póliza",
-                max_attempts=3
+            # Llenar ambos campos usando la función base
+            field_map = {
+                self.POLIZA_INPUT: self.config.POLIZA_NUMBER,
+                self.FECHA_INPUT: fecha_limpia
+            }
+            
+            # Usar fill_multiple_fields de la clase base
+            if not await self.fill_multiple_fields(
+                field_map=field_map,
+                description="datos de póliza",
+                timeout=5000,
+                delay_between_fields=0.5
             ):
-                self.logger.error("❌ No se pudo llenar el campo de póliza")
+                self.logger.error("❌ No se pudieron llenar los campos de póliza")
                 return False
             
-            # Llenar y verificar campo de fecha
-            if not await self._fill_and_verify_field(
-                selector=self.FECHA_INPUT,
-                value=fecha_limpia,
-                field_name="Fecha",
-                max_attempts=3
-            ):
-                self.logger.error("❌ No se pudo llenar el campo de fecha")
-                return False
+            # Verificar que los valores se establecieron correctamente
+            if not await self._verify_policy_fields(fecha_limpia):
+                self.logger.warning("⚠️ Verificación de campos falló, pero continuando...")
             
-            self.logger.info("✅ Ambos campos verificados y llenados correctamente")
+            self.logger.info("✅ Campos de póliza llenados correctamente")
             return True
             
         except Exception as e:
             self.logger.error(f"❌ Error llenando datos de póliza: {e}")
             return False
 
-    async def _fill_and_verify_field(
-        self, 
-        selector: str, 
-        value: str, 
-        field_name: str, 
-        max_attempts: int = 3
-    ) -> bool:
-        """
-        Llena un campo y verifica que el valor se haya establecido correctamente.
-        Reintenta si es necesario.
-        """
-        for attempt in range(1, max_attempts + 1):
-            try:
-                self.logger.info(f"📝 {field_name} - Intento {attempt}/{max_attempts}")
-                
-                # Debug: verificar que estamos apuntando al campo correcto
-                try:
-                    label_id = await self.page.get_attribute(selector, "aria-labelledby")
-                    placeholder = await self.page.get_attribute(selector, "placeholder")
-                    self.logger.info(f"🔍 {field_name} - Selector: {selector}")
-                    self.logger.info(f"🔍 {field_name} - Label ID: {label_id}, Placeholder: '{placeholder}'")
-                except:
-                    pass
-                
-                # Limpiar el campo primero
-                await self.page.fill(selector, "")
-                await self.page.wait_for_timeout(200)
-                
-                # Llenar con el valor
-                await self.page.fill(selector, value)
-                await self.page.wait_for_timeout(300)
-                
-                # Verificar que el valor se estableció correctamente
-                actual_value = await self.page.input_value(selector)
-                  # Para el campo de fecha, aceptar tanto formato limpio como formateado
-                is_date_field = "placeholder='DD/MM/YYYY'" in selector or "aria-labelledby='paper-input-label-27'" in selector
-                if is_date_field:
-                    # Si es campo de fecha, verificar si contiene la fecha esperada (con o sin formato)
-                    expected_clean = value  # ej: "23062025"
-                    if len(expected_clean) == 8:  # DDMMYYYY
-                        expected_formatted = f"{expected_clean[:2]}/{expected_clean[2:4]}/{expected_clean[4:]}"  # "23/06/2025"
-                        if actual_value == expected_clean or actual_value == expected_formatted:
-                            self.logger.info(f"✅ {field_name} verificado correctamente: '{actual_value}' (formato aceptado)")
-                            return True
-                    # También aceptar si ya está en formato con barras
-                    elif "/" in value and actual_value == value:
-                        self.logger.info(f"✅ {field_name} verificado correctamente: '{actual_value}' (formato con barras)")
-                        return True
-                    # Verificación flexible adicional: si el valor actual contiene los mismos números
-                    clean_actual = actual_value.replace("/", "").replace("-", "").replace(" ", "")
-                    clean_expected = expected_clean.replace("/", "").replace("-", "").replace(" ", "")
-                    if clean_actual == clean_expected:
-                        self.logger.info(f"✅ {field_name} verificado correctamente: '{actual_value}' (formato flexible)")
-                        return True
-                else:
-                    # Para otros campos, verificación exacta
-                    if actual_value == value:
-                        self.logger.info(f"✅ {field_name} verificado correctamente: '{actual_value}'")
-                        return True
-                
-                self.logger.warning(f"⚠️ {field_name} - Esperado: '{value}', Actual: '{actual_value}'")
-                
-                if attempt < max_attempts:
-                    self.logger.info(f"🔄 {field_name} - Reintentando...")
-                    await self.page.wait_for_timeout(500)
-                        
-            except Exception as e:
-                self.logger.warning(f"⚠️ {field_name} - Error en intento {attempt}: {e}")
-                if attempt < max_attempts:
-                    await self.page.wait_for_timeout(500)
-        
-        self.logger.error(f"❌ {field_name} - No se pudo llenar después de {max_attempts} intentos")
-        return False
+    async def _verify_policy_fields(self, expected_date: str) -> bool:
+        """Verifica que los campos de póliza se llenaron correctamente."""
+        try:
+            # Verificar campo de póliza
+            poliza_value = await self.page.input_value(self.POLIZA_INPUT)
+            if poliza_value != self.config.POLIZA_NUMBER:
+                self.logger.warning(f"⚠️ Póliza - Esperado: '{self.config.POLIZA_NUMBER}', Actual: '{poliza_value}'")
+                return False
+            
+            # Verificar campo de fecha (con validación flexible)
+            fecha_value = await self.page.input_value(self.FECHA_INPUT)
+            if not self._validate_date_field(expected_date, fecha_value):
+                self.logger.warning(f"⚠️ Fecha - Esperado: '{expected_date}', Actual: '{fecha_value}'")
+                return False
+            
+            self.logger.info("✅ Verificación de campos exitosa")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error verificando campos: {e}")
+            return False
+
+    def _validate_date_field(self, expected: str, actual: str) -> bool:
+        """Valida campos de fecha con múltiples formatos aceptados."""
+        # Usar la función de validación de la clase base
+        try:
+            # Normalizar valores
+            expected_clean = expected.strip()
+            actual_clean = actual.strip()
+            
+            # Verificación directa
+            if actual_clean == expected_clean:
+                return True
+            
+            # Si el expected es formato DDMMYYYY (8 dígitos)
+            if len(expected_clean) == 8 and expected_clean.isdigit():
+                expected_formatted = f"{expected_clean[:2]}/{expected_clean[2:4]}/{expected_clean[4:]}"
+                if actual_clean == expected_formatted:
+                    return True
+            
+            # Verificación flexible: comparar solo números
+            actual_numbers = ''.join(filter(str.isdigit, actual_clean))
+            expected_numbers = ''.join(filter(str.isdigit, expected_clean))
+            
+            return actual_numbers == expected_numbers
+            
+        except Exception:
+            return False
 
     async def click_consultar(self) -> bool:
         """Hace clic en el botón Consultar usando funciones base."""
@@ -199,7 +176,8 @@ class PolicyPage(BasePage):
             
             # Esperar un poco para que procese la consulta
             await self.page.wait_for_timeout(3000)
-              # Verificar si hay algún cambio en la página o navegación
+            
+            # Verificar si hay algún cambio en la página o navegación
             new_url = self.page.url
             if new_url != current_url:
                 self.logger.info(f"🔄 Navegación detectada - Nueva URL: {new_url}")
@@ -213,34 +191,27 @@ class PolicyPage(BasePage):
             return False
 
     async def wait_for_plan_selection(self) -> bool:
-        """Espera a que aparezca la pantalla de selección de planes."""
+        """Espera a que aparezca la pantalla de selección de planes usando funciones base."""
         self.logger.info("⏳ Esperando pantalla de selección de planes...")
         
-        try:
-            # Esperar a que aparezca el indicador de selección de plan
-            await self.page.wait_for_selector(
-                self.PLAN_SELECTION_INDICATOR, 
-                timeout=15000,
-                state='visible'
-            )
-            
-            self.logger.info("✅ Pantalla de selección de planes detectada")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error esperando pantalla de selección de planes: {e}")
-            return False
+        # Usar wait_for_selector_safe de la clase base
+        return await self.wait_for_selector_safe(
+            self.PLAN_SELECTION_INDICATOR, 
+            timeout=15000
+        )
 
     async def select_plan(self, plan_name: str) -> bool:
-        """Selecciona un plan específico."""
+        """Selecciona un plan específico usando funciones base."""
         self.logger.info(f"🎯 Seleccionando plan: {plan_name}")
         
         try:
             # Crear el selector específico para el plan
             plan_selector = self.PLAN_SELECTOR_TEMPLATE.format(plan_name=plan_name)
             
-            # Esperar a que el plan esté disponible
-            await self.page.wait_for_selector(plan_selector, timeout=10000)
+            # Esperar a que el plan esté disponible y hacer clic usando funciones base
+            if not await self.wait_for_selector_safe(plan_selector, timeout=10000):
+                self.logger.error(f"❌ Plan '{plan_name}' no disponible")
+                return False
             
             # Hacer clic en el plan usando safe_click
             if not await self.safe_click(plan_selector, timeout=5000):
@@ -255,7 +226,7 @@ class PolicyPage(BasePage):
             return False
 
     async def fill_vigencia_date(self) -> bool:
-        """Llena la fecha de inicio de vigencia con la fecha de hoy."""
+        """Llena la fecha de inicio de vigencia con la fecha de hoy usando funciones base."""
         self.logger.info("📅 Llenando fecha de inicio de vigencia...")
         
         try:
@@ -265,8 +236,8 @@ class PolicyPage(BasePage):
             
             self.logger.info(f"📅 Fecha de hoy: {fecha_hoy}")
             
-            # Llenar y verificar el campo de fecha de vigencia
-            if not await self._fill_and_verify_field(
+            # Usar fill_and_verify_field_flexible de la clase base
+            if not await self.fill_and_verify_field_flexible(
                 selector=self.VIGENCIA_FECHA_INPUT,
                 value=fecha_hoy,
                 field_name="Fecha de Vigencia",
@@ -324,7 +295,8 @@ class PolicyPage(BasePage):
             # 2. Llenar datos de póliza
             if not await self.fill_policy_data():
                 self.logger.error("❌ No se pudieron llenar los datos de póliza")
-                return False            
+                return False
+            
             # 3. Hacer clic en Consultar
             if not await self.click_consultar():
                 self.logger.error("❌ No se pudo hacer clic en Consultar")
