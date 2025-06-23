@@ -5,8 +5,7 @@ from .base_config import BaseConfig
 
 class SuraConfig(BaseConfig):
     """Configuración específica para Sura."""
-    
-    # Credenciales (desde .env)
+      # Credenciales (desde .env)
     USUARIO: str = os.getenv('SURA_USUARIO', '')
     CONTRASENA: str = os.getenv('SURA_CONTRASENA', '')
     
@@ -46,7 +45,26 @@ class SuraConfig(BaseConfig):
     # TC = CERTIFICADO NACIDO VIVO
     # TP = PASAPORTE ONU
     # TE = PERMISO ESPECIAL PERMANENCIA
-    # TS = SALVOCONDUCTO DE PERMANENCIA
-    # TF = PERMISO ESPECIAL FORMACN PEPFF
+    # TS = SALVOCONDUCTO DE PERMANENCIA    # TF = PERMISO ESPECIAL FORMACN PEPFF
     # TT = PERMISO POR PROTECCION TEMPORL
     
+    # ==========================================
+    # DATOS DEL CLIENTE PARA COTIZACIÓN
+    # ==========================================
+    CLIENT_FIRST_NAME: str = 'SERGIO'
+    CLIENT_SECOND_NAME: str = 'ALEXIS'
+    CLIENT_FIRST_LASTNAME: str = 'AREIZA'
+    CLIENT_SECOND_LASTNAME: str = 'LOAIZA'
+    CLIENT_BIRTH_DATE: str = '1989-06-01'  # Formato YYYY-MM-DD
+    CLIENT_GENDER: str = 'M'  # M = Masculino, F = Femenino
+    CLIENT_PHONE: str = ''  # Opcional
+    CLIENT_EMAIL: str = ''  # Opcional
+    CLIENT_EMAIL_TYPE: str = ''  # TR = Trabajo, RS = Residencia
+    CLIENT_OCCUPATION: str = 'ABOGADO'  # Ocupación del cliente
+
+    # ==========================================
+    # DATOS DE DIRECCIÓN PARA COTIZACIÓN
+    # ==========================================
+    CLIENT_ADDRESS: str = 'CRA 58 42-125'  # Dirección del cliente
+    CLIENT_PHONE_WORK: str = '3807400'      # Teléfono de trabajo
+    CLIENT_CITY: str = 'MEDELLIN'           # Ciudad del cliente

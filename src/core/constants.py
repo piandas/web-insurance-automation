@@ -47,9 +47,7 @@ class Constants:
     
     # Configuraciones de logging
     LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
-    LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
-    
-    # Configuraciones específicas de Sura
+    LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'    # Configuraciones específicas de Sura
     SURA_KEYBOARD_APPEAR_TIMEOUT = 5000
     SURA_KEYBOARD_HIDE_TIMEOUT = 5000
     SURA_CLICK_DELAY = 300

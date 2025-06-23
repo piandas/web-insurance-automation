@@ -2,5 +2,6 @@
 
 from .login_page import LoginPage
 from .dashboard_page import DashboardPage
+from .quote_page import QuotePage
 
-__all__ = ['LoginPage', 'DashboardPage']
+__all__ = ['LoginPage', 'DashboardPage', 'QuotePage']

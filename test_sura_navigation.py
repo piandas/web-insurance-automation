@@ -37,11 +37,25 @@ async def test_sura_navigation():
             return False
         
         print("✅ Navegación exitosa")
+          # Ejecutar cotización
+        print("💰 Iniciando flujo de cotización...")
+        if not await automation.execute_quote_flow():
+            print("❌ Error en el flujo de cotización")
+            return False
+        
+        print("✅ Cotización exitosa - Se completó el proceso y navegó a la página de Clientes")
         print("🎉 ¡Prueba completada exitosamente!")
         
+        # Mostrar URL final
+        try:
+            final_url = automation.page.url if automation.page else "No disponible"
+            print(f"📍 URL final: {final_url}")
+        except:
+            print("📍 URL final: No disponible")
+        
         # Esperar para revisar resultados
-        print("⏳ Esperando 15 segundos para revisar...")
-        await asyncio.sleep(15)
+        print("⏳ Esperando 10 segundos para revisar...")
+        await asyncio.sleep(10)
         
         return True
         

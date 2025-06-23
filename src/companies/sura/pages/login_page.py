@@ -302,6 +302,16 @@ class LoginPage(BasePage):
             if "asesores.segurossura.com.co" in current_url:
                 self.logger.info("✅ Login verificado exitosamente")
                 return True
+            
+            # Si no redirigió, esperar 3 segundos más y volver a verificar
+            self.logger.info("⏳ Aún cargando, esperando 3 segundos más...")
+            await self.page.wait_for_timeout(3000)
+            current_url = self.page.url
+            self.logger.info(f"📍 URL después de espera adicional: {current_url}")
+            if "asesores.segurossura.com.co" in current_url:
+                self.logger.info("✅ Login verificado exitosamente tras espera adicional")
+                return True
+                
             self.logger.error("❌ Login no exitoso - no se redirigió correctamente")
             return False
         except Exception as e:

@@ -1,6 +1,7 @@
 """Página del dashboard específica para Sura."""
 
 import asyncio
+from typing import Optional
 from playwright.async_api import Page
 from ....shared.base_page import BasePage
 
@@ -295,7 +296,7 @@ class DashboardPage(BasePage):
         return False
 
     async def accept_form(self) -> bool:
-        """Acepta o envía el formulario."""
+        """Acepta o envía el formulario y espera a que cargue la página de cotización."""
         self.logger.info("✅ Aceptando formulario...")
         
         # Hacer clic en el botón
@@ -303,35 +304,73 @@ class DashboardPage(BasePage):
             self.ACCEPT_SELECTORS,
             "botón de aceptar/enviar",
             5000,
-            2
+            1  # Esperar 1 segundo después del clic
         ):
             return False
         
-        # Intentar esperar que se cargue, pero no fallar si no funciona
-        try:
-            await self.wait_for_load_state_with_retry("networkidle", timeout=10000)
-        except Exception as e:
-            self.logger.warning(f"⚠️ No se pudo esperar networkidle, pero continuando: {e}")
+        # Esperar a que aparezca la página de cotización con los elementos específicos
+        self.logger.info("⏳ Esperando que cargue la página de cotización...")
         
-        self.logger.info("✅ Formulario aceptado exitosamente")
-        return True
+        try:
+            # Esperar a que aparezca un elemento específico de la página de cotización
+            cotizacion_selectors = [
+                "input[ng-reflect-name='primerNombreControl']",  # Campo primer nombre
+                "input[ng-reflect-name='documentControl']",      # Campo documento
+                "text=Cotizador Conectado",                      # Título de la página
+                "text=Cliente"                                   # Sección Cliente
+            ]
+            
+            # Intentar esperar por cualquiera de estos selectores
+            for i, selector in enumerate(cotizacion_selectors):
+                try:
+                    self.logger.info(f"🔍 Intentando selector {i+1}/{len(cotizacion_selectors)}: {selector}")
+                    await self.page.wait_for_selector(selector, timeout=15000, state='visible')
+                    self.logger.info(f"✅ Página de cotización detectada con selector: {selector}")
+                    
+                    # Esperar un poco más para que la página se estabilice
+                    await asyncio.sleep(2)
+                    
+                    # Verificar URL para confirmar
+                    current_url = self.page.url
+                    self.logger.info(f"📍 URL actual: {current_url}")
+                    
+                    self.logger.info("✅ Formulario aceptado y página de cotización cargada exitosamente")
+                    return True
+                    
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Selector {selector} no encontrado: {e}")
+                    continue
+            
+            # Si ningún selector funcionó, pero la URL cambió, aún puede ser exitoso
+            current_url = self.page.url
+            if "cotizador" in current_url.lower() or "clientes" in current_url.lower():
+                self.logger.info(f"✅ Nueva página detectada por URL: {current_url}")
+                return True
+            
+            self.logger.error("❌ No se pudo detectar la carga de la página de cotización")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error esperando la página de cotización: {e}")
+            return False
 
     async def complete_navigation_flow(
         self,
         document_number: str = "1020422674",
         document_type: str = "C"
-    ) -> bool:
+    ) -> tuple[bool, Optional['Page']]:
         """Completa el flujo completo de navegación en Sura."""
+        from playwright.async_api import Page
+        
         self.logger.info("🚀 Iniciando flujo completo de navegación Sura...")
         steps = [
             self.navigate_to_cotizador,
             self.click_main_dropdown,
-            lambda: self.select_document_type(document_type),
-            lambda: self.input_document_number(document_number),
+            lambda: self.select_document_type(document_type),            lambda: self.input_document_number(document_number),
             self.accept_form,
         ]
         for step in steps:
             if not await step():
-                return False
+                return False, None
         self.logger.info("✅ Flujo de navegación Sura completado exitosamente")
-        return True
+        return True, self.page

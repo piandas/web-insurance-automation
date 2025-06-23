@@ -5,7 +5,7 @@ from typing import Optional
 
 from ...core.base_automation import BaseAutomation
 from ...config.sura_config import SuraConfig
-from .pages import LoginPage, DashboardPage
+from .pages import LoginPage, DashboardPage, QuotePage
 
 class SuraAutomation(BaseAutomation):
     """Automatización específica para Sura."""
@@ -23,7 +23,8 @@ class SuraAutomation(BaseAutomation):
         self.usuario = usuario or self.config.USUARIO
         self.contrasena = contrasena or self.config.CONTRASENA
         self.headless = headless if headless is not None else self.config.HEADLESS
-          # Páginas específicas de Sura
+        
+        # Páginas específicas de Sura
         self.login_page = None
         self.dashboard_page = None
         self.quote_page = None
@@ -60,11 +61,14 @@ class SuraAutomation(BaseAutomation):
             document_type = getattr(self.config, 'CLIENT_DOCUMENT_TYPE', 'C')
             
             # Ejecutar flujo completo de navegación
-            success = await self.dashboard_page.complete_navigation_flow(document_number, document_type)
+            success, new_page = await self.dashboard_page.complete_navigation_flow(document_number, document_type)
             
-            if success:
+            if success and new_page:
+                # Actualizar la referencia de la página en la automatización
+                self.page = new_page
+                self.logger.info(f"✅ Página actualizada en SuraAutomation: {new_page.url}")
                 self.logger.info("✅ Flujo de navegación Sura completado exitosamente")
-                return True
+                return True            
             else:
                 self.logger.error("❌ Error en el flujo de navegación Sura")
                 return False
@@ -76,11 +80,21 @@ class SuraAutomation(BaseAutomation):
     async def execute_quote_flow(self) -> bool:
         """Ejecuta el flujo de cotización específico de Sura."""
         self.logger.info("💰 Ejecutando flujo de cotización Sura...")
-        self.logger.warning("⚠️ Cotización de Sura pendiente de implementación")
         
-        # Placeholder - en desarrollo
-        await asyncio.sleep(2)
-        return True
+        try:
+            self.logger.info("📊 Procesando página de cotización...")
+            quote_page = QuotePage(self.page)
+            
+            if not await quote_page.process_quote_page():
+                self.logger.error("❌ Error procesando página de cotización")
+                return False
+            
+            self.logger.info("✅ Flujo de cotización Sura completado exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.exception(f"❌ Error ejecutando cotización Sura: {e}")
+            return False
 
 
 # Función principal para compatibilidad
