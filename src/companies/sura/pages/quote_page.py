@@ -1,4 +1,4 @@
-"""Página de cotización específica para Sura - Versión corregida."""
+"""Página de cotización específica para Sura """
 
 from playwright.async_api import Page
 from ....shared.base_page import BasePage

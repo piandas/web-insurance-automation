@@ -36,14 +36,21 @@ async def test_sura_navigation():
             print("❌ Error en la navegación")
             return False
         
-        print("✅ Navegación exitosa")
-          # Ejecutar cotización
+        print("✅ Navegación exitosa")        # Ejecutar cotización
         print("💰 Iniciando flujo de cotización...")
         if not await automation.execute_quote_flow():
             print("❌ Error en el flujo de cotización")
             return False
         
         print("✅ Cotización exitosa - Se completó el proceso y navegó a la página de Clientes")
+        
+        # Ejecutar consulta de póliza
+        print("📄 Iniciando flujo de consulta de póliza...")
+        if not await automation.execute_policy_flow():
+            print("❌ Error en el flujo de consulta de póliza")
+            return False
+        
+        print("✅ Consulta de póliza exitosa")
         print("🎉 ¡Prueba completada exitosamente!")
         
         # Mostrar URL final

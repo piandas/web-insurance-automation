@@ -5,7 +5,7 @@ from typing import Optional
 
 from ...core.base_automation import BaseAutomation
 from ...config.sura_config import SuraConfig
-from .pages import LoginPage, DashboardPage, QuotePage
+from .pages import LoginPage, DashboardPage, QuotePage, PolicyPage
 
 class SuraAutomation(BaseAutomation):
     """Automatización específica para Sura."""
@@ -28,6 +28,7 @@ class SuraAutomation(BaseAutomation):
         self.login_page = None
         self.dashboard_page = None
         self.quote_page = None
+        self.policy_page = None
 
     async def launch(self) -> bool:
         """Inicializa Playwright y abre el navegador."""
@@ -94,6 +95,57 @@ class SuraAutomation(BaseAutomation):
             
         except Exception as e:
             self.logger.exception(f"❌ Error ejecutando cotización Sura: {e}")
+            return False
+
+    async def execute_policy_flow(self) -> bool:
+        """Ejecuta el flujo de consulta de póliza específico de Sura."""
+        self.logger.info("📄 Ejecutando flujo de consulta de póliza Sura...")
+        
+        try:
+            self.logger.info("🔍 Procesando página de consulta de póliza...")
+            policy_page = PolicyPage(self.page)
+            
+            if not await policy_page.process_policy_page():
+                self.logger.error("❌ Error procesando página de consulta de póliza")
+                return False
+            
+            self.logger.info("✅ Flujo de consulta de póliza Sura completado exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.exception(f"❌ Error ejecutando consulta de póliza Sura: {e}")
+            return False
+
+    async def run_complete_flow(self) -> bool:
+        """Ejecuta el flujo completo de automatización de Sura."""
+        self.logger.info("🚀 Iniciando flujo completo de Sura...")
+        
+        try:
+            # 1. Ejecutar login
+            if not await self.execute_login_flow():
+                self.logger.error("❌ Error en el flujo de login")
+                return False
+            
+            # 2. Ejecutar navegación
+            if not await self.execute_navigation_flow():
+                self.logger.error("❌ Error en el flujo de navegación")
+                return False
+            
+            # 3. Ejecutar cotización
+            if not await self.execute_quote_flow():
+                self.logger.error("❌ Error en el flujo de cotización")
+                return False
+            
+            # 4. Ejecutar consulta de póliza
+            if not await self.execute_policy_flow():
+                self.logger.error("❌ Error en el flujo de consulta de póliza")
+                return False
+            
+            self.logger.info("🎉 ¡Flujo completo de Sura completado exitosamente!")
+            return True
+            
+        except Exception as e:
+            self.logger.exception(f"❌ Error en el flujo completo de Sura: {e}")
             return False
 
 

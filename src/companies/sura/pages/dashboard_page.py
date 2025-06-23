@@ -92,6 +92,9 @@ class DashboardPage(BasePage):
                     if await self.is_visible_safe(sel, timeout=2000):
                         self.logger.info(f"✅ Cotizador encontrado con selector: {sel}")
                         
+                        # Esperar un poco para asegurar que el elemento esté completamente interactivo
+                        await asyncio.sleep(1)
+                        
                         # Configurar el listener antes del clic
                         new_page_promise = self.page.context.wait_for_event("page")
                         await self.safe_click(sel)

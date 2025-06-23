@@ -82,3 +82,23 @@ class Utils:
             True si es válido, False en caso contrario
         """
         return documento.isdigit() and len(documento) >= 6
+
+    @staticmethod
+    def get_formatted_today(format_type: str = "dd/mm/yyyy") -> str:
+        """
+        Obtiene la fecha de hoy en el formato especificado.
+        
+        Args:
+            format_type: Formato de fecha deseado
+                - "dd/mm/yyyy": Formato con separadores (por defecto)
+                - "ddmmyyyy": Formato sin separadores
+                
+        Returns:
+            Fecha de hoy en el formato especificado
+        """
+        today = datetime.datetime.now()
+        
+        if format_type == "ddmmyyyy":
+            return today.strftime("%d%m%Y")
+        else:  # dd/mm/yyyy por defecto
+            return today.strftime("%d/%m/%Y")

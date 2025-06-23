@@ -27,9 +27,6 @@ class SuraConfig(BaseConfig):
     # ==========================================
     # CONFIGURACIÓN DE DOCUMENTOS PARA CLIENTE
     # ==========================================
-    CLIENT_DOCUMENT_NUMBER: str = '1020422674'  # Número de documento del cliente para desarrollo
-    CLIENT_DOCUMENT_TYPE: str = 'C'  # Tipo de documento del cliente
-    
     # Tipos de documento disponibles para CLIENTES (según el select del sistema):
     # C = CEDULA
     # E = CEDULA EXTRANJERIA  
@@ -48,6 +45,9 @@ class SuraConfig(BaseConfig):
     # TS = SALVOCONDUCTO DE PERMANENCIA    # TF = PERMISO ESPECIAL FORMACN PEPFF
     # TT = PERMISO POR PROTECCION TEMPORL
     
+    CLIENT_DOCUMENT_NUMBER: str = '1020422674'  # Número de documento del cliente para desarrollo
+    CLIENT_DOCUMENT_TYPE: str = 'C'  # Tipo de documento del cliente
+    
     # ==========================================
     # DATOS DEL CLIENTE PARA COTIZACIÓN
     # ==========================================
@@ -60,11 +60,14 @@ class SuraConfig(BaseConfig):
     CLIENT_PHONE: str = ''  # Opcional
     CLIENT_EMAIL: str = ''  # Opcional
     CLIENT_EMAIL_TYPE: str = ''  # TR = Trabajo, RS = Residencia
-    CLIENT_OCCUPATION: str = 'ABOGADO'  # Ocupación del cliente
-
-    # ==========================================
+    CLIENT_OCCUPATION: str = 'ABOGADO'  # Ocupación del cliente    # ==========================================
     # DATOS DE DIRECCIÓN PARA COTIZACIÓN
     # ==========================================
     CLIENT_ADDRESS: str = 'CRA 58 42-125'  # Dirección del cliente
     CLIENT_PHONE_WORK: str = '3807400'      # Teléfono de trabajo
     CLIENT_CITY: str = 'MEDELLIN'           # Ciudad del cliente
+    
+    # ==========================================
+    # DATOS DE PÓLIZA PARA CONSULTA
+    # ==========================================
+    POLIZA_NUMBER: str = '040007325677'  # Número de póliza para desarrollo
