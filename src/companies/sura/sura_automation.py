@@ -5,7 +5,7 @@ from typing import Optional
 
 from ...core.base_automation import BaseAutomation
 from ...config.sura_config import SuraConfig
-from .pages import LoginPage
+from .pages import LoginPage, DashboardPage
 
 class SuraAutomation(BaseAutomation):
     """Automatización específica para Sura."""
@@ -23,8 +23,7 @@ class SuraAutomation(BaseAutomation):
         self.usuario = usuario or self.config.USUARIO
         self.contrasena = contrasena or self.config.CONTRASENA
         self.headless = headless if headless is not None else self.config.HEADLESS
-        
-        # Páginas específicas de Sura
+          # Páginas específicas de Sura
         self.login_page = None
         self.dashboard_page = None
         self.quote_page = None
@@ -32,8 +31,11 @@ class SuraAutomation(BaseAutomation):
     async def launch(self) -> bool:
         """Inicializa Playwright y abre el navegador."""
         if not await super().launch():
-            return False        # Inicializar páginas específicas de Sura
+            return False
+        
+        # Inicializar páginas específicas de Sura
         self.login_page = LoginPage(self.page)
+        self.dashboard_page = DashboardPage(self.page)
         
         self.logger.info("✅ Páginas de Sura inicializadas")
         return True
@@ -51,11 +53,25 @@ class SuraAutomation(BaseAutomation):
     async def execute_navigation_flow(self) -> bool:
         """Ejecuta el flujo de navegación específico de Sura."""
         self.logger.info("🧭 Ejecutando flujo de navegación Sura...")
-        self.logger.warning("⚠️ Navegación de Sura pendiente de implementación")
         
-        # Placeholder - en desarrollo
-        await asyncio.sleep(2)
-        return True
+        try:
+            # Usar los valores desde la configuración
+            document_number = getattr(self.config, 'CLIENT_DOCUMENT_NUMBER', '1020422674')
+            document_type = getattr(self.config, 'CLIENT_DOCUMENT_TYPE', 'C')
+            
+            # Ejecutar flujo completo de navegación
+            success = await self.dashboard_page.complete_navigation_flow(document_number, document_type)
+            
+            if success:
+                self.logger.info("✅ Flujo de navegación Sura completado exitosamente")
+                return True
+            else:
+                self.logger.error("❌ Error en el flujo de navegación Sura")
+                return False
+                
+        except Exception as e:
+            self.logger.exception(f"❌ Error ejecutando navegación Sura: {e}")
+            return False
 
     async def execute_quote_flow(self) -> bool:
         """Ejecuta el flujo de cotización específico de Sura."""

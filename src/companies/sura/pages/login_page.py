@@ -72,7 +72,7 @@ class LoginPage(BasePage):
 
     async def select_tipo_documento(self, tipo: str = None) -> bool:
         """Selecciona el tipo de documento con reintentos automáticos."""
-        tipo_doc = tipo or self.config.TIPO_DOCUMENTO
+        tipo_doc = tipo or self.config.TIPO_DOCUMENTO_LOGIN
         self.logger.info(f"📋 Seleccionando tipo de documento: {tipo_doc}")
         
         max_intentos = 5
@@ -277,12 +277,10 @@ class LoginPage(BasePage):
                     return passwordField && passwordField.value && passwordField.value.length > 0;
                 }
             """)
-            
             if not contrasena_filled:
                 self.logger.error("❌ Contraseña no ingresada")
                 return False
             self.logger.info("✅ Contraseña ingresada")
-            
             self.logger.info("🎯 Todos los campos verificados correctamente")
             return True
             
@@ -293,8 +291,8 @@ class LoginPage(BasePage):
     async def submit_login(self) -> bool:
         """Envía el formulario de login."""
         self.logger.info("🚀 Enviando formulario de login...")
-        
-        try:            # Verificar que todos los campos estén completos antes de enviar
+        try:
+            # Verificar que todos los campos estén completos antes de enviar
             if not await self.verify_form_completion():
                 self.logger.error("❌ Formulario incompleto, no se puede enviar")
                 return False
@@ -303,11 +301,10 @@ class LoginPage(BasePage):
                 self.logger.error("❌ Error haciendo clic en submit")
                 return False
             
-            # Esperar a que se procese el login - usar load en lugar de networkidle para mayor velocidad
-            await self.wait_for_load_state_with_retry("load", timeout=15000)
+            # Esperar solo lo mínimo necesario para que se procese el clic
+            await self.page.wait_for_timeout(500)
             self.logger.info("✅ Formulario de login enviado")
             return True
-            
         except Exception as e:
             self.logger.exception(f"❌ Error enviando formulario: {e}")
             return False
@@ -317,7 +314,7 @@ class LoginPage(BasePage):
         self.logger.info("🔍 Verificando login exitoso...")
         
         try:
-            await self.page.wait_for_timeout(2000)  # Esperar 2 segundos
+            await self.page.wait_for_timeout(1000)  # Reducir espera a 1 segundo
             
             current_url = self.page.url
             self.logger.info(f"📍 URL actual después del login: {current_url}")
