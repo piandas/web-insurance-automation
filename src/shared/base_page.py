@@ -2,7 +2,7 @@
 
 import logging
 import asyncio
-from typing import Optional, Any, Callable
+from typing import Optional, Any, Callable, Dict, List, Union
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
 from ..core.constants import Constants
@@ -10,13 +10,367 @@ from ..core.constants import Constants
 class BasePage:
     """Clase base con métodos genéricos para interacciones con páginas."""
     
-    IFRAME_SELECTOR: str = "iframe"
+    IFRAME_SELECTOR: str = "iframe" # Selector del iframe principal (Allianz)
+    
+    # Mapeo común de tipos de documento (Sura)
+    DOCUMENT_TYPE_MAP = {
+        'C': 'CEDULA',
+        'E': 'CED.EXTRANJERIA',
+        'P': 'PASAPORTE',
+        'A': 'NIT',
+        'CA': 'NIT PERSONAS NATURALES',
+        'N': 'NUIP',
+        'R': 'REGISTRO CIVIL',
+        'T': 'TARJ.IDENTIDAD',
+        'D': 'DIPLOMATICO',
+        'X': 'DOC.IDENT. DE EXTRANJEROS',
+        'F': 'IDENT. FISCAL PARA EXT.',
+        'TC': 'CERTIFICADO NACIDO VIVO',
+        'TP': 'PASAPORTE ONU',
+        'TE': 'PERMISO ESPECIAL PERMANENCIA',
+        'TS': 'SALVOCONDUCTO DE PERMANENCIA',
+        'TF': 'PERMISO ESPECIAL FORMACN PEPFF',
+        'TT': 'PERMISO POR PROTECCION TEMPORL',
+    }
 
     def __init__(self, page: Page, company: str = "generic"):
         self.page: Page = page
         self.company = company
         self._frame = self.page.frame_locator(self.IFRAME_SELECTOR)
-        self.logger = logging.getLogger(company)
+        self.logger = logging.getLogger(company)    
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # FUNCIONES REUTILIZABLES EXTRAÍDAS DE LAS PÁGINAS DE SURA
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    async def get_element_value(self, selector: str, property_name: str = "value") -> str:
+        """
+        Obtiene el valor de una propiedad de un elemento.
+        
+        Args:
+            selector: Selector CSS del elemento
+            property_name: Propiedad a obtener (value, textContent, innerHTML, etc.)
+            
+        Returns:
+            Valor de la propiedad o cadena vacía si no se encuentra
+        """
+        try:
+            return await self.page.evaluate(
+                """(args) => { 
+                    const el = document.querySelector(args.selector); 
+                    return el ? el[args.property] || '' : ''; 
+                }""",
+                {"selector": selector, "property": property_name}
+            )
+        except Exception as e:
+            self.logger.error(f"❌ Error obteniendo {property_name} de '{selector}': {e}")
+            return ""
+
+    async def find_and_click_from_selectors(
+        self,
+        selectors: List[str],
+        description: str,
+        timeout: int = 5000,
+        sleep_after: float = 0,
+        max_attempts: int = 5,
+        retry_delay: float = 1.0,
+    ) -> bool:
+        """
+        Busca múltiples selectores y hace clic en el primero visible con reintentos.
+        
+        Args:
+            selectors: Lista de selectores CSS a probar
+            description: Descripción para logging
+            timeout: Timeout para cada selector individual
+            sleep_after: Tiempo de espera después del clic exitoso
+            max_attempts: Número máximo de intentos completos
+            retry_delay: Tiempo entre reintentos
+            
+        Returns:
+            True si logró hacer clic, False en caso contrario
+        """
+        
+        async def _try_click_selectors():
+            """Función interna para intentar hacer clic en los selectores."""
+            for sel in selectors:
+                if await self.is_visible_safe(sel, timeout=timeout):
+                    self.logger.info(f"✅ {description} encontrado con selector: {sel}")
+                    success = await self.safe_click(sel)
+                    if success and sleep_after:
+                        await asyncio.sleep(sleep_after)
+                    return success
+            return False
+        
+        # Usar la función de reintentos de la clase base
+        return await self.retry_action(
+            _try_click_selectors,            description,
+            max_attempts=max_attempts,
+            delay_seconds=retry_delay
+        )
+
+    async def verify_element_value_equals(
+        self, 
+        selector: str, 
+        expected_value: str, 
+        property_name: str = "value",
+        description: str = ""
+    ) -> bool:
+        """
+        Verifica que un elemento tenga un valor específico.
+        
+        Args:
+            selector: Selector CSS del elemento
+            expected_value: Valor esperado
+            property_name: Propiedad a verificar
+            description: Descripción para logging
+            
+        Returns:
+            True si el valor coincide, False en caso contrario
+        """
+        try:
+            # Usar locator().first para obtener el primer elemento que coincida
+            current_value = await self.page.locator(selector).first.input_value()
+            is_equal = current_value == expected_value
+            
+            if description:
+                status = "✅ MATCH" if is_equal else "⚠️ DIFF"
+                self.logger.info(f"{status} {description}: Esperado='{expected_value}' | Actual='{current_value}'")
+            
+            return is_equal
+        except Exception as e:
+            self.logger.error(f"❌ Error verificando valor de '{selector}': {e}")
+            return False
+
+    async def execute_js_with_validation(
+        self,
+        script: str,
+        validation_func: Optional[Callable] = None,
+        description: str = "",
+        max_attempts: int = 3,
+        retry_delay: float = 0.5
+    ) -> Any:
+        """
+        Ejecuta JavaScript con validación opcional y reintentos.
+        
+        Args:
+            script: Script de JavaScript a ejecutar
+            validation_func: Función para validar el resultado (opcional)
+            description: Descripción para logging
+            max_attempts: Número máximo de intentos
+            retry_delay: Tiempo entre reintentos
+            
+        Returns:
+            Resultado del script si es válido, None en caso contrario
+        """
+        for attempt in range(1, max_attempts + 1):
+            try:
+                result = await self.page.evaluate(script)
+                
+                if validation_func is None or validation_func(result):
+                    if description:
+                        self.logger.info(f"✅ {description} - JS ejecutado exitosamente: {result}")
+                    return result
+                    
+                if attempt < max_attempts:
+                    self.logger.warning(f"⚠️ {description} - Intento {attempt} falló, reintentando...")
+                    await asyncio.sleep(retry_delay)
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️ {description} - Error en intento {attempt}: {e}")
+                if attempt < max_attempts:
+                    await asyncio.sleep(retry_delay)        
+        self.logger.error(f"❌ {description} - Falló después de {max_attempts} intentos")
+        return None
+
+    async def wait_for_page_navigation(
+        self,
+        expected_url_parts: List[str] = None,
+        timeout: int = 10000,
+        description: str = "navegación"
+    ) -> bool:
+        """
+        Espera a que la página navegue a una nueva URL de manera eficiente.
+        
+        Args:
+            expected_url_parts: Partes que deberían estar en la nueva URL
+            timeout: Timeout en milisegundos
+            description: Descripción para logging
+            
+        Returns:
+            True si la navegación fue exitosa, False en caso contrario
+        """
+        self.logger.info(f"⏳ Esperando {description}...")
+        
+        try:
+            current_url = self.page.url
+            self.logger.info(f"📍 URL actual: {current_url}")
+            
+            # Verificación rápida cada 500ms en lugar de esperar todo el timeout
+            max_checks = timeout // 500  # Verificar cada 500ms
+            
+            for check in range(max_checks):
+                await asyncio.sleep(0.5)  # Esperar 500ms
+                
+                new_url = self.page.url
+                
+                # Verificar si cambió la URL
+                if new_url != current_url:
+                    self.logger.info(f"📍 Nueva URL: {new_url}")
+                    self.logger.info(f"✅ {description} - URL cambió exitosamente en {(check + 1) * 0.5:.1f}s")
+                    
+                    # Si se especificaron partes esperadas, verificarlas
+                    if expected_url_parts:
+                        for part in expected_url_parts:
+                            if part.lower() in new_url.lower():
+                                self.logger.info(f"✅ {description} - Encontrada parte esperada: {part}")
+                                return True
+                        
+                        self.logger.warning(f"⚠️ {description} - URL cambió pero no contiene partes esperadas")
+                        return True  # Aún consideramos exitoso el cambio de URL
+                    
+                    return True
+            
+            # Si llegamos aquí, no hubo cambio de URL en el tiempo especificado
+            final_url = self.page.url
+            self.logger.info(f"📍 URL final: {final_url}")
+            self.logger.warning(f"⚠️ {description} - No se detectó cambio de URL después de {timeout/1000}s")
+            return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error esperando {description}: {e}")
+            return False
+
+    async def select_from_material_dropdown(
+        self,
+        dropdown_selector: str,
+        option_text: str,
+        description: str = "",
+        timeout: int = 10000
+    ) -> bool:
+        """
+        Selecciona una opción de un dropdown de Material Design.
+        
+        Args:
+            dropdown_selector: Selector del dropdown (mat-select)
+            option_text: Texto de la opción a seleccionar
+            description: Descripción para logging
+            timeout: Timeout en milisegundos
+            
+        Returns:
+            True si la selección fue exitosa, False en caso contrario
+        """
+        try:
+            desc = description or f"dropdown con opción '{option_text}'"
+            self.logger.info(f"🔽 Seleccionando {desc}...")
+            
+            # Abrir dropdown
+            await self.page.click(dropdown_selector, timeout=timeout)
+            await asyncio.sleep(0.5)  # Esperar que se abra
+            
+            # Seleccionar opción
+            option_selector = f'mat-option:has-text("{option_text}")'
+            await self.page.click(option_selector, timeout=timeout)
+            await asyncio.sleep(0.3)  # Esperar que se cierre
+            
+            self.logger.info(f"✅ {desc} seleccionado exitosamente")
+            return True            
+        except Exception as e:
+            self.logger.error(f"❌ Error seleccionando {desc}: {e}")
+            return False
+
+    async def fill_multiple_fields(
+        self,
+        field_map: Dict[str, str],
+        description: str = "campos",
+        timeout: int = 5000,
+        delay_between_fields: float = 0.3
+    ) -> bool:
+        """
+        Llena múltiples campos de formulario.
+        
+        Args:
+            field_map: Diccionario {selector: valor} de campos a llenar
+            description: Descripción para logging
+            timeout: Timeout para cada campo
+            delay_between_fields: Tiempo de espera entre campos
+            
+        Returns:
+            True si todos los campos se llenaron exitosamente, False en caso contrario
+        """
+        self.logger.info(f"📝 Llenando {description}...")
+        
+        try:
+            for selector, value in field_map.items():
+                try:
+                    # Usar locator().first para evitar problemas con selectores CSS
+                    await self.page.locator(selector).first.fill(str(value), timeout=timeout)
+                    self.logger.info(f"✅ Campo '{selector}' llenado con '{value}'")
+                except Exception as e:
+                    self.logger.error(f"❌ Error llenando campo '{selector}' con valor '{value}': {e}")
+                    return False
+                
+                if delay_between_fields:
+                    await asyncio.sleep(delay_between_fields)
+            
+            self.logger.info(f"✅ {description} llenados exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error llenando {description}: {e}")
+            return False
+
+    async def retry_action(
+        self,
+        action_func: Callable,
+        description: str,
+        max_attempts: int = 5,
+        delay_seconds: float = 1.0,
+        *args,
+        **kwargs
+    ) -> bool:
+        """
+        Ejecuta una acción con reintentos automáticos.
+        
+        Args:
+            action_func: Función async a ejecutar (ej: self.safe_click, self.is_visible_safe)
+            description: Descripción de la acción para logging
+            max_attempts: Número máximo de intentos
+            delay_seconds: Segundos de espera entre intentos
+            *args, **kwargs: Argumentos para la función
+            
+        Returns:
+            bool: True si la acción fue exitosa, False en caso contrario
+        """
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self.logger.info(f"🔄 [{description}] Intento {attempt}/{max_attempts}...")
+                
+                # Ejecutar la acción
+                result = await action_func(*args, **kwargs)
+                
+                if result:
+                    self.logger.info(f"✅ [{description}] Exitoso en intento {attempt}")
+                    return True
+                    
+                # Si no es el último intento, esperar
+                if attempt < max_attempts:
+                    self.logger.warning(f"⚠️ [{description}] Intento {attempt} fallido. Esperando {delay_seconds}s...")
+                    await asyncio.sleep(delay_seconds)
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️ [{description}] Error en intento {attempt}: {e}")
+                if attempt < max_attempts:
+                    await asyncio.sleep(delay_seconds)
+                else:
+                    self.logger.error(f"❌ [{description}] Falló después de {max_attempts} intentos")
+                    
+        self.logger.error(f"❌ [{description}] No se pudo completar después de {max_attempts} intentos")
+        return False
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # FUNCIONES PARA ALLIANZ
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     async def wait_for_element_with_text(self, text: str, timeout: Optional[int] = None) -> bool:
         """Espera un texto en el main o en el iframe."""
@@ -318,55 +672,3 @@ class BasePage:
         else:
             return bool(result)
         
-    ##############
-    # Funciones para Sura
-    ##############
-
-    async def retry_action(
-        self,
-        action_func: Callable,
-        description: str,
-        max_attempts: int = 5,
-        delay_seconds: float = 1.0,
-        *args,
-        **kwargs
-    ) -> bool:
-        """
-        Ejecuta una acción con reintentos automáticos.
-        
-        Args:
-            action_func: Función async a ejecutar (ej: self.safe_click, self.is_visible_safe)
-            description: Descripción de la acción para logging
-            max_attempts: Número máximo de intentos
-            delay_seconds: Segundos de espera entre intentos
-            *args, **kwargs: Argumentos para la función
-            
-        Returns:
-            bool: True si la acción fue exitosa, False en caso contrario
-        """
-        
-        for attempt in range(1, max_attempts + 1):
-            try:
-                self.logger.info(f"🔄 [{description}] Intento {attempt}/{max_attempts}...")
-                
-                # Ejecutar la acción
-                result = await action_func(*args, **kwargs)
-                
-                if result:
-                    self.logger.info(f"✅ [{description}] Exitoso en intento {attempt}")
-                    return True
-                    
-                # Si no es el último intento, esperar
-                if attempt < max_attempts:
-                    self.logger.warning(f"⚠️ [{description}] Intento {attempt} fallido. Esperando {delay_seconds}s...")
-                    await asyncio.sleep(delay_seconds)
-                    
-            except Exception as e:
-                self.logger.warning(f"⚠️ [{description}] Error en intento {attempt}: {e}")
-                if attempt < max_attempts:
-                    await asyncio.sleep(delay_seconds)
-                else:
-                    self.logger.error(f"❌ [{description}] Falló después de {max_attempts} intentos")
-                    
-        self.logger.error(f"❌ [{description}] No se pudo completar después de {max_attempts} intentos")
-        return False

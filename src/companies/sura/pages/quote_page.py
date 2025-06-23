@@ -51,8 +51,7 @@ class QuotePage(BasePage):
                     return True
                 except Exception as e:
                     self.logger.warning(f"⚠️ Selector {selector} no encontrado: {e}")
-                    continue
-            
+                    continue            
             current_url = self.page.url
             self.logger.error(f"❌ Página de cotización no detectada. URL actual: {current_url}")
             return False
@@ -69,14 +68,10 @@ class QuotePage(BasePage):
                 "Nombre": self.config.CLIENT_FIRST_NAME,
                 "Apellido": self.config.CLIENT_FIRST_LASTNAME,
                 "Documento": self.config.CLIENT_DOCUMENT_NUMBER,
-                "Ocupación": self.config.CLIENT_OCCUPATION,
-                "Dirección": self.config.CLIENT_ADDRESS,
-                "Teléfono": self.config.CLIENT_PHONE_WORK,
-                "Ciudad": self.config.CLIENT_CITY
             }
             self.logger.info("📋 COMPARACIÓN CONFIG vs PÁGINA:")
-            self.logger.info("=" * 50)
-
+            self.logger.info("=" * 50)            
+            
             # Para cada input, seleccionamos solo el primero que NO esté disabled
             fields = [
                 (self.PRIMER_NOMBRE_INPUT + ":not([disabled])", "Nombre"),
@@ -84,19 +79,21 @@ class QuotePage(BasePage):
                 (self.NUMERO_DOCUMENTO_INPUT + ":not([disabled])", "Documento"),
             ]
 
+            # Usar función optimizada de la clase base para verificar valores
             for selector, field_name in fields:
                 try:
-                    # Esperamos que exista al menos uno habilitado
                     await self.page.wait_for_selector(selector, timeout=5000)
-                    # Tomamos el primero
-                    value = await self.page.locator(selector).first.input_value()
-                    expected = expected_data[field_name]
-                    status = "✅ MATCH" if value == expected else "⚠️ DIFF"
-                    self.logger.info(f"{status} {field_name}: Config='{expected}' | Página='{value}'")
+                    # Usar función de la clase base sin el :first problemático
+                    await self.verify_element_value_equals(
+                        selector=selector,  # Remover :first que causa error
+                        expected_value=expected_data[field_name],
+                        property_name="value",
+                        description=field_name
+                    )
                 except Exception as e:
                     self.logger.warning(f"❌ ERROR {field_name}: {e}")
 
-            # Verificar sexo, solo radios habilitados
+            # Verificar sexo
             try:
                 expected_gender = self.config.CLIENT_GENDER.upper()  # 'M' o 'F'
                 # Apuntamos al input interno de cada mat-radio-button
@@ -204,17 +201,12 @@ class QuotePage(BasePage):
                 self.logger.info(f"✅ Ocupación ya seleccionada: {ocupacion_esperada}")
                 return True
             
-            # Abrir dropdown y seleccionar
-            self.logger.info("🔄 Abriendo dropdown de ocupación...")
-            await ocupacion_element.click(timeout=5000)
-            await self.page.wait_for_timeout(1000)
-            
-            ocupacion_option_selector = f"mat-option:has-text('{ocupacion_esperada}')"
-            await self.page.locator(ocupacion_option_selector).click(timeout=5000)
-            await self.page.wait_for_timeout(500)
-            
-            self.logger.info(f"✅ Ocupación seleccionada: {ocupacion_esperada}")
-            return True
+            # Usar función optimizada de la clase base para seleccionar
+            return await self.select_from_material_dropdown(
+                dropdown_selector="mat-select:has(span:text('Ocupación *'))",
+                option_text=ocupacion_esperada,
+                description=f"ocupación {ocupacion_esperada}"
+            )
                 
         except Exception as e:
             self.logger.error(f"❌ Error seleccionando ocupación: {e}")
@@ -239,33 +231,37 @@ class QuotePage(BasePage):
             self.logger.error(f"❌ Error seleccionando tipo de dirección 'Trabajo': {e}")
             return False
 
-
     async def fill_address(self) -> bool:
         """Llena los datos de dirección desde el config, eligiendo siempre el input habilitado."""
         self.logger.info("🏠 Llenando dirección...")
         try:
-            # Elegir el input habilitado con .first() para evitar ambigüedad
-            await self.page.locator(self.DIRECCION_TRABAJO_INPUT).first.fill(self.config.CLIENT_ADDRESS, timeout=5000)
-            await self.page.wait_for_timeout(300)
+            # Corregir los selectores para evitar errores de sintaxis
+            field_map = {
+                self.DIRECCION_TRABAJO_INPUT: self.config.CLIENT_ADDRESS,
+                self.TELEFONO_TRABAJO_INPUT: self.config.CLIENT_PHONE_WORK,
+                self.CIUDAD_TRABAJO_INPUT: self.config.CLIENT_CITY,
+            }
             
-            await self.page.locator(self.TELEFONO_TRABAJO_INPUT).first.fill(self.config.CLIENT_PHONE_WORK, timeout=5000)
-            await self.page.wait_for_timeout(300)
+            success = await self.fill_multiple_fields(
+                field_map=field_map,
+                description="datos de dirección",
+                timeout=5000,
+                delay_between_fields=0.3
+            )
             
-            await self.page.locator(self.CIUDAD_TRABAJO_INPUT).first.fill(self.config.CLIENT_CITY, timeout=5000)
-            await self.page.wait_for_timeout(500)
+            if success:
+                # Intentar seleccionar primera opción de autocompletado
+                try:
+                    await self.page.locator("mat-option").first.click(timeout=3000)
+                except:
+                    pass
+                
+                self.logger.info(f"✅ Dirección llenada: {self.config.CLIENT_ADDRESS}, {self.config.CLIENT_PHONE_WORK}, {self.config.CLIENT_CITY}")
             
-            # Intentar seleccionar primera opción de autocompletado
-            try:
-                await self.page.locator("mat-option").first.click(timeout=3000)
-            except:
-                pass
-            
-            self.logger.info(f"✅ Dirección llenada: {self.config.CLIENT_ADDRESS}, {self.config.CLIENT_PHONE_WORK}, {self.config.CLIENT_CITY}")
-            return True
+            return success
         except Exception as e:
             self.logger.error(f"❌ Error llenando dirección: {e}")
             return False
-        
     async def click_continue(self) -> bool:
         """Hace clic en el botón Continuar y verifica la navegación."""
         self.logger.info("➡️ Haciendo clic en Continuar...")
@@ -276,20 +272,13 @@ class QuotePage(BasePage):
             await self.page.locator(self.CONTINUAR_BUTTON).click(timeout=5000)
             self.logger.info("✅ Clic en Continuar exitoso")
             
-            await self.page.wait_for_timeout(3000)
-            
-            new_url = self.page.url
-            self.logger.info(f"📍 Nueva URL: {new_url}")
-            
-            if "cotizadores.sura.com" in new_url and "Clientes" in new_url:
-                self.logger.info("🎉 ¡Navegación exitosa! Llegó a la página de Clientes")
-                return True
-            elif new_url != current_url:
-                self.logger.info("🔄 Navegación detectada a nueva página")
-                return True
-            else:
-                self.logger.warning("⚠️ No se detectó cambio de página")
-                return True
+            # Usar función optimizada de navegación de la clase base
+            expected_url_parts = ["cotizadores.sura.com", "Clientes"]
+            return await self.wait_for_page_navigation(
+                expected_url_parts=expected_url_parts,
+                timeout=3000,
+                description="página de Clientes"
+            )
                 
         except Exception as e:
             self.logger.error(f"❌ Error haciendo clic en Continuar: {e}")

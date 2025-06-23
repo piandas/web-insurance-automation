@@ -24,25 +24,7 @@ class DashboardPage(BasePage):
         ('a:has-text("Colectivos")', 'Colectivos', 5000, 1),
         ('a:has-text("Nueva Inclusión")', 'Nueva inclusión', 5000, 3),
     ]
-    DOCUMENT_TYPE_MAP = {
-        'C': 'CEDULA',
-        'E': 'CED.EXTRANJERIA',
-        'P': 'PASAPORTE',
-        'A': 'NIT',
-        'CA': 'NIT PERSONAS NATURALES',
-        'N': 'NUIP',
-        'R': 'REGISTRO CIVIL',
-        'T': 'TARJ.IDENTIDAD',
-        'D': 'DIPLOMATICO',
-        'X': 'DOC.IDENT. DE EXTRANJEROS',
-        'F': 'IDENT. FISCAL PARA EXT.',
-        'TC': 'CERTIFICADO NACIDO VIVO',
-        'TP': 'PASAPORTE ONU',
-        'TE': 'PERMISO ESPECIAL PERMANENCIA',
-        'TS': 'SALVOCONDUCTO DE PERMANENCIA',
-        'TF': 'PERMISO ESPECIAL FORMACN PEPFF',
-        'TT': 'PERMISO POR PROTECCION TEMPORL',
-    }
+    
     DOCUMENT_SELECTORS = [
         'input[placeholder="Documento"]',
         'input[placeholder*="documento"]',
@@ -63,8 +45,8 @@ class DashboardPage(BasePage):
         'input[type="submit"]',
         '.btn-primary',
         '.btn-success',
-    ]
-
+    ]    
+    
     # Selectores para verificar si el menú está desplegado
     MENU_DROPDOWN_OPEN_SELECTORS = [
         'button#dropdownMenuButton[aria-expanded="true"]',
@@ -87,23 +69,14 @@ class DashboardPage(BasePage):
     ) -> bool:
         """Busca múltiples selectores y hace clic en el primero visible con reintentos."""
         
-        async def _try_click_selectors():
-            """Función interna para intentar hacer clic en los selectores."""
-            for sel in selectors:
-                if await self.is_visible_safe(sel, timeout=timeout):
-                    self.logger.info(f"✅ {description} encontrado con selector: {sel}")
-                    success = await self.safe_click(sel)
-                    if success and sleep_after:
-                        await asyncio.sleep(sleep_after)
-                    return success
-            return False
-        
-        # Usar la función de reintentos de la clase base
-        return await self.retry_action(
-            _try_click_selectors,
-            description,
+        # Usar la función optimizada de la clase base
+        return await self.find_and_click_from_selectors(
+            selectors=selectors,
+            description=description,
+            timeout=timeout,
+            sleep_after=sleep_after,
             max_attempts=max_attempts,
-            delay_seconds=retry_delay
+            retry_delay=retry_delay
         )
 
     async def navigate_to_cotizador(self) -> bool:
@@ -222,8 +195,7 @@ class DashboardPage(BasePage):
             # Si no es el último intento completo, esperar antes de reintentar
             if full_attempt < max_full_attempts:
                 self.logger.warning(f"🔄 Reintentando secuencia completa en 2 segundos...")
-                await asyncio.sleep(2)
-        
+                await asyncio.sleep(2)        
         self.logger.error(f"❌ No se pudo completar la navegación por menús después de {max_full_attempts} intentos completos")
         return False
 
@@ -235,17 +207,16 @@ class DashboardPage(BasePage):
     async def select_document_type(self, document_type: str = "C") -> bool:
         """Selecciona el tipo de documento usando Material Design dropdown."""
         self.logger.info(f"📄 Seleccionando tipo de documento: {document_type}")
-        if not await self._find_and_click(
-            ['.mat-select-value'], "dropdown de tipo de documento", 10000, 1
-        ):
-            return False
-
+        
+        # Usar el mapeo de la clase base
         text = self.DOCUMENT_TYPE_MAP.get(document_type, 'CEDULA')
-        return await self._find_and_click(
-            [f'span:has-text("{text}")'],
-            f"opción {text}",
-            5000,
-            0
+        
+        # Usar función optimizada de la clase base
+        return await self.select_from_material_dropdown(
+            dropdown_selector='.mat-select-value',
+            option_text=text,
+            description=f"tipo de documento {text}",
+            timeout=10000
         )
 
     async def is_menu_open(self) -> bool:
@@ -278,20 +249,20 @@ class DashboardPage(BasePage):
         
         self.logger.error(f"❌ No se pudo abrir el menú después de {max_attempts} intentos")
         return False
-
-
     async def input_document_number(self, document_number: str = "1020422674") -> bool:
         """Ingresa el número de documento en el campo correspondiente."""
         self.logger.info(f"📄 Ingresando número de documento: {document_number}")
+        
+        # Usar función optimizada de la clase base para buscar y llenar
         for sel in self.DOCUMENT_SELECTORS:
             try:
                 if await self.is_visible_safe(sel, timeout=5000):
                     self.logger.info(f"✅ Campo de documento encontrado con selector: {sel}")
-                    await self.page.fill(sel, "")
+                    await self.page.fill(sel, "")  # Limpiar campo
                     await self.page.fill(sel, document_number)
                     return True
             except Exception:
-                continue
+                continue        
         self.logger.error("❌ No se pudo encontrar el campo de número de documento")
         return False
 
@@ -299,60 +270,22 @@ class DashboardPage(BasePage):
         """Acepta o envía el formulario y espera a que cargue la página de cotización."""
         self.logger.info("✅ Aceptando formulario...")
         
-        # Hacer clic en el botón
-        if not await self._find_and_click(
-            self.ACCEPT_SELECTORS,
-            "botón de aceptar/enviar",
-            5000,
-            1  # Esperar 1 segundo después del clic
+        # Hacer clic en el botón usando función optimizada
+        if not await self.find_and_click_from_selectors(
+            selectors=self.ACCEPT_SELECTORS,
+            description="botón de aceptar/enviar",
+            timeout=5000,
+            sleep_after=1
         ):
             return False
         
-        # Esperar a que aparezca la página de cotización con los elementos específicos
-        self.logger.info("⏳ Esperando que cargue la página de cotización...")
-        
-        try:
-            # Esperar a que aparezca un elemento específico de la página de cotización
-            cotizacion_selectors = [
-                "input[ng-reflect-name='primerNombreControl']",  # Campo primer nombre
-                "input[ng-reflect-name='documentControl']",      # Campo documento
-                "text=Cotizador Conectado",                      # Título de la página
-                "text=Cliente"                                   # Sección Cliente
-            ]
-            
-            # Intentar esperar por cualquiera de estos selectores
-            for i, selector in enumerate(cotizacion_selectors):
-                try:
-                    self.logger.info(f"🔍 Intentando selector {i+1}/{len(cotizacion_selectors)}: {selector}")
-                    await self.page.wait_for_selector(selector, timeout=15000, state='visible')
-                    self.logger.info(f"✅ Página de cotización detectada con selector: {selector}")
-                    
-                    # Esperar un poco más para que la página se estabilice
-                    await asyncio.sleep(2)
-                    
-                    # Verificar URL para confirmar
-                    current_url = self.page.url
-                    self.logger.info(f"📍 URL actual: {current_url}")
-                    
-                    self.logger.info("✅ Formulario aceptado y página de cotización cargada exitosamente")
-                    return True
-                    
-                except Exception as e:
-                    self.logger.warning(f"⚠️ Selector {selector} no encontrado: {e}")
-                    continue
-            
-            # Si ningún selector funcionó, pero la URL cambió, aún puede ser exitoso
-            current_url = self.page.url
-            if "cotizador" in current_url.lower() or "clientes" in current_url.lower():
-                self.logger.info(f"✅ Nueva página detectada por URL: {current_url}")
-                return True
-            
-            self.logger.error("❌ No se pudo detectar la carga de la página de cotización")
-            return False
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error esperando la página de cotización: {e}")
-            return False
+        # Usar función optimizada para esperar navegación
+        cotizacion_url_parts = ["cotizador", "clientes"]
+        return await self.wait_for_page_navigation(
+            expected_url_parts=cotizacion_url_parts,
+            timeout=15000,
+            description="página de cotización"
+        )
 
     async def complete_navigation_flow(
         self,

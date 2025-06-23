@@ -53,20 +53,18 @@ class LoginPage(BasePage):
 
     def __init__(self, page: Page):
         super().__init__(page, 'sura')
-        self.config = SuraConfig()
-
+        self.config = SuraConfig()    
+        
     # ────────────────────────────────────────────────
 
     async def _get_value(self, selector: str) -> str:
         """Devuelve el .value de un elemento dado su selector CSS."""
-        return await self.page.evaluate(
-            "(sel) => { const el = document.querySelector(sel); return el ? el.value : ''; }",
-            selector
-        )
+        return await self.get_element_value(selector, "value")
 
     async def _is_password_entered(self) -> bool:
         """Comprueba si el campo de contraseña ya tiene valor."""
-        return bool(await self._get_value(self.CONTRASENA_INPUT))
+        value = await self._get_value(self.CONTRASENA_INPUT)
+        return bool(value)
     
     # ────────────────────────────────────────────────
 
@@ -101,7 +99,7 @@ class LoginPage(BasePage):
                     await self.page.wait_for_timeout(1000)
             except Exception as e:
                 self.logger.warning(f"⚠️ Error en intento {intento}: {e}")
-                if intento < max_intentos:
+                if intento < max_intentos:                    
                     await self.page.wait_for_timeout(1000)
                 else:
                     self.logger.exception(f"❌ Error final seleccionando tipo de documento: {e}")
@@ -112,13 +110,13 @@ class LoginPage(BasePage):
     async def _verify_tipo_documento_selected(self, expected_tipo: str) -> bool:
         """Verifica que el tipo de documento se haya seleccionado correctamente."""
         try:
-            current_value = await self._get_value(self.TIPO_DOCUMENTO_SELECT)
-            is_selected = current_value == expected_tipo
-            if is_selected:
-                self.logger.info(f"✅ Verificación exitosa - Tipo de documento: {current_value}")
-            else:
-                self.logger.warning(f"⚠️ Verificación falló - Esperado: {expected_tipo}, Actual: {current_value}")
-            return is_selected
+            # Usar función optimizada de la clase base
+            return await self.verify_element_value_equals(
+                selector=self.TIPO_DOCUMENTO_SELECT,
+                expected_value=expected_tipo,
+                property_name="value",
+                description=f"Tipo de documento ({expected_tipo})"
+            )
         except Exception as e:
             self.logger.error(f"❌ Error verificando tipo de documento: {e}")
             return False
