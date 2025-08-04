@@ -5,7 +5,7 @@ from typing import Optional
 
 from ...core.base_automation import BaseAutomation
 from ...config.sura_config import SuraConfig
-from .pages import LoginPage, DashboardPage, QuotePage, PolicyPage
+from .pages import LoginPage, DashboardPage, QuotePage, PolicyPage, FasecoldaPage
 
 class SuraAutomation(BaseAutomation):
     """Automatización específica para Sura."""
@@ -99,9 +99,10 @@ class SuraAutomation(BaseAutomation):
 
     async def execute_policy_flow(self) -> bool:
         """Ejecuta el flujo de consulta de póliza específico de Sura."""
-        self.logger.info("📄 Ejecutando flujo de consulta de póliza Sura...")
+        self.logger.info("📄 Ejecutando flujo completo de Sura...")
         
         try:
+            # 1. Procesar página de póliza hasta fecha de vigencia
             self.logger.info("🔍 Procesando página de consulta de póliza...")
             policy_page = PolicyPage(self.page)
             
@@ -109,11 +110,19 @@ class SuraAutomation(BaseAutomation):
                 self.logger.error("❌ Error procesando página de consulta de póliza")
                 return False
             
-            self.logger.info("✅ Flujo de consulta de póliza Sura completado exitosamente")
+            # 2. Procesar código Fasecolda
+            self.logger.info("🔍 Procesando código Fasecolda...")
+            fasecolda_page = FasecoldaPage(self.page)
+            
+            if not await fasecolda_page.process_fasecolda_filling():
+                self.logger.warning("⚠️ No se pudo procesar el código Fasecolda, pero continuando...")
+                # No retornamos False porque Fasecolda puede no ser necesario para vehículos usados
+            
+            self.logger.info("✅ Flujo completo de Sura completado exitosamente")
             return True
             
         except Exception as e:
-            self.logger.exception(f"❌ Error ejecutando consulta de póliza Sura: {e}")
+            self.logger.exception(f"❌ Error ejecutando flujo completo de Sura: {e}")
             return False
 
     async def run_complete_flow(self) -> bool:
