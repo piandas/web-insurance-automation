@@ -74,6 +74,23 @@ class SuraConfig(BaseConfig):
     POLIZA_NUMBER: str = '040007325677'  # Número de póliza para desarrollo
     
     # ==========================================
+    # CONFIGURACIÓN DE VEHÍCULO PARA FASECOLDA
+    # ==========================================
+    # Configuración para consulta en Fasecolda (vehículos nuevos)
+    VEHICLE_CATEGORY: str = 'Liviano pasajeros'  # Opciones: "Liviano pasajeros", "Motos"
+    VEHICLE_STATE: str = 'Nuevo'  # Opciones: "Nuevo", "Usado"
+    VEHICLE_MODEL_YEAR: str = '2025'  # Año del modelo (2025, 2024, etc.)
+    VEHICLE_BRAND: str = 'Chevrolet'  # Marca del vehículo
+    VEHICLE_REFERENCE: str = 'Tracker [2] - utilitario deportivo 4x2'  # Referencia específica que se ingresa manualmente
+    
+    # Referencia completa esperada para matching (concatenación de todas las referencias)
+    # Formato: [brand] [reference] [reference_2] [reference_3]
+    VEHICLE_FULL_REFERENCE: str = 'CHEVROLET TRACKER [2] LS TP 1200CC T'
+    
+    # URL de Fasecolda para consultas
+    FASECOLDA_URL: str = 'https://www.fasecolda.com/guia-de-valores-old/'
+    
+    # ==========================================
     # PLANES DISPONIBLES EN SURA (8 PLANES)
     # ==========================================
     # Los siguientes son los 8 planes disponibles que aparecen tras consultar póliza:
