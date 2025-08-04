@@ -90,6 +90,9 @@ class SuraConfig(BaseConfig):
     # URL de Fasecolda para consultas
     FASECOLDA_URL: str = 'https://www.fasecolda.com/guia-de-valores-old/'
     
+    # Flag para determinar si buscar código Fasecolda automáticamente
+    AUTO_FETCH_FASECOLDA: bool = True  # True = buscar automáticamente, False = manual
+    
     # ==========================================
     # PLANES DISPONIBLES EN SURA (8 PLANES)
     # ==========================================

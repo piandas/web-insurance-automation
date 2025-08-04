@@ -1,10 +1,12 @@
 """Página de consulta de póliza específica para Sura - Versión refactorizada"""
 
 import datetime
+from typing import Optional
 from playwright.async_api import Page
 from ....shared.base_page import BasePage
 from ....config.sura_config import SuraConfig
 from ....shared.utils import Utils
+from ....shared.fasecolda_service import FasecoldaService
 
 class PolicyPage(BasePage):
     """Página de consulta de póliza para Sura."""
@@ -25,6 +27,9 @@ class PolicyPage(BasePage):
     PLAN_SELECTION_INDICATOR = "span.self-center:has-text('Seleccione el plan')"
     PLAN_SELECTOR_TEMPLATE = "div.nombre-plan:has-text('{plan_name}')"  # Selector correcto basado en HTML real
     VIGENCIA_FECHA_INPUT = "input[aria-labelledby='paper-input-label-27']"  # Selector específico para fecha de vigencia
+    
+    # Selector para el código Fasecolda - se busca dinámicamente por etiqueta
+    FASECOLDA_CODE_INPUT = "input[aria-labelledby*='paper-input-label']:not([placeholder*='DD/MM/YYYY'])"  # Fallback genérico
 
     def __init__(self, page: Page):
         super().__init__(page, 'sura')
@@ -253,8 +258,125 @@ class PolicyPage(BasePage):
             self.logger.error(f"❌ Error llenando fecha de vigencia: {e}")
             return False
 
+    async def get_fasecolda_code(self) -> Optional[str]:
+        """Obtiene el código Fasecolda usando FasecoldaService en una nueva pestaña."""
+        self.logger.info("🔍 Obteniendo código Fasecolda...")
+        
+        try:
+            # Verificar si debe buscar automáticamente
+            if not self.config.AUTO_FETCH_FASECOLDA:
+                self.logger.info("⏭️ Búsqueda automática de Fasecolda deshabilitada")
+                return None
+            
+            # Solo buscar si es vehículo nuevo
+            if self.config.VEHICLE_STATE != 'Nuevo':
+                self.logger.info(f"⏭️ Vehículo '{self.config.VEHICLE_STATE}' - no requiere código Fasecolda")
+                return None
+            
+            # Crear nueva pestaña para Fasecolda
+            self.logger.info("🌐 Abriendo nueva pestaña para Fasecolda...")
+            new_page = await self.page.context.new_page()
+            
+            try:
+                # Inicializar el servicio de Fasecolda
+                fasecolda_service = FasecoldaService(new_page, self.logger)
+                
+                # Obtener el código CF
+                cf_code = await fasecolda_service.get_cf_code(
+                    category=self.config.VEHICLE_CATEGORY,
+                    state=self.config.VEHICLE_STATE,
+                    model_year=self.config.VEHICLE_MODEL_YEAR,
+                    brand=self.config.VEHICLE_BRAND,
+                    reference=self.config.VEHICLE_REFERENCE,
+                    full_reference=self.config.VEHICLE_FULL_REFERENCE
+                )
+                
+                if cf_code:
+                    self.logger.info(f"✅ Código Fasecolda obtenido: {cf_code}")
+                    return cf_code
+                else:
+                    self.logger.warning("⚠️ No se pudo obtener código Fasecolda")
+                    return None
+                    
+            finally:
+                # Cerrar la pestaña de Fasecolda
+                await new_page.close()
+                self.logger.info("🗂️ Pestaña de Fasecolda cerrada")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error obteniendo código Fasecolda: {e}")
+            return None
+
+    async def fill_fasecolda_code(self, cf_code: str) -> bool:
+        """Llena el campo del código Fasecolda buscando dinámicamente por etiqueta."""
+        self.logger.info(f"📋 Llenando código Fasecolda: {cf_code}")
+        
+        try:
+            # Buscar dinámicamente el campo de Fasecolda por su etiqueta
+            fasecolda_selector = await self._find_fasecolda_input_selector()
+            
+            if not fasecolda_selector:
+                self.logger.error("❌ No se pudo encontrar el campo de Fasecolda")
+                return False
+            
+            self.logger.info(f"📝 Campo Fasecolda encontrado con selector: {fasecolda_selector}")
+            
+            # Usar fill_and_verify_field_flexible de la clase base
+            if not await self.fill_and_verify_field_flexible(
+                selector=fasecolda_selector,
+                value=cf_code,
+                field_name="Código Fasecolda",
+                max_attempts=3
+            ):
+                self.logger.error("❌ No se pudo llenar el campo de código Fasecolda")
+                return False
+            
+            self.logger.info("✅ Código Fasecolda llenado exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error llenando código Fasecolda: {e}")
+            return False
+
+    async def _find_fasecolda_input_selector(self) -> str:
+        """Encuentra dinámicamente el selector del campo de Fasecolda por su etiqueta."""
+        try:
+            # Ejecutar JavaScript para buscar el campo de Fasecolda dinámicamente
+            fasecolda_selector = await self.page.evaluate("""
+                () => {
+                    // Buscar todos los inputs
+                    const inputs = Array.from(document.querySelectorAll('input'));
+                    
+                    // Filtrar por aquellos que tengan una etiqueta con texto "Fasecolda"
+                    const fasecoldaInputs = inputs.filter(input => {
+                        const labelId = input.getAttribute('aria-labelledby');
+                        if (labelId) {
+                            const labelElement = document.getElementById(labelId);
+                            if (labelElement && labelElement.textContent.toLowerCase().includes('fasecolda')) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    });
+                    
+                    if (fasecoldaInputs.length > 0) {
+                        const input = fasecoldaInputs[0];
+                        const labelId = input.getAttribute('aria-labelledby');
+                        return `input[aria-labelledby='${labelId}']`;
+                    }
+                    
+                    return null;
+                }
+            """)
+            
+            return fasecolda_selector
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error buscando selector de Fasecolda dinámicamente: {e}")
+            return None
+
     async def process_plan_selection(self) -> bool:
-        """Procesa la selección del plan y llenado de fecha de vigencia."""
+        """Procesa la selección del plan, llenado de fecha de vigencia y código Fasecolda."""
         self.logger.info("🎯 Procesando selección de plan...")
         
         try:
@@ -263,7 +385,7 @@ class PolicyPage(BasePage):
                 self.logger.error("❌ No se pudo cargar la pantalla de selección de planes")
                 return False
             
-            # 2. Seleccionar el plan configurado
+            # 2. Seleccionar el plan configurado (por defecto "Plan Autos Global")
             if not await self.select_plan(self.config.SELECTED_PLAN):
                 self.logger.error(f"❌ No se pudo seleccionar el plan: {self.config.SELECTED_PLAN}")
                 return False
@@ -273,7 +395,15 @@ class PolicyPage(BasePage):
                 self.logger.error("❌ No se pudo llenar la fecha de vigencia")
                 return False
             
-            self.logger.info("🎉 Selección de plan y fecha de vigencia completada exitosamente")
+            # 4. Obtener y llenar código Fasecolda (solo para vehículos nuevos)
+            cf_code = await self.get_fasecolda_code()
+            if cf_code:
+                if not await self.fill_fasecolda_code(cf_code):
+                    self.logger.warning("⚠️ No se pudo llenar el código Fasecolda, pero continuando...")
+            else:
+                self.logger.info("⏭️ No se obtuvo código Fasecolda (vehículo usado o búsqueda deshabilitada)")
+            
+            self.logger.info("🎉 Selección de plan, fecha de vigencia y código Fasecolda completada exitosamente")
             return True
             
         except Exception as e:
