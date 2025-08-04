@@ -30,6 +30,12 @@ class PolicyPage(BasePage):
     
     # Selector para el código Fasecolda - se busca dinámicamente por etiqueta
     FASECOLDA_CODE_INPUT = "input[aria-labelledby*='paper-input-label']:not([placeholder*='DD/MM/YYYY'])"  # Fallback genérico
+    
+    # Selectores para dropdown de categoría de vehículo y año del modelo
+    VEHICLE_CATEGORY_DROPDOWN_ID = "#clase"  # ID del dropdown de categoría/clase de vehículo
+    VEHICLE_CATEGORY_OPTION = "paper-item:has-text('AUTOMÓVILES')"  # Opción para seleccionar AUTOMÓVILES
+    MODEL_YEAR_DROPDOWN_ID = "#modelo"  # ID del dropdown de año del modelo
+    MODEL_YEAR_OPTION_TEMPLATE = "paper-item:has-text('{year}')"  # Template para seleccionar año del modelo
 
     def __init__(self, page: Page):
         super().__init__(page, 'sura')
@@ -375,6 +381,65 @@ class PolicyPage(BasePage):
             self.logger.warning(f"⚠️ Error buscando selector de Fasecolda dinámicamente: {e}")
             return None
 
+    async def select_vehicle_category(self) -> bool:
+        """Selecciona 'AUTOMÓVILES' del dropdown de categoría de vehículo."""
+        self.logger.info("🚗 Seleccionando categoría de vehículo: AUTOMÓVILES...")
+        
+        try:
+            # Hacer clic en el dropdown de categoría para abrirlo
+            if not await self.safe_click(self.VEHICLE_CATEGORY_DROPDOWN_ID, timeout=10000):
+                self.logger.error("❌ No se pudo hacer clic en el dropdown de categoría de vehículo")
+                return False
+            
+            # Esperar a que aparezcan las opciones
+            await self.page.wait_for_timeout(1000)
+            
+            # Hacer clic en AUTOMÓVILES
+            if not await self.safe_click(self.VEHICLE_CATEGORY_OPTION, timeout=5000):
+                self.logger.error("❌ No se pudo seleccionar AUTOMÓVILES")
+                return False
+            
+            self.logger.info("✅ Categoría 'AUTOMÓVILES' seleccionada exitosamente")
+            
+            # Esperar un poco para que se procese la selección
+            await self.page.wait_for_timeout(1500)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error seleccionando categoría de vehículo: {e}")
+            return False
+
+    async def select_model_year(self) -> bool:
+        """Selecciona el año del modelo configurado del dropdown."""
+        self.logger.info(f"📅 Seleccionando año del modelo: {self.config.VEHICLE_MODEL_YEAR}...")
+        
+        try:
+            # Hacer clic en el dropdown de modelo/año para abrirlo
+            if not await self.safe_click(self.MODEL_YEAR_DROPDOWN_ID, timeout=10000):
+                self.logger.error("❌ No se pudo hacer clic en el dropdown de modelo/año")
+                return False
+            
+            # Esperar a que aparezcan las opciones
+            await self.page.wait_for_timeout(1000)
+            
+            # Crear el selector específico para el año
+            year_selector = self.MODEL_YEAR_OPTION_TEMPLATE.format(year=self.config.VEHICLE_MODEL_YEAR)
+            
+            # Hacer clic en el año configurado
+            if not await self.safe_click(year_selector, timeout=5000):
+                self.logger.error(f"❌ No se pudo seleccionar el año: {self.config.VEHICLE_MODEL_YEAR}")
+                return False
+            
+            self.logger.info(f"✅ Año '{self.config.VEHICLE_MODEL_YEAR}' seleccionado exitosamente")
+            
+            # Esperar un poco para que se procese la selección
+            await self.page.wait_for_timeout(1500)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error seleccionando año del modelo: {e}")
+            return False
+
     async def process_plan_selection(self) -> bool:
         """Procesa la selección del plan, llenado de fecha de vigencia y código Fasecolda."""
         self.logger.info("🎯 Procesando selección de plan...")
@@ -400,10 +465,18 @@ class PolicyPage(BasePage):
             if cf_code:
                 if not await self.fill_fasecolda_code(cf_code):
                     self.logger.warning("⚠️ No se pudo llenar el código Fasecolda, pero continuando...")
+                else:
+                    # 5. Seleccionar categoría de vehículo (AUTOMÓVILES) después de llenar Fasecolda
+                    if not await self.select_vehicle_category():
+                        self.logger.warning("⚠️ No se pudo seleccionar categoría AUTOMÓVILES, pero continuando...")
+                    
+                    # 6. Seleccionar año del modelo después de seleccionar categoría
+                    if not await self.select_model_year():
+                        self.logger.warning("⚠️ No se pudo seleccionar año del modelo, pero continuando...")
             else:
                 self.logger.info("⏭️ No se obtuvo código Fasecolda (vehículo usado o búsqueda deshabilitada)")
             
-            self.logger.info("🎉 Selección de plan, fecha de vigencia y código Fasecolda completada exitosamente")
+            self.logger.info("🎉 Selección de plan, fecha de vigencia, código Fasecolda, categoría y año completada exitosamente")
             return True
             
         except Exception as e:
@@ -437,7 +510,7 @@ class PolicyPage(BasePage):
                 self.logger.error("❌ No se pudo procesar la selección de plan")
                 return False
             
-            self.logger.info("🎉 Proceso completo de consulta de póliza y selección de plan completado exitosamente")
+            self.logger.info("🎉 Proceso completo de consulta de póliza, selección de plan, categoría y año completado exitosamente")
             return True
 
         except Exception as e:
