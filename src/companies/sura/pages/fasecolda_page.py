@@ -1,6 +1,6 @@
 """Página de manejo de código Fasecolda específica para Sura"""
 
-import datetime
+import os
 from typing import Optional
 from playwright.async_api import Page
 from ....shared.base_page import BasePage
@@ -34,8 +34,12 @@ class FasecoldaPage(BasePage):
     # Selectores para primas y planes
     PRIMA_ANUAL_SELECTOR = "#primaAnual"  # Selector para el valor de prima anual
     PLAN_AUTOS_CLASICO_SELECTOR = "div.horizontal.layout.contenedor-nom-plan:has-text('Plan Autos Clásico')"  # Selector para el plan autos clásico
+    PLAN_AUTOS_GLOBAL_SELECTOR = "div.horizontal.layout.contenedor-nom-plan:has-text('Plan Autos Global')"  # Selector para el plan autos global
     ACCEPT_BUTTON_MODAL_SELECTOR = "#btnOne"  # Botón aceptar específico del modal de continuidad
     MODAL_DIALOG_SELECTOR = "div.dialog-content-base.info"  # Selector del modal de continuidad
+    VER_COTIZACION_BUTTON_SELECTOR = "paper-button.boton-accion-principal:has-text('Ver cotización')"  # Botón Ver cotización
+    MENU_TOGGLE_BUTTON_SELECTOR = "paper-fab[icon='apps']"  # Botón para activar el menú flotante
+    PDF_DOWNLOAD_BUTTON_SELECTOR = "paper-fab[data-menuitem='Descargar PDF']"  # Botón de descarga PDF
 
     def __init__(self, page: Page):
         super().__init__(page, 'sura')
@@ -475,6 +479,33 @@ class FasecoldaPage(BasePage):
             self.logger.error(f"❌ Error haciendo clic en Plan Autos Clásico: {e}")
             return False
 
+    async def click_plan_autos_global(self) -> bool:
+        """Hace clic en el Plan Autos Global y maneja modales opcionales."""
+        self.logger.info("🎯 Haciendo clic en Plan Autos Global...")
+        
+        try:
+            # Hacer clic en el plan autos global
+            if not await self.safe_click(self.PLAN_AUTOS_GLOBAL_SELECTOR, timeout=10000):
+                self.logger.error("❌ No se pudo hacer clic en Plan Autos Global")
+                return False
+            
+            self.logger.info("✅ Clic en Plan Autos Global exitoso")
+            
+            # Esperar más tiempo para que se procese el cambio de plan
+            self.logger.info("⏳ Esperando que se procese el cambio de plan...")
+            await self.page.wait_for_timeout(3000)
+            
+            # Manejar modal opcional que puede aparecer después del cambio de plan
+            await self.check_and_handle_continuity_modal()
+            if not await self.handle_optional_modal():
+                self.logger.warning("⚠️ Hubo problemas manejando el modal opcional después del cambio a Global, pero continuando...")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error haciendo clic en Plan Autos Global: {e}")
+            return False
+
     async def handle_optional_modal(self) -> bool:
         """Maneja un modal opcional que puede aparecer después de seleccionar el plan."""
         self.logger.info("🔍 Verificando si aparece modal opcional...")
@@ -538,6 +569,132 @@ class FasecoldaPage(BasePage):
                 
         except Exception as e:
             self.logger.warning(f"⚠️ Error verificando modal de continuidad: {e}")
+            return False
+
+    async def click_ver_cotizacion(self) -> bool:
+        """Hace clic en el botón 'Ver cotización'."""
+        self.logger.info("🎯 Haciendo clic en 'Ver cotización'...")
+        
+        try:
+            # Hacer clic en el botón Ver cotización
+            if not await self.safe_click(self.VER_COTIZACION_BUTTON_SELECTOR, timeout=10000):
+                self.logger.error("❌ No se pudo hacer clic en 'Ver cotización'")
+                return False
+            
+            self.logger.info("✅ Clic en 'Ver cotización' exitoso")
+            
+            # Esperar un poco para que se procese
+            await self.page.wait_for_timeout(2000)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error haciendo clic en 'Ver cotización': {e}")
+            return False
+
+    async def activate_menu_toggle(self) -> bool:
+        """Activa el menú flotante haciendo clic en el botón de apps."""
+        self.logger.info("📱 Activando menú flotante...")
+        
+        try:
+            # Hacer clic en el botón de menú (apps)
+            if not await self.safe_click(self.MENU_TOGGLE_BUTTON_SELECTOR, timeout=10000):
+                self.logger.error("❌ No se pudo hacer clic en el botón de menú")
+                return False
+            
+            self.logger.info("✅ Menú flotante activado exitosamente")
+            
+            # Esperar un poco para que aparezcan las opciones
+            await self.page.wait_for_timeout(1500)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error activando menú flotante: {e}")
+            return False
+
+    async def download_pdf_quote(self) -> bool:
+        """Descarga el PDF de la cotización usando únicamente el método de conversión blob → base64."""
+        self.logger.info("📄 Iniciando descarga de PDF (solo Método 2)...")
+
+        try:
+            from ....shared.utils import Utils
+            import base64
+            import os
+
+            # Esperar por una nueva pestaña cuando se haga clic en PDF
+            self.logger.info("🌐 Detectando nueva pestaña con el PDF...")
+            async with self.page.context.expect_page() as new_page_info:
+                if not await self.safe_click(self.PDF_DOWNLOAD_BUTTON_SELECTOR, timeout=10000):
+                    self.logger.error("❌ No se pudo hacer clic en el botón de descarga PDF")
+                    return False
+                self.logger.info("✅ Clic en botón PDF exitoso")
+
+            nuevo_popup = await new_page_info.value
+            await nuevo_popup.wait_for_load_state("networkidle")
+
+            # Esperar hasta 45 segundos a que la URL cambie de about:blank a la URL real del PDF
+            self.logger.info("⏳ Esperando que aparezca la URL real del PDF (máximo 45 segundos)...")
+            pdf_url = None
+            for attempt in range(45):
+                current_url = nuevo_popup.url
+                self.logger.debug(f"Intento {attempt + 1}: URL actual = {current_url}")
+                if current_url != "about:blank" and (current_url.startswith("blob:") or current_url.startswith("http")):
+                    pdf_url = current_url
+                    self.logger.info(f"✅ URL del PDF encontrada: {pdf_url}")
+                    break
+                await nuevo_popup.wait_for_timeout(1000)
+
+            if not pdf_url or pdf_url == "about:blank":
+                self.logger.error("❌ No se pudo obtener una URL válida del PDF después de 45 segundos")
+                await nuevo_popup.close()
+                return False
+
+            # Preparar directorio y ruta de guardado
+            nombre = Utils.generate_filename('sura', 'Cotizacion')
+            downloads_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))),
+                'downloads', 'sura'
+            )
+            Utils.ensure_directory(downloads_dir)
+            ruta = os.path.join(downloads_dir, nombre)
+
+            # MÉTODO 2: convertir blob a base64 con JavaScript
+            self.logger.info("🔄 Método 2: Convirtiendo blob a base64 con JavaScript…")
+            try:
+                js = f"""
+                    async () => {{
+                        const response = await fetch('{pdf_url}');
+                        if (!response.ok) throw new Error(`HTTP error! status: ${{response.status}}`);
+                        const blob = await response.blob();
+                        return new Promise((resolve, reject) => {{
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.onerror = () => reject(reader.error);
+                            reader.readAsDataURL(blob);
+                        }});
+                    }}
+                """
+                blob_data = await nuevo_popup.evaluate(js)
+
+                if blob_data and blob_data.startswith('data:'):
+                    _, data = blob_data.split(',', 1)
+                    pdf_bytes = base64.b64decode(data)
+                    with open(ruta, 'wb') as f:
+                        f.write(pdf_bytes)
+                    self.logger.info(f"✅ PDF guardado en: {ruta} ({len(pdf_bytes)} bytes)")
+                    return True
+                else:
+                    self.logger.error(f"❌ Error en conversión blob: {blob_data}")
+                    return False
+
+            except Exception as e:
+                self.logger.error(f"❌ Método 2 falló: {e}")
+                return False
+
+            finally:
+                await nuevo_popup.close()
+
+        except Exception as e:
+            self.logger.error(f"❌ Error general descargando PDF: {e}")
             return False
 
     async def process_prima_and_plan_selection(self) -> dict:
@@ -653,13 +810,14 @@ class FasecoldaPage(BasePage):
             return results
 
     async def process_fasecolda_filling(self) -> dict:
-        """Proceso completo de obtención y llenado de códigos Fasecolda y información del vehículo."""
-        self.logger.info("🔍 Procesando llenado de código Fasecolda y información del vehículo...")
+        """Proceso completo de obtención y llenado de códigos Fasecolda, información del vehículo y descarga de cotización."""
+        self.logger.info("🔍 Procesando llenado de código Fasecolda, información del vehículo y descarga...")
         
         results = {
             'prima_global': None,
             'prima_clasico': None,
-            'success': False
+            'success': False,
+            'pdf_downloaded': False
         }
         
         try:
@@ -677,7 +835,14 @@ class FasecoldaPage(BasePage):
             results = await self.complete_vehicle_information_filling()
             
             if results['success']:
-                self.logger.info("🎉 Proceso de llenado de código Fasecolda, información del vehículo y extracción de primas completado exitosamente")
+                self.logger.info("✅ Extracción de primas completada, procediendo con cotización final...")
+                
+                # Completar cotización y descargar PDF
+                if await self.complete_quote_and_download():
+                    results['pdf_downloaded'] = True
+                    self.logger.info("🎉 Proceso completo finalizado exitosamente con descarga de PDF")
+                else:
+                    self.logger.warning("⚠️ Extracción de primas exitosa pero problemas con descarga de PDF")
             else:
                 self.logger.warning("⚠️ Hubo problemas en el proceso completo")
             
@@ -686,3 +851,49 @@ class FasecoldaPage(BasePage):
         except Exception as e:
             self.logger.error(f"❌ Error procesando llenado de Fasecolda: {e}")
             return results
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error procesando llenado de Fasecolda: {e}")
+            return results
+
+    async def complete_quote_and_download(self) -> bool:
+        """Proceso completo para finalizar cotización y descargar PDF."""
+        self.logger.info("🎯 Completando cotización y descarga de PDF...")
+        
+        try:
+            # 1. Volver a Plan Autos Global (ya maneja modales internamente)
+            self.logger.info("🔄 Regresando a Plan Autos Global...")
+            if not await self.click_plan_autos_global():
+                self.logger.error("❌ No se pudo seleccionar Plan Autos Global")
+                return False
+            
+            # 2. Esperar que cargue el valor del Plan Global nuevamente
+            self.logger.info("⏳ Esperando que cargue el valor del Plan Global...")
+            await self.page.wait_for_timeout(3000)
+            
+            # 3. Hacer clic en "Ver cotización"
+            if not await self.click_ver_cotizacion():
+                self.logger.error("❌ No se pudo hacer clic en 'Ver cotización'")
+                return False
+            
+            # 4. Manejar modal opcional que puede aparecer después de "Ver cotización"
+            await self.check_and_handle_continuity_modal()
+            if not await self.handle_optional_modal():
+                self.logger.warning("⚠️ Hubo problemas manejando el modal opcional, pero continuando...")
+            
+            # 5. Activar menú flotante antes de buscar el botón PDF
+            if not await self.activate_menu_toggle():
+                self.logger.error("❌ No se pudo activar el menú flotante")
+                return False
+            
+            # 6. Descargar PDF
+            if not await self.download_pdf_quote():
+                self.logger.error("❌ No se pudo descargar el PDF")
+                return False
+            
+            self.logger.info("🎉 Proceso de cotización y descarga completado exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error completando cotización y descarga: {e}")
+            return False

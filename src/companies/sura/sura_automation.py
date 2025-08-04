@@ -111,13 +111,18 @@ class SuraAutomation(BaseAutomation):
                 return False
             
             # 2. Procesar código Fasecolda y extraer primas
-            self.logger.info("🔍 Procesando código Fasecolda y extrayendo primas...")
+            self.logger.info("🔍 Procesando código Fasecolda, extrayendo primas y descargando PDF...")
             fasecolda_page = FasecoldaPage(self.page)
             
             results = await fasecolda_page.process_fasecolda_filling()
             
             if results['success']:
                 self.logger.info(f"✅ Primas extraídas - Global: ${results['prima_global']:,.0f}, Clásico: ${results['prima_clasico']:,.0f}")
+                
+                if results.get('pdf_downloaded', False):
+                    self.logger.info("📥 PDF descargado exitosamente")
+                else:
+                    self.logger.warning("⚠️ Primas extraídas pero PDF no se pudo descargar")
             else:
                 self.logger.warning("⚠️ No se pudo procesar completamente el código Fasecolda y extracción de primas")
                 # No retornamos False porque el proceso puede continuar
