@@ -22,6 +22,14 @@ class FasecoldaPage(BasePage):
     VEHICLE_CATEGORY_OPTION = "paper-item:has-text('AUTOMÓVILES')"  # Opción para seleccionar AUTOMÓVILES
     MODEL_YEAR_DROPDOWN_ID = "#modelo"  # ID del dropdown de año del modelo
     MODEL_YEAR_OPTION_TEMPLATE = "paper-item:has-text('{year}')"  # Template para seleccionar año del modelo
+    
+    # Selectores para campos adicionales después del Fasecolda
+    SERVICE_TYPE_DROPDOWN_ID = "#tipoServicio"  # ID del dropdown de tipo de servicio
+    SERVICE_TYPE_OPTION = "paper-item:has-text('Particular')"  # Opción para seleccionar Particular
+    CITY_INPUT_SELECTOR = "input[aria-label='Ciudad']"  # Campo de ciudad
+    CITY_OPTION_TEMPLATE = "vaadin-combo-box-item:has-text('Medellin - (Antioquia)')"  # Opción de ciudad
+    PLATE_INPUT_SELECTOR = "#placa input"  # Campo de placa
+    ZERO_KM_RADIO_SELECTOR = "paper-radio-button[title='opcion-Si']"  # Radio button para cero kilómetros
 
     def __init__(self, page: Page):
         super().__init__(page, 'sura')
@@ -294,9 +302,188 @@ class FasecoldaPage(BasePage):
             self.logger.error(f"❌ Error seleccionando año del modelo: {e}")
             return False
 
+    async def select_service_type(self) -> bool:
+        """Selecciona 'Particular' del dropdown de tipo de servicio."""
+        self.logger.info("🏠 Seleccionando tipo de servicio: Particular...")
+        
+        try:
+            # Hacer clic en el dropdown de tipo de servicio para abrirlo
+            if not await self.safe_click(self.SERVICE_TYPE_DROPDOWN_ID, timeout=10000):
+                self.logger.error("❌ No se pudo hacer clic en el dropdown de tipo de servicio")
+                return False
+            
+            # Esperar a que aparezcan las opciones
+            await self.page.wait_for_timeout(1000)
+            
+            # Hacer clic en Particular
+            if not await self.safe_click(self.SERVICE_TYPE_OPTION, timeout=5000):
+                self.logger.error("❌ No se pudo seleccionar Particular")
+                return False
+            
+            self.logger.info("✅ Tipo de servicio 'Particular' seleccionado exitosamente")
+            
+            # Esperar un poco para que se procese la selección
+            await self.page.wait_for_timeout(1500)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error seleccionando tipo de servicio: {e}")
+            return False
+
+    async def fill_city(self) -> bool:
+        """Llena el campo de ciudad y selecciona la opción de Medellín."""
+        self.logger.info(f"🏙️ Llenando ciudad: {self.config.CLIENT_CITY}...")
+        
+        try:
+            # Llenar el campo de ciudad directamente con fill()
+            await self.page.fill(self.CITY_INPUT_SELECTOR, self.config.CLIENT_CITY)
+            
+            # Esperar a que aparezcan las opciones del autocompletado
+            await self.page.wait_for_timeout(1500)
+            
+            # Seleccionar la opción de Medellín - Antioquia
+            if not await self.safe_click(self.CITY_OPTION_TEMPLATE, timeout=5000):
+                self.logger.error("❌ No se pudo seleccionar la opción de ciudad")
+                return False
+            
+            self.logger.info("✅ Ciudad seleccionada exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error llenando ciudad: {e}")
+            return False
+
+    async def fill_plate(self) -> bool:
+        """Llena el campo de placa con una placa genérica."""
+        self.logger.info("🚗 Llenando placa genérica: XXX123...")
+        
+        try:
+            # Llenar el campo de placa con una placa genérica
+            if not await self.fill_and_verify_field_flexible(
+                selector=self.PLATE_INPUT_SELECTOR,
+                value="XXX123",
+                field_name="Placa",
+                max_attempts=3
+            ):
+                self.logger.error("❌ No se pudo llenar el campo de placa")
+                return False
+            
+            self.logger.info("✅ Placa llenada exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error llenando placa: {e}")
+            return False
+
+    async def select_zero_kilometers(self) -> bool:
+        """Selecciona 'Sí' en la opción de cero kilómetros."""
+        self.logger.info("🆕 Seleccionando vehículo cero kilómetros: Sí...")
+        
+        try:
+            # Hacer clic en el radio button de Sí para cero kilómetros
+            if not await self.safe_click(self.ZERO_KM_RADIO_SELECTOR, timeout=10000):
+                self.logger.error("❌ No se pudo seleccionar la opción de cero kilómetros")
+                return False
+            
+            self.logger.info("✅ Opción 'Sí' para cero kilómetros seleccionada exitosamente")
+            
+            # Esperar un poco para que se procese la selección
+            await self.page.wait_for_timeout(1500)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error seleccionando cero kilómetros: {e}")
+            return False
+
+    async def trigger_quote_calculation(self) -> bool:
+        """Hace clic en un área vacía para deseleccionar y activar el cálculo de la cotización."""
+        self.logger.info("🎯 Activando cálculo de cotización...")
+        
+        try:
+            # Hacer clic en el body para deseleccionar cualquier elemento activo
+            await self.page.click("body")
+            
+            # Esperar a que se procese y se calcule la cotización
+            await self.page.wait_for_timeout(3000)
+            
+            self.logger.info("✅ Cálculo de cotización activado")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error activando cálculo de cotización: {e}")
+            return False
+
+    async def check_quote_result(self) -> bool:
+        """Verifica si aparece el resultado de la prima anual."""
+        self.logger.info("💰 Verificando resultado de la cotización...")
+        
+        try:
+            # Buscar el elemento de prima anual y verificar si tiene valor
+            result = await self.page.evaluate("""
+                () => {
+                    const primaAnualElement = document.getElementById('primaAnual');
+                    return primaAnualElement ? {
+                        text: primaAnualElement.textContent?.trim(),
+                        visible: primaAnualElement.offsetParent !== null,
+                        hasValue: primaAnualElement.textContent?.trim() !== ''
+                    } : null;
+                }
+            """)
+            
+            if result and result.get('hasValue'):
+                self.logger.info(f"✅ Prima anual calculada: {result['text']}")
+                return True
+            else:
+                self.logger.warning("⚠️ Prima anual aún no calculada o sin valor")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error verificando resultado de cotización: {e}")
+            return False
+
+    async def complete_vehicle_information_filling(self) -> bool:
+        """Proceso completo para llenar la información adicional del vehículo después del Fasecolda."""
+        self.logger.info("📋 Completando información del vehículo...")
+        
+        try:
+            # 1. Seleccionar tipo de servicio: Particular
+            if not await self.select_service_type():
+                self.logger.warning("⚠️ No se pudo seleccionar tipo de servicio")
+                return False
+            
+            # 2. Llenar ciudad
+            if not await self.fill_city():
+                self.logger.warning("⚠️ No se pudo llenar la ciudad")
+                return False
+            
+            # 3. Llenar placa
+            if not await self.fill_plate():
+                self.logger.warning("⚠️ No se pudo llenar la placa")
+                return False
+            
+            # 4. Seleccionar cero kilómetros
+            if not await self.select_zero_kilometers():
+                self.logger.warning("⚠️ No se pudo seleccionar cero kilómetros")
+                return False
+            
+            # 5. Activar cálculo de cotización
+            if not await self.trigger_quote_calculation():
+                self.logger.warning("⚠️ No se pudo activar el cálculo de cotización")
+                return False
+            
+            # 6. Verificar resultado (opcional, no bloquea el proceso)
+            await self.check_quote_result()
+            
+            self.logger.info("🎉 Información del vehículo completada exitosamente")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error completando información del vehículo: {e}")
+            return False
+
     async def process_fasecolda_filling(self) -> bool:
-        """Proceso completo de obtención y llenado de códigos Fasecolda."""
-        self.logger.info("🔍 Procesando llenado de código Fasecolda...")
+        """Proceso completo de obtención y llenado de códigos Fasecolda y información del vehículo."""
+        self.logger.info("🔍 Procesando llenado de código Fasecolda y información del vehículo...")
         
         try:
             # Obtener códigos Fasecolda (solo para vehículos nuevos)
@@ -307,9 +494,14 @@ class FasecoldaPage(BasePage):
                     return False
             else:
                 self.logger.info("⏭️ No se obtuvieron códigos Fasecolda (vehículo usado o búsqueda deshabilitada)")
-                return True  # No es error si no necesita Fasecolda
+                # Para vehículos usados, aún necesitamos llenar la información adicional
             
-            self.logger.info("🎉 Proceso de llenado de código Fasecolda completado exitosamente")
+            # Completar el llenado de información adicional del vehículo
+            if not await self.complete_vehicle_information_filling():
+                self.logger.warning("⚠️ No se pudo completar la información adicional del vehículo")
+                return False
+            
+            self.logger.info("🎉 Proceso de llenado de código Fasecolda e información del vehículo completado exitosamente")
             return True
             
         except Exception as e:
