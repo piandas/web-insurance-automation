@@ -75,9 +75,9 @@ class FasecoldaService:
         brand: str,
         reference: str,
         full_reference: str = None
-    ) -> Optional[str]:
+    ) -> Optional[dict]:
         """
-        Obtiene el código CF de Fasecolda para un vehículo específico.
+        Obtiene los códigos CF y CH de Fasecolda para un vehículo específico.
         
         Args:
             category: Categoría del vehículo ("Liviano pasajeros", "Motos")
@@ -88,7 +88,8 @@ class FasecoldaService:
             full_reference: Referencia completa para matching exacto (ej: "CHEVROLET TRACKER [2] LS TP 1200CC T")
             
         Returns:
-            Código CF si se encuentra, None en caso contrario
+            Diccionario con códigos CF y CH si se encuentra, None en caso contrario
+            Formato: {'cf_code': 'xxxxx', 'ch_code': 'yyyyyyy'}
         """
         try:
             await self._navigate_to_fasecolda()
@@ -99,10 +100,10 @@ class FasecoldaService:
             if not await self._search_vehicle():
                 return None
                 
-            return await self._extract_cf_code(full_reference)
+            return await self._extract_codes(full_reference)
             
         except Exception as e:
-            self.logger.error(f"❌ Error obteniendo código CF: {e}")
+            self.logger.error(f"❌ Error obteniendo códigos CF/CH: {e}")
             return None
     
     async def _navigate_to_fasecolda(self):
@@ -257,9 +258,9 @@ class FasecoldaService:
             self.logger.error(f"❌ Error en búsqueda: {e}")
             return False
     
-    async def _extract_cf_code(self, full_reference: str = None) -> Optional[str]:
-        """Extrae el código CF basado en la referencia completa usando scoring de similitud."""
-        self.logger.info("📊 Extrayendo código CF...")
+    async def _extract_codes(self, full_reference: str = None) -> Optional[dict]:
+        """Extrae los códigos CF y CH basado en la referencia completa usando scoring de similitud."""
+        self.logger.info("📊 Extrayendo códigos CF y CH...")
         
         try:
             # Esperar a que aparezcan los resultados
@@ -275,16 +276,17 @@ class FasecoldaService:
                 return None
             
             if len(result_containers) == 1:
-                # Solo un resultado, extraer el CF directamente
-                cf_code = await self._extract_cf_from_container(result_containers[0])
-                self.logger.info(f"✅ Un solo resultado encontrado - CF: {cf_code}")
-                return cf_code
+                # Solo un resultado, extraer ambos códigos directamente
+                codes = await self._extract_codes_from_container(result_containers[0])
+                ch_info = f" - CH: {codes['ch_code']}" if codes['ch_code'] else ""
+                self.logger.info(f"✅ Un solo resultado encontrado - CF: {codes['cf_code']}{ch_info}")
+                return codes
             
             # Múltiples resultados, procesar y encontrar la mejor coincidencia
-            return await self._process_multiple_results(result_containers, full_reference)
+            return await self._process_multiple_codes_results(result_containers, full_reference)
                 
         except Exception as e:
-            self.logger.error(f"❌ Error extrayendo código CF: {e}")
+            self.logger.error(f"❌ Error extrayendo códigos CF/CH: {e}")
             return None
     
     async def _extract_cf_from_container(self, container) -> str:
@@ -293,11 +295,40 @@ class FasecoldaService:
         cf_text = await cf_element.inner_text()
         return cf_text.replace('CF: ', '').strip()
     
+    async def _extract_ch_from_container(self, container) -> str:
+        """Extrae el código CH de un contenedor de resultado."""
+        try:
+            # Buscar div con clase car-code que contenga CH:
+            ch_element = await container.query_selector('div.car-code[data-original-title="Código Homólogo"]')
+            if ch_element:
+                ch_text = await ch_element.inner_text()
+                return ch_text.replace('CH: ', '').strip()
+            return None
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error extrayendo código CH: {e}")
+            return None
+    
+    async def _extract_codes_from_container(self, container) -> dict:
+        """Extrae tanto CF como CH de un contenedor de resultado."""
+        try:
+            cf_code = await self._extract_cf_from_container(container)
+            ch_code = await self._extract_ch_from_container(container)
+            
+            return {
+                'cf_code': cf_code,
+                'ch_code': ch_code
+            }
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error extrayendo códigos: {e}")
+            return {'cf_code': None, 'ch_code': None}
+    
     async def _extract_result_data(self, container, index: int, full_reference: str = None) -> dict:
         """Extrae toda la información de un contenedor de resultado."""
         try:
-            # Extraer el código CF
-            cf_code = await self._extract_cf_from_container(container)
+            # Extraer ambos códigos CF y CH
+            codes = await self._extract_codes_from_container(container)
+            cf_code = codes['cf_code']
+            ch_code = codes['ch_code']
             
             # Extraer las referencias del resultado
             brand_element = await container.query_selector(SELECTORS['car_brand'])
@@ -319,6 +350,7 @@ class FasecoldaService:
             return {
                 'index': index + 1,
                 'cf_code': cf_code,
+                'ch_code': ch_code,
                 'full_reference': result_full_ref,
                 'score': score
             }
@@ -338,7 +370,8 @@ class FasecoldaService:
             result_data = await self._extract_result_data(container, i, full_reference)
             
             if result_data:
-                self.logger.info(f"📝 Resultado {result_data['index']}: CF: {result_data['cf_code']} - {result_data['full_reference']} (Score: {result_data['score']:.2f})")
+                ch_info = f" - CH: {result_data['ch_code']}" if result_data['ch_code'] else ""
+                self.logger.info(f"📝 Resultado {result_data['index']}: CF: {result_data['cf_code']}{ch_info} - {result_data['full_reference']} (Score: {result_data['score']:.2f})")
                 
                 # Verificar si es la mejor coincidencia hasta ahora
                 if result_data['score'] > best_score:
@@ -347,6 +380,28 @@ class FasecoldaService:
         
         # Determinar el resultado a retornar
         return await self._select_best_result(best_match, best_score, result_containers[0])
+    
+    async def _process_multiple_codes_results(self, result_containers, full_reference: str = None) -> Optional[dict]:
+        """Procesa múltiples resultados y encuentra la mejor coincidencia retornando códigos CF y CH."""
+        self.logger.info(f"🔍 Múltiples resultados, analizando similitudes...")
+        
+        best_match = None
+        best_score = -1
+        
+        for i, container in enumerate(result_containers):
+            result_data = await self._extract_result_data(container, i, full_reference)
+            
+            if result_data:
+                ch_info = f" - CH: {result_data['ch_code']}" if result_data['ch_code'] else ""
+                self.logger.info(f"📝 Resultado {result_data['index']}: CF: {result_data['cf_code']}{ch_info} - {result_data['full_reference']} (Score: {result_data['score']:.2f})")
+                
+                # Verificar si es la mejor coincidencia hasta ahora
+                if result_data['score'] > best_score:
+                    best_score = result_data['score']
+                    best_match = result_data
+        
+        # Determinar el resultado a retornar
+        return await self._select_best_codes_result(best_match, best_score, result_containers[0])
     
     async def _select_best_result(self, best_match: dict, best_score: float, first_container) -> str:
         """Selecciona el mejor resultado basado en el score o usa fallback."""
@@ -362,6 +417,24 @@ class FasecoldaService:
             cf_code = await self._extract_cf_from_container(first_container)
             self.logger.warning(f"⚠️ Retornando primer CF como fallback: {cf_code}")
             return cf_code
+    
+    async def _select_best_codes_result(self, best_match: dict, best_score: float, first_container) -> dict:
+        """Selecciona el mejor resultado basado en el score o usa fallback para códigos CF y CH."""
+        if best_match and best_score > SCORE_THRESHOLD:
+            ch_info = f" - CH: {best_match['ch_code']}" if best_match['ch_code'] else ""
+            self.logger.info(f"✅ Mejor coincidencia encontrada - CF: {best_match['cf_code']}{ch_info} (Score: {best_score:.2f})")
+            return {'cf_code': best_match['cf_code'], 'ch_code': best_match['ch_code']}
+        elif best_match:
+            ch_info = f" - CH: {best_match['ch_code']}" if best_match['ch_code'] else ""
+            self.logger.warning(f"⚠️ Score bajo ({best_score:.2f}), retornando mejor opción - CF: {best_match['cf_code']}{ch_info}")
+            return {'cf_code': best_match['cf_code'], 'ch_code': best_match['ch_code']}
+        else:
+            # Fallback al primer resultado si no hay matches
+            self.logger.warning("⚠️ No se encontraron coincidencias, retornando primer resultado")
+            codes = await self._extract_codes_from_container(first_container)
+            ch_info = f" - CH: {codes['ch_code']}" if codes['ch_code'] else ""
+            self.logger.warning(f"⚠️ Retornando primer resultado como fallback - CF: {codes['cf_code']}{ch_info}")
+            return codes
     
     def _calculate_similarity_score(self, reference: str, candidate: str) -> float:
         """

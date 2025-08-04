@@ -31,6 +31,10 @@ class PolicyPage(BasePage):
     # Selector para el código Fasecolda - se busca dinámicamente por etiqueta
     FASECOLDA_CODE_INPUT = "input[aria-labelledby*='paper-input-label']:not([placeholder*='DD/MM/YYYY'])"  # Fallback genérico
     
+    # Selectores para mensaje de error y botón Aceptar
+    ERROR_MESSAGE_SELECTOR = "#divMessage:has-text('No existe el fasecolda')"
+    ACCEPT_BUTTON_SELECTOR = "#btnOne:has-text('Aceptar')"
+    
     # Selectores para dropdown de categoría de vehículo y año del modelo
     VEHICLE_CATEGORY_DROPDOWN_ID = "#clase"  # ID del dropdown de categoría/clase de vehículo
     VEHICLE_CATEGORY_OPTION = "paper-item:has-text('AUTOMÓVILES')"  # Opción para seleccionar AUTOMÓVILES
@@ -264,9 +268,9 @@ class PolicyPage(BasePage):
             self.logger.error(f"❌ Error llenando fecha de vigencia: {e}")
             return False
 
-    async def get_fasecolda_code(self) -> Optional[str]:
-        """Obtiene el código Fasecolda usando FasecoldaService en una nueva pestaña."""
-        self.logger.info("🔍 Obteniendo código Fasecolda...")
+    async def get_fasecolda_code(self) -> Optional[dict]:
+        """Obtiene los códigos Fasecolda usando FasecoldaService en una nueva pestaña."""
+        self.logger.info("🔍 Obteniendo códigos Fasecolda...")
         
         try:
             # Verificar si debe buscar automáticamente
@@ -287,8 +291,8 @@ class PolicyPage(BasePage):
                 # Inicializar el servicio de Fasecolda
                 fasecolda_service = FasecoldaService(new_page, self.logger)
                 
-                # Obtener el código CF
-                cf_code = await fasecolda_service.get_cf_code(
+                # Obtener los códigos CF y CH
+                codes = await fasecolda_service.get_cf_code(
                     category=self.config.VEHICLE_CATEGORY,
                     state=self.config.VEHICLE_STATE,
                     model_year=self.config.VEHICLE_MODEL_YEAR,
@@ -297,11 +301,12 @@ class PolicyPage(BasePage):
                     full_reference=self.config.VEHICLE_FULL_REFERENCE
                 )
                 
-                if cf_code:
-                    self.logger.info(f"✅ Código Fasecolda obtenido: {cf_code}")
-                    return cf_code
+                if codes and codes.get('cf_code'):
+                    ch_info = f" - CH: {codes.get('ch_code')}" if codes.get('ch_code') else ""
+                    self.logger.info(f"✅ Códigos Fasecolda obtenidos - CF: {codes['cf_code']}{ch_info}")
+                    return codes
                 else:
-                    self.logger.warning("⚠️ No se pudo obtener código Fasecolda")
+                    self.logger.warning("⚠️ No se pudieron obtener códigos Fasecolda")
                     return None
                     
             finally:
@@ -310,7 +315,7 @@ class PolicyPage(BasePage):
                 self.logger.info("🗂️ Pestaña de Fasecolda cerrada")
                 
         except Exception as e:
-            self.logger.error(f"❌ Error obteniendo código Fasecolda: {e}")
+            self.logger.error(f"❌ Error obteniendo códigos Fasecolda: {e}")
             return None
 
     async def fill_fasecolda_code(self, cf_code: str) -> bool:
@@ -343,6 +348,96 @@ class PolicyPage(BasePage):
         except Exception as e:
             self.logger.error(f"❌ Error llenando código Fasecolda: {e}")
             return False
+
+    async def check_and_handle_fasecolda_error(self) -> bool:
+        """Verifica si apareció el mensaje de error 'No existe el fasecolda' y lo maneja."""
+        self.logger.info("🔍 Verificando si hay error de Fasecolda...")
+        
+        try:
+            # Verificar si apareció el mensaje de error con timeout corto
+            error_visible = await self.is_visible_safe(self.ERROR_MESSAGE_SELECTOR, timeout=3000)
+            
+            if error_visible:
+                self.logger.warning("⚠️ Detectado mensaje 'No existe el fasecolda'")
+                
+                # Hacer clic en el botón Aceptar
+                if await self.safe_click(self.ACCEPT_BUTTON_SELECTOR, timeout=5000):
+                    self.logger.info("✅ Botón 'Aceptar' presionado exitosamente")
+                    
+                    # Esperar un poco para que el modal se cierre
+                    await self.page.wait_for_timeout(2000)
+                    return True
+                else:
+                    self.logger.error("❌ No se pudo hacer clic en el botón 'Aceptar'")
+                    return False
+            else:
+                self.logger.info("✅ No se detectó error de Fasecolda")
+                return False
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error verificando mensaje de error Fasecolda: {e}")
+            return False
+
+    async def fill_fasecolda_with_retry(self, codes: dict) -> bool:
+        """Llena el código Fasecolda con reintentos usando CH primero y CF como fallback."""
+        self.logger.info("🔄 Iniciando proceso de llenado de Fasecolda con reintentos...")
+        
+        # Lista de códigos a intentar: primero CH, luego CF
+        codes_to_try = []
+        
+        if codes.get('ch_code'):
+            codes_to_try.append(('CH', codes['ch_code']))
+        
+        if codes.get('cf_code'):
+            codes_to_try.append(('CF', codes['cf_code']))
+        
+        if not codes_to_try:
+            self.logger.error("❌ No hay códigos disponibles para intentar")
+            return False
+        
+        for attempt, (code_type, code_value) in enumerate(codes_to_try, 1):
+            self.logger.info(f"🎯 Intento {attempt}: Probando código {code_type}: {code_value}")
+            
+            # Llenar el código Fasecolda
+            if not await self.fill_fasecolda_code(code_value):
+                self.logger.warning(f"⚠️ No se pudo llenar el código {code_type}")
+                continue
+            
+            # Seleccionar categoría de vehículo después de llenar Fasecolda
+            if not await self.select_vehicle_category():
+                self.logger.warning("⚠️ No se pudo seleccionar categoría AUTOMÓVILES")
+                continue
+            
+            # Seleccionar año del modelo después de seleccionar categoría
+            if not await self.select_model_year():
+                self.logger.warning("⚠️ No se pudo seleccionar año del modelo")
+                continue
+            
+            # Verificar si apareció error de Fasecolda
+            error_occurred = await self.check_and_handle_fasecolda_error()
+            
+            if not error_occurred:
+                self.logger.info(f"✅ Código {code_type} aceptado exitosamente")
+                return True
+            else:
+                self.logger.warning(f"⚠️ Código {code_type} rechazado, continuando con siguiente...")
+                # Limpiar el campo antes del siguiente intento si es necesario
+                await self._clear_fasecolda_field()
+        
+        self.logger.error("❌ Todos los códigos fueron rechazados")
+        return False
+
+    async def _clear_fasecolda_field(self) -> bool:
+        """Limpia el campo de Fasecolda para el siguiente intento."""
+        try:
+            fasecolda_selector = await self._find_fasecolda_input_selector()
+            if fasecolda_selector:
+                await self.page.fill(fasecolda_selector, "")
+                await self.page.wait_for_timeout(500)
+                return True
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error limpiando campo Fasecolda: {e}")
+        return False
 
     async def _find_fasecolda_input_selector(self) -> str:
         """Encuentra dinámicamente el selector del campo de Fasecolda por su etiqueta."""
@@ -460,23 +555,15 @@ class PolicyPage(BasePage):
                 self.logger.error("❌ No se pudo llenar la fecha de vigencia")
                 return False
             
-            # 4. Obtener y llenar código Fasecolda (solo para vehículos nuevos)
-            cf_code = await self.get_fasecolda_code()
-            if cf_code:
-                if not await self.fill_fasecolda_code(cf_code):
-                    self.logger.warning("⚠️ No se pudo llenar el código Fasecolda, pero continuando...")
-                else:
-                    # 5. Seleccionar categoría de vehículo (AUTOMÓVILES) después de llenar Fasecolda
-                    if not await self.select_vehicle_category():
-                        self.logger.warning("⚠️ No se pudo seleccionar categoría AUTOMÓVILES, pero continuando...")
-                    
-                    # 6. Seleccionar año del modelo después de seleccionar categoría
-                    if not await self.select_model_year():
-                        self.logger.warning("⚠️ No se pudo seleccionar año del modelo, pero continuando...")
+            # 4. Obtener y llenar códigos Fasecolda (solo para vehículos nuevos)
+            codes = await self.get_fasecolda_code()
+            if codes:
+                if not await self.fill_fasecolda_with_retry(codes):
+                    self.logger.warning("⚠️ No se pudieron llenar los códigos Fasecolda, pero continuando...")
             else:
-                self.logger.info("⏭️ No se obtuvo código Fasecolda (vehículo usado o búsqueda deshabilitada)")
+                self.logger.info("⏭️ No se obtuvieron códigos Fasecolda (vehículo usado o búsqueda deshabilitada)")
             
-            self.logger.info("🎉 Selección de plan, fecha de vigencia, código Fasecolda, categoría y año completada exitosamente")
+            self.logger.info("🎉 Selección de plan, fecha de vigencia y código Fasecolda completada exitosamente")
             return True
             
         except Exception as e:
