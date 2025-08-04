@@ -8,7 +8,7 @@ class FlotasPage(BasePage):
     """Página de Flotas con funciones específicas para el flujo de cotización de Allianz."""
 
     # Selectores centralizados
-    SELECTOR_CELL               = "#tableFlotas_7_1"
+    SELECTOR_CELL_BASE          = "td.table-cell"  # Busca cualquier celda de tabla
     SELECTOR_ACEPTAR            = "#siguiente"
     SELECTOR_LIVIANOS           = "text=Livianos Particulares"
     SELECTOR_RADIO_NO           = "#IntervinientesBean\\$esAsegurado2"
@@ -25,7 +25,7 @@ class FlotasPage(BasePage):
         """Hace clic en la celda con el número de póliza configurado."""
         self.logger.info(f"🔲 Haciendo clic en celda {self.config.POLICY_NUMBER}...")
         return await self.click_in_frame(
-            f"{self.SELECTOR_CELL}:has-text('{self.config.POLICY_NUMBER}')",
+            f"{self.SELECTOR_CELL_BASE}:has-text('{self.config.POLICY_NUMBER}')",
             f"celda {self.config.POLICY_NUMBER}"
         )
 

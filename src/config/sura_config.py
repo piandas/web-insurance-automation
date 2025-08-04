@@ -60,7 +60,9 @@ class SuraConfig(BaseConfig):
     CLIENT_PHONE: str = ''  # Opcional
     CLIENT_EMAIL: str = ''  # Opcional
     CLIENT_EMAIL_TYPE: str = ''  # TR = Trabajo, RS = Residencia
-    CLIENT_OCCUPATION: str = 'ABOGADO'  # Ocupación del cliente    # ==========================================
+    CLIENT_OCCUPATION: str = 'ABOGADO'  # Ocupación del cliente    
+    
+    # ==========================================
     # DATOS DE DIRECCIÓN PARA COTIZACIÓN
     # ==========================================
     CLIENT_ADDRESS: str = 'CRA 58 42-125'  # Dirección del cliente

@@ -69,14 +69,34 @@ class LoginPage(BasePage):
     # ────────────────────────────────────────────────
 
     async def navigate_to_login(self) -> bool:
-        """Navega a la página de login de Sura."""
+        """Navega a la página de login de Sura o detecta si ya está logueado."""
         self.logger.info("🌐 Navegando a página de login Sura...")
         try:
             await self.page.goto(self.config.LOGIN_URL)
+            
+            # Esperar un poco para que la página cargue completamente
+            await self.page.wait_for_timeout(2000)
+            current_url = self.page.url
+            
+            # Verificar si ya está logueado (perfil persistente)
+            if "asesores.segurossura.com.co" in current_url:
+                self.logger.info("✅ ¡Ya estás logueado! (sesión activa desde perfil persistente)")
+                self.logger.info(f"📍 URL actual: {current_url}")
+                return True
+            
+            # Si no está logueado, esperar a que aparezcan los elementos de login
             await self.page.wait_for_selector(self.TIPO_DOCUMENTO_SELECT, timeout=10000)
             self.logger.info("✅ Página de login Sura cargada correctamente")
             return True
+            
         except Exception as e:
+            # Verificar una vez más si ya está logueado por si hay un redirect lento
+            current_url = self.page.url
+            if "asesores.segurossura.com.co" in current_url:
+                self.logger.info("✅ ¡Ya estás logueado! (detectado después de error inicial)")
+                self.logger.info(f"📍 URL actual: {current_url}")
+                return True
+            
             self.logger.exception(f"❌ Error navegando a login Sura: {e}")
             return False
 
@@ -291,29 +311,94 @@ class LoginPage(BasePage):
             return False
 
     async def verify_login_success(self) -> bool:
-        """Verifica si el login fue exitoso."""
+        """Verifica si el login fue exitoso, manejando MFA si es necesario."""
         self.logger.info("🔍 Verificando login exitoso...")
         try:
             await self.page.wait_for_timeout(1000)
             current_url = self.page.url
             self.logger.info(f"📍 URL actual después del login: {current_url}")
+            
+            # Verificar si es login exitoso directo
             if "asesores.segurossura.com.co" in current_url:
                 self.logger.info("✅ Login verificado exitosamente")
                 return True
+            
+            # Verificar si requiere MFA (autenticación de dos factores)
+            if "mfa/process" in current_url:
+                self.logger.info("🔐 Detectado MFA (autenticación de dos factores)")
+                return await self._handle_mfa()
             
             # Si no redirigió, esperar 3 segundos más y volver a verificar
             self.logger.info("⏳ Aún cargando, esperando 3 segundos más...")
             await self.page.wait_for_timeout(3000)
             current_url = self.page.url
             self.logger.info(f"📍 URL después de espera adicional: {current_url}")
+            
             if "asesores.segurossura.com.co" in current_url:
                 self.logger.info("✅ Login verificado exitosamente tras espera adicional")
                 return True
+            elif "mfa/process" in current_url:
+                self.logger.info("🔐 Detectado MFA tras espera adicional")
+                return await self._handle_mfa()
                 
             self.logger.error("❌ Login no exitoso - no se redirigió correctamente")
             return False
         except Exception as e:
             self.logger.exception(f"❌ Error verificando login: {e}")
+            return False
+
+    async def _handle_mfa(self) -> bool:
+        """Maneja el proceso de autenticación de dos factores con intervención manual."""
+        self.logger.info("📱 Iniciando proceso de MFA...")
+        self.logger.info("⏸️ PAUSA PARA INTERVENCIÓN MANUAL")
+        self.logger.info("=" * 70)
+        self.logger.info("🔔 ACCIÓN REQUERIDA:")
+        self.logger.info("   1. Ingresa manualmente el código MFA en el navegador")
+        self.logger.info("   2. ¡IMPORTANTE! Marca 'Recordar este dispositivo por 8 días'")
+        self.logger.info("   3. Haz clic en 'Continuar' o 'Siguiente'")
+        self.logger.info("   4. La automatización continuará automáticamente")
+        self.logger.info("")
+        self.logger.info("💡 Esto evitará que se pida MFA en próximas ejecuciones")
+        self.logger.info("=" * 70)
+        
+        try:
+            # Esperar hasta que la URL cambie o hasta 5 minutos máximo
+            max_wait_time = 300000  # 5 minutos
+            check_interval = 2000   # Revisar cada 2 segundos
+            elapsed_time = 0
+            
+            while elapsed_time < max_wait_time:
+                await self.page.wait_for_timeout(check_interval)
+                elapsed_time += check_interval
+                current_url = self.page.url
+                
+                # Si ya no está en la página de MFA, verificar si llegó al dashboard
+                if "mfa/process" not in current_url:
+                    self.logger.info(f"📍 URL cambió a: {current_url}")
+                    if "asesores.segurossura.com.co" in current_url:
+                        self.logger.info("✅ MFA completado exitosamente")
+                        self.logger.info("🎉 Si marcaste 'recordar dispositivo', no volverá a pedirse por 8 días")
+                        return True
+                    else:
+                        self.logger.warning(f"⚠️ URL inesperada después de MFA: {current_url}")
+                        # Dar una oportunidad más
+                        await self.page.wait_for_timeout(3000)
+                        final_url = self.page.url
+                        if "asesores.segurossura.com.co" in final_url:
+                            self.logger.info("✅ MFA completado exitosamente tras verificación adicional")
+                            self.logger.info("🎉 Si marcaste 'recordar dispositivo', no volverá a pedirse por 8 días")
+                            return True
+                
+                # Mostrar progreso cada 30 segundos
+                if elapsed_time % 30000 == 0:
+                    minutes_elapsed = elapsed_time // 60000
+                    self.logger.info(f"⏳ Esperando intervención manual... ({minutes_elapsed} min transcurridos)")
+            
+            self.logger.error("❌ Tiempo de espera agotado para MFA (5 minutos)")
+            return False
+            
+        except Exception as e:
+            self.logger.exception(f"❌ Error durante el proceso de MFA: {e}")
             return False
 
     async def login(self, usuario: str, contrasena: str) -> bool:
@@ -322,6 +407,14 @@ class LoginPage(BasePage):
         try:
             if not await self.navigate_to_login():
                 return False
+            
+            # Verificar si ya está logueado después de navegar
+            current_url = self.page.url
+            if "asesores.segurossura.com.co" in current_url:
+                self.logger.info("🎉 Ya estás logueado - omitiendo pasos de login")
+                return True
+            
+            # Si no está logueado, proceder con el login normal
             if not await self.select_tipo_documento():
                 return False
             if not await self.fill_credentials(usuario, contrasena):

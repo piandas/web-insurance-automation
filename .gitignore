@@ -30,6 +30,8 @@ prompt.txt
 # Carpetas de descargas - ignorar archivos pero mantener carpetas
 downloads/
 
+# Perfiles de navegador persistentes (contienen cookies y datos sensibles)
+browser_profiles/
 
 # Carpetas de logs - ignorar archivos pero mantener carpetas  
 LOGS/

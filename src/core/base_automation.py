@@ -41,13 +41,46 @@ class BaseAutomation(ABC):
         downloads_dir = os.path.join(base_dir, 'downloads', self.company)
         os.makedirs(downloads_dir, exist_ok=True)
         return downloads_dir
+    
+    def _get_user_data_dir(self) -> str:
+        """Obtiene el directorio de datos de usuario específico para la compañía."""
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        user_data_dir = os.path.join(base_dir, 'browser_profiles', self.company)
+        os.makedirs(user_data_dir, exist_ok=True)
+        return user_data_dir
     async def launch(self) -> bool:
         """Inicializa Playwright y abre el navegador."""
         try:
             self.logger.info(f"🚀 Lanzando navegador para {self.company.upper()}...")
             self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(headless=self.headless)
-            self.page = await self.browser.new_page()
+            
+            # Para Sura, usar perfil persistente para mantener las cookies/sesiones MFA
+            if self.company == 'sura':
+                self.logger.info("📁 Usando perfil persistente para SURA...")
+                user_data_dir = self._get_user_data_dir()
+                self.logger.info(f"📂 Directorio de perfil: {user_data_dir}")
+                
+                # Crear contexto persistente en lugar de navegador temporal
+                self.browser = await self.playwright.chromium.launch_persistent_context(
+                    user_data_dir=user_data_dir,
+                    headless=self.headless,
+                    # Configuraciones adicionales para mejor compatibilidad
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--disable-dev-shm-usage',
+                        '--no-sandbox'
+                    ]
+                )
+                # En contexto persistente, la página ya está disponible
+                if len(self.browser.pages) > 0:
+                    self.page = self.browser.pages[0]
+                else:
+                    self.page = await self.browser.new_page()
+            else:
+                # Para otras compañías (como Allianz), usar navegador temporal normal
+                self.browser = await self.playwright.chromium.launch(headless=self.headless)
+                self.page = await self.browser.new_page()
+            
             self.logger.info("✅ Navegador lanzado exitosamente")
             return True
         except Exception as e:
@@ -59,7 +92,13 @@ class BaseAutomation(ABC):
         try:
             self.logger.info(f"🔒 Cerrando navegador {self.company.upper()}...")
             if self.browser:
-                await self.browser.close()
+                if self.company == 'sura':
+                    # Para Sura (contexto persistente), cerrar contexto
+                    await self.browser.close()
+                    self.logger.info("📁 Perfil persistente de SURA guardado")
+                else:
+                    # Para otras compañías, cerrar navegador normal
+                    await self.browser.close()
             if self.playwright:
                 await self.playwright.stop()
             self.logger.info("✅ Recursos liberados")
