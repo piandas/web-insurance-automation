@@ -5,6 +5,61 @@ import logging
 from typing import Optional
 from playwright.async_api import Page
 
+# Constantes para configuración
+FASECOLDA_URL = 'https://www.fasecolda.com/guia-de-valores-old/'
+SELECTORS = {
+    'category': '#fe-categoria',
+    'state': '#fe-estado', 
+    'model': '#fe-modelo',
+    'brand': '#fe-marca',
+    'reference': '#fe-refe1',
+    'search_button': 'button.btn.btn-red.fe-submit',
+    'result_container': '.car-result-container',
+    'cf_code': '.car-code',
+    'car_brand': '.car-brand',
+    'car_reference_2': '.car-reference-2',
+    'car_reference_3': '.car-reference-3'
+}
+
+TIMEOUTS = {
+    'page_load': 10000,
+    'field_enable': 5000,
+    'cf_search': 10000
+}
+
+SCORE_THRESHOLD = 0.3
+SLEEP_DURATION = 1  # seconds
+
+# Marcas disponibles en Fasecolda (extraídas del select)
+SUPPORTED_BRANDS = [
+    'AUDI', 'BAIC', 'BMW', 'BRENSON', 'BYD', 'CHANGAN', 'CHERY', 'CHEVROLET',
+    'CITROEN', 'CUPRA', 'DFSK', 'DFM', 'DFZL', 'DS', 'FAW AMI', 'FIAT', 'FORD',
+    'FOTON', 'GAC', 'GREAT WALL', 'HONDA', 'HYUNDAI', 'JAC', 'JAGUAR', 'JEEP',
+    'JETOUR', 'JMC', 'KIA', 'KYC', 'LAND ROVER', 'MAXUS', 'MAZDA', 'MERCEDES BENZ',
+    'MG', 'MINI', 'MITSUBISHI', 'NISSAN', 'OPEL', 'PEUGEOT', 'PORSCHE', 'RAYSINCE',
+    'RENAULT', 'SEAT', 'SHINERAY', 'SMART', 'SSANGYONG', 'SUBARU', 'SUZUKI',
+    'TOYOTA', 'VOLKSWAGEN', 'VOLVO', 'ZEEKR'
+]
+
+# Patrones de motor y especificaciones técnicas
+ENGINE_PATTERNS = [
+    # Cilindrada
+    '1000CC', '1200CC', '1300CC', '1400CC', '1500CC', '1600CC', '1800CC', '2000CC',
+    '2200CC', '2400CC', '2500CC', '2700CC', '3000CC', '3200CC', '3500CC', '4000CC',
+    '5000CC', '6000CC',
+    # Transmisión
+    'TP', 'MT', 'AT', 'CVT', 'AMT', 'DSG',
+    # Tipo de motor
+    'TURBO', 'T', 'HYBRID', 'ELECTRIC', 'DIESEL', 'GAS', 'GNV', 'FLEX',
+    # Configuración
+    '4X2', '4X4', 'AWD', 'FWD', 'RWD',
+    # Versiones comunes
+    'LS', 'LT', 'LTZ', 'RS', 'SPORT', 'PREMIUM', 'LUXURY', 'BASE',
+    'GL', 'GLS', 'GLX', 'SE', 'SL', 'SR', 'SV', 'SX',
+    # Otros patrones técnicos
+    'DOHC', 'SOHC', 'V6', 'V8', 'L4', 'H4'
+]
+
 class FasecoldaService:
     """Servicio para consultar códigos CF en Fasecolda."""
     
@@ -53,7 +108,7 @@ class FasecoldaService:
     async def _navigate_to_fasecolda(self):
         """Navega a la página de Fasecolda."""
         self.logger.info("🌐 Navegando a Fasecolda...")
-        await self.page.goto('https://www.fasecolda.com/guia-de-valores-old/')
+        await self.page.goto(FASECOLDA_URL)
         await self.page.wait_for_load_state('networkidle')
         self.logger.info("✅ Página de Fasecolda cargada")
         
@@ -69,43 +124,32 @@ class FasecoldaService:
         self.logger.info("📝 Llenando formulario de vehículo...")
         
         try:
-            # Categoría - usar el select original directamente
-            self.logger.info(f"📋 Seleccionando categoría: {category}")
-            category_value = await self._get_category_value(category)
-            await self._select_by_value('#fe-categoria', category_value)
-            await asyncio.sleep(1)
+            # Configuración de campos: (nombre, emoji, selector, valor, wait_enabled)
+            fields = [
+                ("categoría", "📋", SELECTORS['category'], category, False),
+                ("estado", "🏷️", SELECTORS['state'], state, True),
+                ("modelo", "📅", SELECTORS['model'], model_year, True),
+                ("marca", "🚗", SELECTORS['brand'], brand, True),
+                ("referencia", "🔍", SELECTORS['reference'], reference, True),
+            ]
             
-            # Estado - esperar a que se habilite y seleccionar
-            self.logger.info(f"🏷️ Seleccionando estado: {state}")
-            await self._wait_for_field_enabled('#fe-estado')
-            state_value = await self._get_state_value(state)
-            await self._select_by_value('#fe-estado', state_value)
-            await asyncio.sleep(1)
-            
-            # Modelo (año)
-            self.logger.info(f"📅 Seleccionando modelo: {model_year}")
-            await self._wait_for_field_enabled('#fe-modelo')
-            model_value = await self._get_model_value(model_year)
-            await self._select_by_value('#fe-modelo', model_value)
-            await asyncio.sleep(1)
-            
-            # Marca
-            self.logger.info(f"🚗 Seleccionando marca: {brand}")
-            await self._wait_for_field_enabled('#fe-marca')
-            brand_value = await self._get_brand_value(brand)
-            await self._select_by_value('#fe-marca', brand_value)
-            await asyncio.sleep(1)
-            
-            # Referencia - buscar y seleccionar por texto que coincida
-            self.logger.info(f"🔍 Seleccionando referencia: {reference}")
-            await self._wait_for_field_enabled('#fe-refe1')
-            reference_value = await self._get_reference_value(reference)
-            if reference_value:
-                await self._select_by_value('#fe-refe1', reference_value)
-                await asyncio.sleep(1)
-            else:
-                self.logger.error(f"❌ No se encontró la referencia: {reference}")
-                return False
+            for field_name, emoji, selector, value, wait_enabled in fields:
+                self.logger.info(f"{emoji} Seleccionando {field_name}: {value}")
+                
+                # Esperar a que el campo se habilite si es necesario
+                if wait_enabled:
+                    await self._wait_for_field_enabled(selector)
+                
+                # Obtener el valor para el select
+                field_value = await self._get_select_value(selector, value, field_name)
+                
+                if field_value is None:
+                    self.logger.error(f"❌ No se encontró {field_name}: {value}")
+                    return False
+                
+                # Seleccionar el valor
+                await self._select_by_value(selector, field_value)
+                await asyncio.sleep(SLEEP_DURATION)
             
             self.logger.info("✅ Formulario llenado correctamente")
             return True
@@ -116,61 +160,64 @@ class FasecoldaService:
             traceback.print_exc()
             return False
     
-    async def _get_category_value(self, category: str) -> str:
-        """Obtiene el valor del select para la categoría especificada."""
-        category_map = {
-            "Liviano carga": "2",
-            "Liviano pasajeros": "1", 
-            "Motos": "3",
-            "Pesado carga": "4",
-            "Pesado pasajeros": "5",
-            "Pesado semirremolque": "6"
+    async def _get_select_value(self, selector: str, search_value: str, field_type: str) -> Optional[str]:
+        """
+        Método unificado para obtener el valor de cualquier select.
+        
+        Args:
+            selector: Selector CSS del select
+            search_value: Valor a buscar en las opciones
+            field_type: Tipo de campo para aplicar lógica específica
+            
+        Returns:
+            Valor del option encontrado o None si no se encuentra
+        """
+        # Mapeos estáticos para campos conocidos
+        static_mappings = {
+            "categoría": {
+                "Liviano carga": "2",
+                "Liviano pasajeros": "1", 
+                "Motos": "3",
+                "Pesado carga": "4",
+                "Pesado pasajeros": "5",
+                "Pesado semirremolque": "6"
+            },
+            "estado": {
+                "Nuevo": "1",
+                "Usado": "0"
+            }
         }
-        return category_map.get(category, "false")
+        
+        # Verificar si existe un mapeo estático para este campo
+        if field_type in static_mappings:
+            return static_mappings[field_type].get(search_value, "false")
+        
+        # Para campos dinámicos, buscar en las opciones del DOM
+        try:
+            options = await self.page.query_selector_all(f'{selector} option')
+            for option in options:
+                text = await option.inner_text()
+                text_clean = text.strip()
+                
+                # Lógica de matching según el tipo de campo
+                if field_type == "marca":
+                    # Para marcas, hacer comparación case-insensitive
+                    if text_clean.lower() == search_value.lower():
+                        return await option.get_attribute('value')
+                else:
+                    # Para otros campos (modelo, referencia), comparación exacta
+                    if text_clean == search_value:
+                        return await option.get_attribute('value')
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error buscando valor en {field_type}: {e}")
+            return None
     
-    async def _get_state_value(self, state: str) -> str:
-        """Obtiene el valor del select para el estado especificado."""
-        state_map = {
-            "Nuevo": "1",
-            "Usado": "0"
-        }
-        return state_map.get(state, "false")
-    
-    async def _get_model_value(self, model_year: str) -> str:
-        """Obtiene el valor del select para el año del modelo."""
-        # Buscar en las opciones disponibles del select
-        options = await self.page.query_selector_all('#fe-modelo option')
-        for option in options:
-            text = await option.inner_text()
-            if text.strip() == model_year:
-                value = await option.get_attribute('value')
-                return value
-        return "false"
-    
-    async def _get_brand_value(self, brand: str) -> str:
-        """Obtiene el valor del select para la marca especificada."""
-        # Buscar en las opciones disponibles del select
-        options = await self.page.query_selector_all('#fe-marca option')
-        for option in options:
-            text = await option.inner_text()
-            if text.strip().lower() == brand.lower():
-                value = await option.get_attribute('value')
-                return value
-        return "false"
-    
-    async def _get_reference_value(self, reference: str) -> str:
-        """Obtiene el valor del select para la referencia especificada."""
-        # Buscar en las opciones disponibles del select
-        options = await self.page.query_selector_all('#fe-refe1 option')
-        for option in options:
-            text = await option.inner_text()
-            if text.strip() == reference:
-                value = await option.get_attribute('value')
-                return value
-        return None
-    
-    async def _wait_for_field_enabled(self, selector: str, timeout: int = 5000):
+    async def _wait_for_field_enabled(self, selector: str, timeout: int = None):
         """Espera a que un campo se habilite."""
+        timeout = timeout or TIMEOUTS['field_enable']
         await self.page.wait_for_function(
             f"document.querySelector('{selector}').disabled === false",
             timeout=timeout
@@ -202,7 +249,7 @@ class FasecoldaService:
         """Hace clic en el botón de búsqueda."""
         self.logger.info("🔍 Iniciando búsqueda...")
         try:
-            await self.page.click('button.btn.btn-red.fe-submit')
+            await self.page.click(SELECTORS['search_button'])
             await self.page.wait_for_load_state('networkidle')
             self.logger.info("✅ Búsqueda completada")
             return True
@@ -216,94 +263,105 @@ class FasecoldaService:
         
         try:
             # Esperar a que aparezcan los resultados
-            await self.page.wait_for_selector('text=CF:', timeout=10000)
+            await self.page.wait_for_selector('text=CF:', timeout=TIMEOUTS['cf_search'])
             
             # Buscar todos los contenedores de resultados
-            result_containers = await self.page.query_selector_all('.car-result-container')
+            result_containers = await self.page.query_selector_all(SELECTORS['result_container'])
             
             self.logger.info(f"📋 Encontrados {len(result_containers)} resultados")
             
+            if len(result_containers) == 0:
+                self.logger.error("❌ No se encontraron resultados")
+                return None
+            
             if len(result_containers) == 1:
                 # Solo un resultado, extraer el CF directamente
-                cf_element = await result_containers[0].query_selector('.car-code')
-                cf_text = await cf_element.inner_text()
-                cf_code = cf_text.replace('CF: ', '').strip()
+                cf_code = await self._extract_cf_from_container(result_containers[0])
                 self.logger.info(f"✅ Un solo resultado encontrado - CF: {cf_code}")
                 return cf_code
             
-            elif len(result_containers) > 1:
-                # Múltiples resultados, usar scoring para encontrar la mejor coincidencia
-                self.logger.info(f"🔍 Múltiples resultados, analizando similitudes...")
-                
-                best_match = None
-                best_score = -1
-                all_results = []
-                
-                for i, container in enumerate(result_containers):
-                    try:
-                        # Extraer el código CF
-                        cf_element = await container.query_selector('.car-code')
-                        cf_text = await cf_element.inner_text()
-                        cf_code = cf_text.replace('CF: ', '').strip()
-                        
-                        # Extraer las referencias del resultado
-                        brand_element = await container.query_selector('.car-brand')
-                        ref2_element = await container.query_selector('.car-reference-2')
-                        ref3_element = await container.query_selector('.car-reference-3')
-                        
-                        brand = await brand_element.inner_text() if brand_element else ""
-                        ref2 = await ref2_element.inner_text() if ref2_element else ""
-                        ref3 = await ref3_element.inner_text() if ref3_element else ""
-                        
-                        # Construir referencia completa: BRAND + REF2 + REF3
-                        result_full_ref = f"{brand} {ref2} {ref3}".strip()
-                        
-                        # Calcular score de similitud si tenemos referencia de configuración
-                        score = 0
-                        if full_reference:
-                            score = self._calculate_similarity_score(full_reference, result_full_ref)
-                        
-                        result_data = {
-                            'index': i + 1,
-                            'cf_code': cf_code,
-                            'full_reference': result_full_ref,
-                            'score': score
-                        }
-                        all_results.append(result_data)
-                        
-                        self.logger.info(f"📝 Resultado {i+1}: CF: {cf_code} - {result_full_ref} (Score: {score:.2f})")
-                        
-                        # Verificar si es la mejor coincidencia hasta ahora
-                        if score > best_score:
-                            best_score = score
-                            best_match = result_data
-                            
-                    except Exception as e:
-                        self.logger.warning(f"⚠️ Error procesando resultado {i+1}: {e}")
-                
-                # Determinar el resultado a retornar
-                if full_reference and best_match and best_score > 0.3:  # Threshold mínimo del 30%
-                    self.logger.info(f"✅ Mejor coincidencia encontrada - CF: {best_match['cf_code']} (Score: {best_score:.2f})")
-                    return best_match['cf_code']
-                elif best_match:
-                    self.logger.warning(f"⚠️ Score bajo ({best_score:.2f}), retornando mejor opción - CF: {best_match['cf_code']}")
-                    return best_match['cf_code']
-                else:
-                    # Fallback al primer resultado si no hay matches
-                    self.logger.warning("⚠️ No se encontraron coincidencias, retornando primer resultado")
-                    cf_element = await result_containers[0].query_selector('.car-code')
-                    cf_text = await cf_element.inner_text()
-                    cf_code = cf_text.replace('CF: ', '').strip()
-                    self.logger.warning(f"⚠️ Retornando primer CF como fallback: {cf_code}")
-                    return cf_code
-            
-            else:
-                self.logger.error("❌ No se encontraron resultados")
-                return None
+            # Múltiples resultados, procesar y encontrar la mejor coincidencia
+            return await self._process_multiple_results(result_containers, full_reference)
                 
         except Exception as e:
             self.logger.error(f"❌ Error extrayendo código CF: {e}")
             return None
+    
+    async def _extract_cf_from_container(self, container) -> str:
+        """Extrae el código CF de un contenedor de resultado."""
+        cf_element = await container.query_selector(SELECTORS['cf_code'])
+        cf_text = await cf_element.inner_text()
+        return cf_text.replace('CF: ', '').strip()
+    
+    async def _extract_result_data(self, container, index: int, full_reference: str = None) -> dict:
+        """Extrae toda la información de un contenedor de resultado."""
+        try:
+            # Extraer el código CF
+            cf_code = await self._extract_cf_from_container(container)
+            
+            # Extraer las referencias del resultado
+            brand_element = await container.query_selector(SELECTORS['car_brand'])
+            ref2_element = await container.query_selector(SELECTORS['car_reference_2'])
+            ref3_element = await container.query_selector(SELECTORS['car_reference_3'])
+            
+            brand = await brand_element.inner_text() if brand_element else ""
+            ref2 = await ref2_element.inner_text() if ref2_element else ""
+            ref3 = await ref3_element.inner_text() if ref3_element else ""
+            
+            # Construir referencia completa: BRAND + REF2 + REF3
+            result_full_ref = f"{brand} {ref2} {ref3}".strip()
+            
+            # Calcular score de similitud si tenemos referencia de configuración
+            score = 0
+            if full_reference:
+                score = self._calculate_similarity_score(full_reference, result_full_ref)
+            
+            return {
+                'index': index + 1,
+                'cf_code': cf_code,
+                'full_reference': result_full_ref,
+                'score': score
+            }
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error procesando resultado {index + 1}: {e}")
+            return None
+    
+    async def _process_multiple_results(self, result_containers, full_reference: str = None) -> Optional[str]:
+        """Procesa múltiples resultados y encuentra la mejor coincidencia."""
+        self.logger.info(f"🔍 Múltiples resultados, analizando similitudes...")
+        
+        best_match = None
+        best_score = -1
+        
+        for i, container in enumerate(result_containers):
+            result_data = await self._extract_result_data(container, i, full_reference)
+            
+            if result_data:
+                self.logger.info(f"📝 Resultado {result_data['index']}: CF: {result_data['cf_code']} - {result_data['full_reference']} (Score: {result_data['score']:.2f})")
+                
+                # Verificar si es la mejor coincidencia hasta ahora
+                if result_data['score'] > best_score:
+                    best_score = result_data['score']
+                    best_match = result_data
+        
+        # Determinar el resultado a retornar
+        return await self._select_best_result(best_match, best_score, result_containers[0])
+    
+    async def _select_best_result(self, best_match: dict, best_score: float, first_container) -> str:
+        """Selecciona el mejor resultado basado en el score o usa fallback."""
+        if best_match and best_score > SCORE_THRESHOLD:
+            self.logger.info(f"✅ Mejor coincidencia encontrada - CF: {best_match['cf_code']} (Score: {best_score:.2f})")
+            return best_match['cf_code']
+        elif best_match:
+            self.logger.warning(f"⚠️ Score bajo ({best_score:.2f}), retornando mejor opción - CF: {best_match['cf_code']}")
+            return best_match['cf_code']
+        else:
+            # Fallback al primer resultado si no hay matches
+            self.logger.warning("⚠️ No se encontraron coincidencias, retornando primer resultado")
+            cf_code = await self._extract_cf_from_container(first_container)
+            self.logger.warning(f"⚠️ Retornando primer CF como fallback: {cf_code}")
+            return cf_code
     
     def _calculate_similarity_score(self, reference: str, candidate: str) -> float:
         """
@@ -339,32 +397,38 @@ class FasecoldaService:
         token_score = len(common_tokens) / len(total_tokens) if total_tokens else 0.0
         
         # Bonus por patrones específicos importantes
+        bonus = self._calculate_pattern_bonus(ref_normalized, cand_normalized)
+        
+        # Score final (limitado a 1.0)
+        return min(1.0, token_score + bonus)
+    
+    def _calculate_pattern_bonus(self, ref_normalized: str, cand_normalized: str) -> float:
+        """Calcula bonificaciones por patrones específicos en las referencias."""
         bonus = 0.0
         
-        # Bonus si coincide la marca exacta
-        if any(brand in ref_normalized for brand in ['CHEVROLET', 'TOYOTA', 'FORD', 'HONDA']):
-            if any(brand in cand_normalized for brand in ['CHEVROLET', 'TOYOTA', 'FORD', 'HONDA']):
-                for brand in ['CHEVROLET', 'TOYOTA', 'FORD', 'HONDA']:
-                    if brand in ref_normalized and brand in cand_normalized:
-                        bonus += 0.2
-                        break
+        # Bonus si coincide la marca exacta (peso alto)
+        for brand in SUPPORTED_BRANDS:
+            if brand in ref_normalized and brand in cand_normalized:
+                bonus += 0.25
+                break
         
-        # Bonus si coincide el modelo exacto (ej: TRACKER [2])
+        # Bonus si coincide el modelo exacto (ej: TRACKER [2]) - peso muy alto
         import re
         ref_model_match = re.search(r'(\w+)\s*\[[^\]]+\]', ref_normalized)
         cand_model_match = re.search(r'(\w+)\s*\[[^\]]+\]', cand_normalized)
         
         if ref_model_match and cand_model_match:
             if ref_model_match.group() == cand_model_match.group():
-                bonus += 0.3
+                bonus += 0.35
         
-        # Bonus por coincidencias de motores/transmisiones (ej: TP 1200CC T)
-        engine_patterns = ['1200CC', '1500CC', '2000CC', 'TP', 'MT', 'AT']
-        for pattern in engine_patterns:
+        # Bonus por coincidencias de especificaciones técnicas
+        engine_matches = 0
+        for pattern in ENGINE_PATTERNS:
             if pattern in ref_normalized and pattern in cand_normalized:
-                bonus += 0.1
+                engine_matches += 1
         
-        # Score final (limitado a 1.0)
-        final_score = min(1.0, token_score + bonus)
+        # Dar más peso si hay múltiples coincidencias técnicas
+        if engine_matches > 0:
+            bonus += min(0.3, engine_matches * 0.05)  # Máximo 0.3, 0.05 por cada coincidencia
         
-        return final_score
+        return bonus
