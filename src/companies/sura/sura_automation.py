@@ -110,13 +110,17 @@ class SuraAutomation(BaseAutomation):
                 self.logger.error("❌ Error procesando página de consulta de póliza")
                 return False
             
-            # 2. Procesar código Fasecolda
-            self.logger.info("🔍 Procesando código Fasecolda...")
+            # 2. Procesar código Fasecolda y extraer primas
+            self.logger.info("🔍 Procesando código Fasecolda y extrayendo primas...")
             fasecolda_page = FasecoldaPage(self.page)
             
-            if not await fasecolda_page.process_fasecolda_filling():
-                self.logger.warning("⚠️ No se pudo procesar el código Fasecolda, pero continuando...")
-                # No retornamos False porque Fasecolda puede no ser necesario para vehículos usados
+            results = await fasecolda_page.process_fasecolda_filling()
+            
+            if results['success']:
+                self.logger.info(f"✅ Primas extraídas - Global: ${results['prima_global']:,.0f}, Clásico: ${results['prima_clasico']:,.0f}")
+            else:
+                self.logger.warning("⚠️ No se pudo procesar completamente el código Fasecolda y extracción de primas")
+                # No retornamos False porque el proceso puede continuar
             
             self.logger.info("✅ Flujo completo de Sura completado exitosamente")
             return True

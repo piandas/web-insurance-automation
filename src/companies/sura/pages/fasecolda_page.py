@@ -30,6 +30,12 @@ class FasecoldaPage(BasePage):
     CITY_OPTION_TEMPLATE = "vaadin-combo-box-item:has-text('Medellin - (Antioquia)')"  # Opción de ciudad
     PLATE_INPUT_SELECTOR = "#placa input"  # Campo de placa
     ZERO_KM_RADIO_SELECTOR = "paper-radio-button[title='opcion-Si']"  # Radio button para cero kilómetros
+    
+    # Selectores para primas y planes
+    PRIMA_ANUAL_SELECTOR = "#primaAnual"  # Selector para el valor de prima anual
+    PLAN_AUTOS_CLASICO_SELECTOR = "div.horizontal.layout.contenedor-nom-plan:has-text('Plan Autos Clásico')"  # Selector para el plan autos clásico
+    ACCEPT_BUTTON_MODAL_SELECTOR = "#btnOne"  # Botón aceptar específico del modal de continuidad
+    MODAL_DIALOG_SELECTOR = "div.dialog-content-base.info"  # Selector del modal de continuidad
 
     def __init__(self, page: Page):
         super().__init__(page, 'sura')
@@ -413,77 +419,248 @@ class FasecoldaPage(BasePage):
             self.logger.error(f"❌ Error activando cálculo de cotización: {e}")
             return False
 
-    async def check_quote_result(self) -> bool:
-        """Verifica si aparece el resultado de la prima anual."""
-        self.logger.info("💰 Verificando resultado de la cotización...")
+    async def extract_prima_anual_value(self, max_wait_seconds: int = 20) -> Optional[float]:
+        """Extrae el valor numérico de la prima anual esperando hasta que aparezca."""
+        self.logger.info(f"💰 Esperando y extrayendo valor de prima anual (máximo {max_wait_seconds} segundos)...")
         
         try:
-            # Buscar el elemento de prima anual y verificar si tiene valor
-            result = await self.page.evaluate("""
-                () => {
-                    const primaAnualElement = document.getElementById('primaAnual');
-                    return primaAnualElement ? {
-                        text: primaAnualElement.textContent?.trim(),
-                        visible: primaAnualElement.offsetParent !== null,
-                        hasValue: primaAnualElement.textContent?.trim() !== ''
-                    } : null;
-                }
-            """)
+            # Esperar hasta que el elemento aparezca y tenga valor
+            for attempt in range(max_wait_seconds):
+                try:
+                    # Verificar si el elemento existe y tiene contenido
+                    element = await self.page.query_selector(self.PRIMA_ANUAL_SELECTOR)
+                    if element:
+                        text_content = await element.text_content()
+                        if text_content and text_content.strip():
+                            # Extraer solo los números del texto
+                            import re
+                            numbers = re.sub(r'[^\d]', '', text_content)
+                            if numbers:
+                                value = float(numbers)
+                                self.logger.info(f"✅ Prima anual extraída: ${value:,.0f} (texto original: '{text_content.strip()}')")
+                                return value
+                    
+                    # Esperar 1 segundo antes del siguiente intento
+                    await self.page.wait_for_timeout(1000)
+                    
+                except Exception as e:
+                    self.logger.debug(f"Intento {attempt + 1} fallido: {e}")
+                    await self.page.wait_for_timeout(1000)
             
-            if result and result.get('hasValue'):
-                self.logger.info(f"✅ Prima anual calculada: {result['text']}")
-                return True
+            self.logger.warning("⚠️ No se pudo extraer el valor de prima anual después de esperar")
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error extrayendo prima anual: {e}")
+            return None
+
+    async def click_plan_autos_clasico(self) -> bool:
+        """Hace clic en el Plan Autos Clásico."""
+        self.logger.info("🎯 Haciendo clic en Plan Autos Clásico...")
+        
+        try:
+            # Hacer clic en el plan autos clásico
+            if not await self.safe_click(self.PLAN_AUTOS_CLASICO_SELECTOR, timeout=10000):
+                self.logger.error("❌ No se pudo hacer clic en Plan Autos Clásico")
+                return False
+            
+            self.logger.info("✅ Clic en Plan Autos Clásico exitoso")
+            
+            # Esperar más tiempo para que se procese el cambio de plan
+            self.logger.info("⏳ Esperando que se procese el cambio de plan...")
+            await self.page.wait_for_timeout(3000)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error haciendo clic en Plan Autos Clásico: {e}")
+            return False
+
+    async def handle_optional_modal(self) -> bool:
+        """Maneja un modal opcional que puede aparecer después de seleccionar el plan."""
+        self.logger.info("🔍 Verificando si aparece modal opcional...")
+        
+        try:
+            # Verificar si apareció el modal de continuidad o cualquier modal con btnOne
+            modal_visible = await self.is_visible_safe(self.MODAL_DIALOG_SELECTOR, timeout=5000)
+            button_visible = await self.is_visible_safe(self.ACCEPT_BUTTON_MODAL_SELECTOR, timeout=5000)
+            
+            if modal_visible or button_visible:
+                self.logger.info("📋 Modal opcional detectado, haciendo clic en Aceptar...")
+                
+                # Intentar hacer clic en el botón específico #btnOne
+                if await self.safe_click(self.ACCEPT_BUTTON_MODAL_SELECTOR, timeout=5000):
+                    self.logger.info("✅ Botón 'Aceptar' del modal presionado exitosamente")
+                    
+                    # Esperar más tiempo a que el modal se cierre y se procese el cambio
+                    self.logger.info("⏳ Esperando que se procese después del modal...")
+                    await self.page.wait_for_timeout(3000)
+                    return True
+                else:
+                    # Intentar con selector alternativo
+                    self.logger.info("🔄 Intentando con selector alternativo...")
+                    if await self.safe_click("paper-button:has-text('Aceptar')", timeout=5000):
+                        self.logger.info("✅ Botón 'Aceptar' alternativo presionado exitosamente")
+                        await self.page.wait_for_timeout(3000)
+                        return True
+                    else:
+                        self.logger.error("❌ No se pudo hacer clic en el botón 'Aceptar' del modal")
+                        return False
             else:
-                self.logger.warning("⚠️ Prima anual aún no calculada o sin valor")
+                self.logger.info("✅ No se detectó modal opcional")
+                return True
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error verificando modal opcional: {e}")
+            return True  # No bloqueamos el flujo si hay error verificando el modal
+
+    async def check_and_handle_continuity_modal(self) -> bool:
+        """Verifica y maneja específicamente el modal de continuidad de placa."""
+        self.logger.info("🔍 Verificando modal de continuidad de placa...")
+        
+        try:
+            # Verificar si apareció el modal con mensaje de continuidad
+            modal_message_visible = await self.is_visible_safe("div:has-text('La placa ingresada al momento de la cotización  cumple con continuidad')", timeout=3000)
+            
+            if modal_message_visible:
+                self.logger.info("📋 Modal de continuidad detectado, haciendo clic en Aceptar...")
+                
+                # Intentar hacer clic en el botón Aceptar del modal
+                if await self.safe_click("#btnOne", timeout=5000):
+                    self.logger.info("✅ Modal de continuidad cerrado exitosamente")
+                    await self.page.wait_for_timeout(2000)
+                    return True
+                else:
+                    self.logger.error("❌ No se pudo cerrar el modal de continuidad")
+                    return False
+            else:
+                self.logger.info("✅ No se detectó modal de continuidad")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"❌ Error verificando resultado de cotización: {e}")
+            self.logger.warning(f"⚠️ Error verificando modal de continuidad: {e}")
             return False
 
-    async def complete_vehicle_information_filling(self) -> bool:
+    async def process_prima_and_plan_selection(self) -> dict:
+        """Proceso completo para extraer prima inicial, seleccionar plan clásico y extraer segunda prima."""
+        self.logger.info("🔄 Procesando extracción de primas y selección de plan...")
+        
+        results = {
+            'prima_global': None,
+            'prima_clasico': None,
+            'success': False
+        }
+        
+        try:
+            # 1. Extraer primer valor de prima anual (Plan Global)
+            self.logger.info("📊 Extrayendo prima del Plan Global...")
+            prima_global = await self.extract_prima_anual_value(max_wait_seconds=20)
+            
+            if prima_global is None:
+                self.logger.error("❌ No se pudo extraer la prima del Plan Global")
+                return results
+            
+            results['prima_global'] = prima_global
+            self.logger.info(f"✅ Prima Plan Global: ${prima_global:,.0f}")
+            
+            # 2. Hacer clic en Plan Autos Clásico
+            self.logger.info("🎯 Cambiando a Plan Autos Clásico...")
+            if not await self.click_plan_autos_clasico():
+                self.logger.error("❌ No se pudo seleccionar Plan Autos Clásico")
+                return results
+            
+            # 3. Verificar y manejar modal de continuidad específico
+            await self.check_and_handle_continuity_modal()
+            
+            # 4. Manejar cualquier otro modal opcional
+            if not await self.handle_optional_modal():
+                self.logger.warning("⚠️ Hubo problemas manejando el modal opcional, pero continuando...")
+            
+            # 5. Extraer segundo valor de prima anual (Plan Clásico) - DESPUÉS del cambio de plan
+            self.logger.info("📊 Extrayendo prima del Plan Autos Clásico (después del cambio)...")
+            prima_clasico = await self.extract_prima_anual_value(max_wait_seconds=20)
+            
+            if prima_clasico is None:
+                self.logger.error("❌ No se pudo extraer la prima del Plan Autos Clásico")
+                return results
+            
+            results['prima_clasico'] = prima_clasico
+            results['success'] = True
+            
+            self.logger.info(f"✅ Prima Plan Autos Clásico: ${prima_clasico:,.0f}")
+            
+            # Verificar que los valores sean diferentes (como validación)
+            if prima_global == prima_clasico:
+                self.logger.warning(f"⚠️ Ambas primas tienen el mismo valor (${prima_global:,.0f}). Verificar si el cambio de plan fue efectivo.")
+            else:
+                self.logger.info(f"✅ Primas diferentes detectadas - Global: ${prima_global:,.0f}, Clásico: ${prima_clasico:,.0f}")
+            
+            self.logger.info("🎉 Proceso de extracción de primas completado exitosamente")
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error procesando primas y selección de plan: {e}")
+            return results
+
+    async def complete_vehicle_information_filling(self) -> dict:
         """Proceso completo para llenar la información adicional del vehículo después del Fasecolda."""
         self.logger.info("📋 Completando información del vehículo...")
+        
+        results = {
+            'prima_global': None,
+            'prima_clasico': None,
+            'success': False
+        }
         
         try:
             # 1. Seleccionar tipo de servicio: Particular
             if not await self.select_service_type():
                 self.logger.warning("⚠️ No se pudo seleccionar tipo de servicio")
-                return False
+                return results
             
             # 2. Llenar ciudad
             if not await self.fill_city():
                 self.logger.warning("⚠️ No se pudo llenar la ciudad")
-                return False
+                return results
             
             # 3. Llenar placa
             if not await self.fill_plate():
                 self.logger.warning("⚠️ No se pudo llenar la placa")
-                return False
+                return results
             
             # 4. Seleccionar cero kilómetros
             if not await self.select_zero_kilometers():
                 self.logger.warning("⚠️ No se pudo seleccionar cero kilómetros")
-                return False
+                return results
             
             # 5. Activar cálculo de cotización
             if not await self.trigger_quote_calculation():
                 self.logger.warning("⚠️ No se pudo activar el cálculo de cotización")
-                return False
+                return results
             
-            # 6. Verificar resultado (opcional, no bloquea el proceso)
-            await self.check_quote_result()
+            # 6. Procesar extracción de primas y selección de planes
+            results = await self.process_prima_and_plan_selection()
             
-            self.logger.info("🎉 Información del vehículo completada exitosamente")
-            return True
+            if results['success']:
+                self.logger.info("🎉 Información del vehículo y extracción de primas completada exitosamente")
+            else:
+                self.logger.warning("⚠️ Hubo problemas en la extracción de primas")
+            
+            return results
             
         except Exception as e:
             self.logger.error(f"❌ Error completando información del vehículo: {e}")
-            return False
+            return results
 
-    async def process_fasecolda_filling(self) -> bool:
+    async def process_fasecolda_filling(self) -> dict:
         """Proceso completo de obtención y llenado de códigos Fasecolda y información del vehículo."""
         self.logger.info("🔍 Procesando llenado de código Fasecolda y información del vehículo...")
+        
+        results = {
+            'prima_global': None,
+            'prima_clasico': None,
+            'success': False
+        }
         
         try:
             # Obtener códigos Fasecolda (solo para vehículos nuevos)
@@ -491,19 +668,21 @@ class FasecoldaPage(BasePage):
             if codes:
                 if not await self.fill_fasecolda_with_retry(codes):
                     self.logger.warning("⚠️ No se pudieron llenar los códigos Fasecolda")
-                    return False
+                    return results
             else:
                 self.logger.info("⏭️ No se obtuvieron códigos Fasecolda (vehículo usado o búsqueda deshabilitada)")
                 # Para vehículos usados, aún necesitamos llenar la información adicional
             
-            # Completar el llenado de información adicional del vehículo
-            if not await self.complete_vehicle_information_filling():
-                self.logger.warning("⚠️ No se pudo completar la información adicional del vehículo")
-                return False
+            # Completar el llenado de información adicional del vehículo y extraer primas
+            results = await self.complete_vehicle_information_filling()
             
-            self.logger.info("🎉 Proceso de llenado de código Fasecolda e información del vehículo completado exitosamente")
-            return True
+            if results['success']:
+                self.logger.info("🎉 Proceso de llenado de código Fasecolda, información del vehículo y extracción de primas completado exitosamente")
+            else:
+                self.logger.warning("⚠️ Hubo problemas en el proceso completo")
+            
+            return results
             
         except Exception as e:
             self.logger.error(f"❌ Error procesando llenado de Fasecolda: {e}")
-            return False
+            return results
