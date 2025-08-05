@@ -1,45 +1,56 @@
 """Página de manejo de código Fasecolda específica para Sura"""
 
 import os
-from typing import Optional
+import base64
+import asyncio
+from typing import Optional, Dict, List
 from playwright.async_api import Page
 from ....shared.base_page import BasePage
 from ....config.sura_config import SuraConfig
 from ....shared.fasecolda_service import FasecoldaService
+from ....shared.utils import Utils
 
 class FasecoldaPage(BasePage):
     """Página de manejo de código Fasecolda para Sura."""
     
-    # Selector para el código Fasecolda - se busca dinámicamente por etiqueta
-    FASECOLDA_CODE_INPUT = "input[aria-labelledby*='paper-input-label']:not([placeholder*='DD/MM/YYYY'])"  # Fallback genérico
+    # Selectores principales - agrupados por funcionalidad
+    SELECTORS = {
+        'fasecolda': {
+            'input': "input[aria-labelledby*='paper-input-label']:not([placeholder*='DD/MM/YYYY'])",
+            'error_message': "#divMessage:has-text('No existe el fasecolda')",
+            'accept_button': "#btnOne:has-text('Aceptar')"
+        },
+        'dropdowns': {
+            'vehicle_category': "#clase",
+            'model_year': "#modelo", 
+            'service_type': "#tipoServicio"
+        },
+        'form_fields': {
+            'city': "input[aria-label='Ciudad']",
+            'plate': "#placa input",
+            'zero_km_radio': "paper-radio-button[title='opcion-Si']"
+        },
+        'plans': {
+            'prima_anual': "#primaAnual",
+            'clasico': "div.horizontal.layout.contenedor-nom-plan:has-text('Plan Autos Clásico')",
+            'global': "div.horizontal.layout.contenedor-nom-plan:has-text('Plan Autos Global')"
+        },
+        'actions': {
+            'modal_accept': "#btnOne",
+            'modal_dialog': "div.dialog-content-base.info",
+            'ver_cotizacion': "paper-button.boton-accion-principal:has-text('Ver cotización')",
+            'menu_toggle': "paper-fab[icon='apps']",
+            'pdf_download': "paper-fab[data-menuitem='Descargar PDF']"
+        }
+    }
     
-    # Selectores para mensaje de error y botón Aceptar
-    ERROR_MESSAGE_SELECTOR = "#divMessage:has-text('No existe el fasecolda')"
-    ACCEPT_BUTTON_SELECTOR = "#btnOne:has-text('Aceptar')"
-    
-    # Selectores para dropdown de categoría de vehículo y año del modelo
-    VEHICLE_CATEGORY_DROPDOWN_ID = "#clase"  # ID del dropdown de categoría/clase de vehículo
-    VEHICLE_CATEGORY_OPTION = "paper-item:has-text('AUTOMÓVILES')"  # Opción para seleccionar AUTOMÓVILES
-    MODEL_YEAR_DROPDOWN_ID = "#modelo"  # ID del dropdown de año del modelo
-    MODEL_YEAR_OPTION_TEMPLATE = "paper-item:has-text('{year}')"  # Template para seleccionar año del modelo
-    
-    # Selectores para campos adicionales después del Fasecolda
-    SERVICE_TYPE_DROPDOWN_ID = "#tipoServicio"  # ID del dropdown de tipo de servicio
-    SERVICE_TYPE_OPTION = "paper-item:has-text('Particular')"  # Opción para seleccionar Particular
-    CITY_INPUT_SELECTOR = "input[aria-label='Ciudad']"  # Campo de ciudad
-    CITY_OPTION_TEMPLATE = "vaadin-combo-box-item:has-text('Medellin - (Antioquia)')"  # Opción de ciudad
-    PLATE_INPUT_SELECTOR = "#placa input"  # Campo de placa
-    ZERO_KM_RADIO_SELECTOR = "paper-radio-button[title='opcion-Si']"  # Radio button para cero kilómetros
-    
-    # Selectores para primas y planes
-    PRIMA_ANUAL_SELECTOR = "#primaAnual"  # Selector para el valor de prima anual
-    PLAN_AUTOS_CLASICO_SELECTOR = "div.horizontal.layout.contenedor-nom-plan:has-text('Plan Autos Clásico')"  # Selector para el plan autos clásico
-    PLAN_AUTOS_GLOBAL_SELECTOR = "div.horizontal.layout.contenedor-nom-plan:has-text('Plan Autos Global')"  # Selector para el plan autos global
-    ACCEPT_BUTTON_MODAL_SELECTOR = "#btnOne"  # Botón aceptar específico del modal de continuidad
-    MODAL_DIALOG_SELECTOR = "div.dialog-content-base.info"  # Selector del modal de continuidad
-    VER_COTIZACION_BUTTON_SELECTOR = "paper-button.boton-accion-principal:has-text('Ver cotización')"  # Botón Ver cotización
-    MENU_TOGGLE_BUTTON_SELECTOR = "paper-fab[icon='apps']"  # Botón para activar el menú flotante
-    PDF_DOWNLOAD_BUTTON_SELECTOR = "paper-fab[data-menuitem='Descargar PDF']"  # Botón de descarga PDF
+    # Opciones de dropdown
+    OPTIONS = {
+        'vehicle_category': "paper-item:has-text('AUTOMÓVILES')",
+        'service_type': "paper-item:has-text('Particular')",
+        'city': "vaadin-combo-box-item:has-text('Medellin - (Antioquia)')",
+        'model_year_template': "paper-item:has-text('{year}')"
+    }
 
     def __init__(self, page: Page):
         super().__init__(page, 'sura')
@@ -50,12 +61,11 @@ class FasecoldaPage(BasePage):
         self.logger.info("🔍 Obteniendo códigos Fasecolda...")
         
         try:
-            # Verificar si debe buscar automáticamente
+            # Verificar configuración
             if not self.config.AUTO_FETCH_FASECOLDA:
                 self.logger.info("⏭️ Búsqueda automática de Fasecolda deshabilitada")
                 return None
             
-            # Solo buscar si es vehículo nuevo
             if self.config.VEHICLE_STATE != 'Nuevo':
                 self.logger.info(f"⏭️ Vehículo '{self.config.VEHICLE_STATE}' - no requiere código Fasecolda")
                 return None
@@ -65,10 +75,7 @@ class FasecoldaPage(BasePage):
             new_page = await self.page.context.new_page()
             
             try:
-                # Inicializar el servicio de Fasecolda
                 fasecolda_service = FasecoldaService(new_page, self.logger)
-                
-                # Obtener los códigos CF y CH
                 codes = await fasecolda_service.get_cf_code(
                     category=self.config.VEHICLE_CATEGORY,
                     state=self.config.VEHICLE_STATE,
@@ -87,7 +94,6 @@ class FasecoldaPage(BasePage):
                     return None
                     
             finally:
-                # Cerrar la pestaña de Fasecolda
                 await new_page.close()
                 self.logger.info("🗂️ Pestaña de Fasecolda cerrada")
                 
@@ -100,16 +106,14 @@ class FasecoldaPage(BasePage):
         self.logger.info(f"📋 Llenando código Fasecolda: {cf_code}")
         
         try:
-            # Buscar dinámicamente el campo de Fasecolda por su etiqueta
             fasecolda_selector = await self._find_fasecolda_input_selector()
-            
             if not fasecolda_selector:
                 self.logger.error("❌ No se pudo encontrar el campo de Fasecolda")
                 return False
             
             self.logger.info(f"📝 Campo Fasecolda encontrado con selector: {fasecolda_selector}")
             
-            # Usar fill_and_verify_field_flexible de la clase base
+            # Usar método de la clase base
             if not await self.fill_and_verify_field_flexible(
                 selector=fasecolda_selector,
                 value=cf_code,
@@ -127,21 +131,15 @@ class FasecoldaPage(BasePage):
             return False
 
     async def check_and_handle_fasecolda_error(self) -> bool:
-        """Verifica si apareció el mensaje de error 'No existe el fasecolda' y lo maneja."""
+        """Verifica y maneja el mensaje de error 'No existe el fasecolda'."""
         self.logger.info("🔍 Verificando si hay error de Fasecolda...")
         
         try:
-            # Verificar si apareció el mensaje de error con timeout corto
-            error_visible = await self.is_visible_safe(self.ERROR_MESSAGE_SELECTOR, timeout=3000)
-            
-            if error_visible:
+            if await self.is_visible_safe(self.SELECTORS['fasecolda']['error_message'], timeout=3000):
                 self.logger.warning("⚠️ Detectado mensaje 'No existe el fasecolda'")
                 
-                # Hacer clic en el botón Aceptar
-                if await self.safe_click(self.ACCEPT_BUTTON_SELECTOR, timeout=5000):
+                if await self.safe_click(self.SELECTORS['fasecolda']['accept_button'], timeout=5000):
                     self.logger.info("✅ Botón 'Aceptar' presionado exitosamente")
-                    
-                    # Esperar un poco para que el modal se cierre
                     await self.page.wait_for_timeout(2000)
                     return True
                 else:
@@ -160,13 +158,7 @@ class FasecoldaPage(BasePage):
         self.logger.info("🔄 Iniciando proceso de llenado de Fasecolda con reintentos...")
         
         # Lista de códigos a intentar: primero CH, luego CF
-        codes_to_try = []
-        
-        if codes.get('ch_code'):
-            codes_to_try.append(('CH', codes['ch_code']))
-        
-        if codes.get('cf_code'):
-            codes_to_try.append(('CF', codes['cf_code']))
+        codes_to_try = [(t, codes.get(f'{t.lower()}_code')) for t in ['CH', 'CF'] if codes.get(f'{t.lower()}_code')]
         
         if not codes_to_try:
             self.logger.error("❌ No hay códigos disponibles para intentar")
@@ -175,30 +167,30 @@ class FasecoldaPage(BasePage):
         for attempt, (code_type, code_value) in enumerate(codes_to_try, 1):
             self.logger.info(f"🎯 Intento {attempt}: Probando código {code_type}: {code_value}")
             
-            # Llenar el código Fasecolda
-            if not await self.fill_fasecolda_code(code_value):
-                self.logger.warning(f"⚠️ No se pudo llenar el código {code_type}")
+            # Llenar el código y seleccionar opciones
+            steps = [
+                (self.fill_fasecolda_code, [code_value], f"código {code_type}"),
+                (self._select_dropdown_option, ['vehicle_category'], "categoría AUTOMÓVILES"),
+                (self._select_dropdown_option, ['model_year'], "año del modelo")
+            ]
+            
+            success = True
+            for step_func, step_args, step_desc in steps:
+                if not await step_func(*step_args):
+                    self.logger.warning(f"⚠️ No se pudo {step_desc}")
+                    success = False
+                    break
+            
+            if not success:
+                await self._clear_fasecolda_field()
                 continue
             
-            # Seleccionar categoría de vehículo después de llenar Fasecolda
-            if not await self.select_vehicle_category():
-                self.logger.warning("⚠️ No se pudo seleccionar categoría AUTOMÓVILES")
-                continue
-            
-            # Seleccionar año del modelo después de seleccionar categoría
-            if not await self.select_model_year():
-                self.logger.warning("⚠️ No se pudo seleccionar año del modelo")
-                continue
-            
-            # Verificar si apareció error de Fasecolda
-            error_occurred = await self.check_and_handle_fasecolda_error()
-            
-            if not error_occurred:
+            # Verificar si apareció error
+            if not await self.check_and_handle_fasecolda_error():
                 self.logger.info(f"✅ Código {code_type} aceptado exitosamente")
                 return True
             else:
                 self.logger.warning(f"⚠️ Código {code_type} rechazado, continuando con siguiente...")
-                # Limpiar el campo antes del siguiente intento si es necesario
                 await self._clear_fasecolda_field()
         
         self.logger.error("❌ Todos los códigos fueron rechazados")
@@ -219,13 +211,9 @@ class FasecoldaPage(BasePage):
     async def _find_fasecolda_input_selector(self) -> str:
         """Encuentra dinámicamente el selector del campo de Fasecolda por su etiqueta."""
         try:
-            # Ejecutar JavaScript para buscar el campo de Fasecolda dinámicamente
-            fasecolda_selector = await self.page.evaluate("""
+            return await self.page.evaluate("""
                 () => {
-                    // Buscar todos los inputs
                     const inputs = Array.from(document.querySelectorAll('input'));
-                    
-                    // Filtrar por aquellos que tengan una etiqueta con texto "Fasecolda"
                     const fasecoldaInputs = inputs.filter(input => {
                         const labelId = input.getAttribute('aria-labelledby');
                         if (labelId) {
@@ -242,102 +230,57 @@ class FasecoldaPage(BasePage):
                         const labelId = input.getAttribute('aria-labelledby');
                         return `input[aria-labelledby='${labelId}']`;
                     }
-                    
                     return null;
                 }
             """)
-            
-            return fasecolda_selector
-            
         except Exception as e:
             self.logger.warning(f"⚠️ Error buscando selector de Fasecolda dinámicamente: {e}")
             return None
 
-    async def select_vehicle_category(self) -> bool:
-        """Selecciona 'AUTOMÓVILES' del dropdown de categoría de vehículo."""
-        self.logger.info("🚗 Seleccionando categoría de vehículo: AUTOMÓVILES...")
+    async def _select_dropdown_option(self, dropdown_type: str) -> bool:
+        """Método genérico para seleccionar opciones de dropdown."""
+        dropdown_info = {
+            'vehicle_category': {
+                'dropdown': self.SELECTORS['dropdowns']['vehicle_category'],
+                'option': self.OPTIONS['vehicle_category'],
+                'description': "categoría de vehículo: AUTOMÓVILES"
+            },
+            'model_year': {
+                'dropdown': self.SELECTORS['dropdowns']['model_year'],
+                'option': self.OPTIONS['model_year_template'].format(year=self.config.VEHICLE_MODEL_YEAR),
+                'description': f"año del modelo: {self.config.VEHICLE_MODEL_YEAR}"
+            },
+            'service_type': {
+                'dropdown': self.SELECTORS['dropdowns']['service_type'],
+                'option': self.OPTIONS['service_type'],
+                'description': "tipo de servicio: Particular"
+            }
+        }
         
-        try:
-            # Hacer clic en el dropdown de categoría para abrirlo
-            if not await self.safe_click(self.VEHICLE_CATEGORY_DROPDOWN_ID, timeout=10000):
-                self.logger.error("❌ No se pudo hacer clic en el dropdown de categoría de vehículo")
-                return False
-            
-            # Esperar a que aparezcan las opciones
-            await self.page.wait_for_timeout(1000)
-            
-            # Hacer clic en AUTOMÓVILES
-            if not await self.safe_click(self.VEHICLE_CATEGORY_OPTION, timeout=5000):
-                self.logger.error("❌ No se pudo seleccionar AUTOMÓVILES")
-                return False
-            
-            self.logger.info("✅ Categoría 'AUTOMÓVILES' seleccionada exitosamente")
-            
-            # Esperar un poco para que se procese la selección
-            await self.page.wait_for_timeout(1500)
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error seleccionando categoría de vehículo: {e}")
+        if dropdown_type not in dropdown_info:
+            self.logger.error(f"❌ Tipo de dropdown no reconocido: {dropdown_type}")
             return False
-
-    async def select_model_year(self) -> bool:
-        """Selecciona el año del modelo configurado del dropdown."""
-        self.logger.info(f"📅 Seleccionando año del modelo: {self.config.VEHICLE_MODEL_YEAR}...")
+        
+        info = dropdown_info[dropdown_type]
+        self.logger.info(f"🔽 Seleccionando {info['description']}...")
         
         try:
-            # Hacer clic en el dropdown de modelo/año para abrirlo
-            if not await self.safe_click(self.MODEL_YEAR_DROPDOWN_ID, timeout=10000):
-                self.logger.error("❌ No se pudo hacer clic en el dropdown de modelo/año")
+            # Abrir dropdown
+            if not await self.safe_click(info['dropdown'], timeout=10000):
                 return False
             
-            # Esperar a que aparezcan las opciones
             await self.page.wait_for_timeout(1000)
             
-            # Crear el selector específico para el año
-            year_selector = self.MODEL_YEAR_OPTION_TEMPLATE.format(year=self.config.VEHICLE_MODEL_YEAR)
-            
-            # Hacer clic en el año configurado
-            if not await self.safe_click(year_selector, timeout=5000):
-                self.logger.error(f"❌ No se pudo seleccionar el año: {self.config.VEHICLE_MODEL_YEAR}")
+            # Seleccionar opción
+            if not await self.safe_click(info['option'], timeout=5000):
                 return False
             
-            self.logger.info(f"✅ Año '{self.config.VEHICLE_MODEL_YEAR}' seleccionado exitosamente")
-            
-            # Esperar un poco para que se procese la selección
+            self.logger.info(f"✅ {info['description']} seleccionado exitosamente")
             await self.page.wait_for_timeout(1500)
             return True
             
         except Exception as e:
-            self.logger.error(f"❌ Error seleccionando año del modelo: {e}")
-            return False
-
-    async def select_service_type(self) -> bool:
-        """Selecciona 'Particular' del dropdown de tipo de servicio."""
-        self.logger.info("🏠 Seleccionando tipo de servicio: Particular...")
-        
-        try:
-            # Hacer clic en el dropdown de tipo de servicio para abrirlo
-            if not await self.safe_click(self.SERVICE_TYPE_DROPDOWN_ID, timeout=10000):
-                self.logger.error("❌ No se pudo hacer clic en el dropdown de tipo de servicio")
-                return False
-            
-            # Esperar a que aparezcan las opciones
-            await self.page.wait_for_timeout(1000)
-            
-            # Hacer clic en Particular
-            if not await self.safe_click(self.SERVICE_TYPE_OPTION, timeout=5000):
-                self.logger.error("❌ No se pudo seleccionar Particular")
-                return False
-            
-            self.logger.info("✅ Tipo de servicio 'Particular' seleccionado exitosamente")
-            
-            # Esperar un poco para que se procese la selección
-            await self.page.wait_for_timeout(1500)
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error seleccionando tipo de servicio: {e}")
+            self.logger.error(f"❌ Error seleccionando {info['description']}: {e}")
             return False
 
     async def fill_city(self) -> bool:
@@ -345,14 +288,11 @@ class FasecoldaPage(BasePage):
         self.logger.info(f"🏙️ Llenando ciudad: {self.config.CLIENT_CITY}...")
         
         try:
-            # Llenar el campo de ciudad directamente con fill()
-            await self.page.fill(self.CITY_INPUT_SELECTOR, self.config.CLIENT_CITY)
-            
-            # Esperar a que aparezcan las opciones del autocompletado
+            # Llenar y seleccionar ciudad usando método reutilizable
+            await self.page.fill(self.SELECTORS['form_fields']['city'], self.config.CLIENT_CITY)
             await self.page.wait_for_timeout(1500)
             
-            # Seleccionar la opción de Medellín - Antioquia
-            if not await self.safe_click(self.CITY_OPTION_TEMPLATE, timeout=5000):
+            if not await self.safe_click(self.OPTIONS['city'], timeout=5000):
                 self.logger.error("❌ No se pudo seleccionar la opción de ciudad")
                 return False
             
@@ -367,37 +307,23 @@ class FasecoldaPage(BasePage):
         """Llena el campo de placa con una placa genérica."""
         self.logger.info("🚗 Llenando placa genérica: XXX123...")
         
-        try:
-            # Llenar el campo de placa con una placa genérica
-            if not await self.fill_and_verify_field_flexible(
-                selector=self.PLATE_INPUT_SELECTOR,
-                value="XXX123",
-                field_name="Placa",
-                max_attempts=3
-            ):
-                self.logger.error("❌ No se pudo llenar el campo de placa")
-                return False
-            
-            self.logger.info("✅ Placa llenada exitosamente")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error llenando placa: {e}")
-            return False
+        return await self.fill_and_verify_field_flexible(
+            selector=self.SELECTORS['form_fields']['plate'],
+            value="XXX123",
+            field_name="Placa",
+            max_attempts=3
+        )
 
     async def select_zero_kilometers(self) -> bool:
         """Selecciona 'Sí' en la opción de cero kilómetros."""
         self.logger.info("🆕 Seleccionando vehículo cero kilómetros: Sí...")
         
         try:
-            # Hacer clic en el radio button de Sí para cero kilómetros
-            if not await self.safe_click(self.ZERO_KM_RADIO_SELECTOR, timeout=10000):
+            if not await self.safe_click(self.SELECTORS['form_fields']['zero_km_radio'], timeout=10000):
                 self.logger.error("❌ No se pudo seleccionar la opción de cero kilómetros")
                 return False
             
             self.logger.info("✅ Opción 'Sí' para cero kilómetros seleccionada exitosamente")
-            
-            # Esperar un poco para que se procese la selección
             await self.page.wait_for_timeout(1500)
             return True
             
@@ -410,15 +336,10 @@ class FasecoldaPage(BasePage):
         self.logger.info("🎯 Activando cálculo de cotización...")
         
         try:
-            # Hacer clic en el body para deseleccionar cualquier elemento activo
             await self.page.click("body")
-            
-            # Esperar a que se procese y se calcule la cotización
             await self.page.wait_for_timeout(3000)
-            
             self.logger.info("✅ Cálculo de cotización activado")
             return True
-            
         except Exception as e:
             self.logger.error(f"❌ Error activando cálculo de cotización: {e}")
             return False
@@ -428,11 +349,9 @@ class FasecoldaPage(BasePage):
         self.logger.info(f"💰 Esperando y extrayendo valor de prima anual (máximo {max_wait_seconds} segundos)...")
         
         try:
-            # Esperar hasta que el elemento aparezca y tenga valor
             for attempt in range(max_wait_seconds):
                 try:
-                    # Verificar si el elemento existe y tiene contenido
-                    element = await self.page.query_selector(self.PRIMA_ANUAL_SELECTOR)
+                    element = await self.page.query_selector(self.SELECTORS['plans']['prima_anual'])
                     if element:
                         text_content = await element.text_content()
                         if text_content and text_content.strip():
@@ -444,7 +363,6 @@ class FasecoldaPage(BasePage):
                                 self.logger.info(f"✅ Prima anual extraída: ${value:,.0f} (texto original: '{text_content.strip()}')")
                                 return value
                     
-                    # Esperar 1 segundo antes del siguiente intento
                     await self.page.wait_for_timeout(1000)
                     
                 except Exception as e:
@@ -458,104 +376,97 @@ class FasecoldaPage(BasePage):
             self.logger.error(f"❌ Error extrayendo prima anual: {e}")
             return None
 
-    async def click_plan_autos_clasico(self) -> bool:
-        """Hace clic en el Plan Autos Clásico."""
-        self.logger.info("🎯 Haciendo clic en Plan Autos Clásico...")
+    async def _click_plan(self, plan_type: str) -> bool:
+        """Método genérico para hacer clic en planes."""
+        plan_info = {
+            'clasico': {'selector': self.SELECTORS['plans']['clasico'], 'name': 'Plan Autos Clásico'},
+            'global': {'selector': self.SELECTORS['plans']['global'], 'name': 'Plan Autos Global'}
+        }
+        
+        if plan_type not in plan_info:
+            self.logger.error(f"❌ Tipo de plan no reconocido: {plan_type}")
+            return False
+        
+        info = plan_info[plan_type]
+        self.logger.info(f"🎯 Haciendo clic en {info['name']}...")
         
         try:
-            # Hacer clic en el plan autos clásico
-            if not await self.safe_click(self.PLAN_AUTOS_CLASICO_SELECTOR, timeout=10000):
-                self.logger.error("❌ No se pudo hacer clic en Plan Autos Clásico")
+            if not await self.safe_click(info['selector'], timeout=10000):
+                self.logger.error(f"❌ No se pudo hacer clic en {info['name']}")
                 return False
             
-            self.logger.info("✅ Clic en Plan Autos Clásico exitoso")
-            
-            # Esperar más tiempo para que se procese el cambio de plan
-            self.logger.info("⏳ Esperando que se procese el cambio de plan...")
+            self.logger.info(f"✅ Clic en {info['name']} exitoso")
             await self.page.wait_for_timeout(3000)
             return True
             
         except Exception as e:
-            self.logger.error(f"❌ Error haciendo clic en Plan Autos Clásico: {e}")
+            self.logger.error(f"❌ Error haciendo clic en {info['name']}: {e}")
             return False
+
+    async def click_plan_autos_clasico(self) -> bool:
+        """Hace clic en el Plan Autos Clásico."""
+        return await self._click_plan('clasico')
 
     async def click_plan_autos_global(self) -> bool:
         """Hace clic en el Plan Autos Global y maneja modales opcionales."""
-        self.logger.info("🎯 Haciendo clic en Plan Autos Global...")
-        
-        try:
-            # Hacer clic en el plan autos global
-            if not await self.safe_click(self.PLAN_AUTOS_GLOBAL_SELECTOR, timeout=10000):
-                self.logger.error("❌ No se pudo hacer clic en Plan Autos Global")
-                return False
-            
-            self.logger.info("✅ Clic en Plan Autos Global exitoso")
-            
-            # Esperar más tiempo para que se procese el cambio de plan
-            self.logger.info("⏳ Esperando que se procese el cambio de plan...")
-            await self.page.wait_for_timeout(3000)
-            
-            # Manejar modal opcional que puede aparecer después del cambio de plan
+        if await self._click_plan('global'):
+            # Manejar modales después del cambio de plan
             await self.check_and_handle_continuity_modal()
-            if not await self.handle_optional_modal():
-                self.logger.warning("⚠️ Hubo problemas manejando el modal opcional después del cambio a Global, pero continuando...")
-            
+            await self.handle_optional_modal()
             return True
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error haciendo clic en Plan Autos Global: {e}")
-            return False
+        return False
 
     async def handle_optional_modal(self) -> bool:
         """Maneja un modal opcional que puede aparecer después de seleccionar el plan."""
         self.logger.info("🔍 Verificando si aparece modal opcional...")
         
         try:
-            # Verificar si apareció el modal de continuidad o cualquier modal con btnOne
-            modal_visible = await self.is_visible_safe(self.MODAL_DIALOG_SELECTOR, timeout=5000)
-            button_visible = await self.is_visible_safe(self.ACCEPT_BUTTON_MODAL_SELECTOR, timeout=5000)
+            # Verificar si apareció algún modal
+            modal_selectors = [
+                self.SELECTORS['actions']['modal_dialog'],
+                self.SELECTORS['actions']['modal_accept']
+            ]
             
-            if modal_visible or button_visible:
+            # Evaluar cada selector de forma secuencial para evitar async generator error
+            modal_visible = False
+            for selector in modal_selectors:
+                if await self.is_visible_safe(selector, timeout=5000):
+                    modal_visible = True
+                    break
+            
+            if modal_visible:
                 self.logger.info("📋 Modal opcional detectado, haciendo clic en Aceptar...")
                 
-                # Intentar hacer clic en el botón específico #btnOne
-                if await self.safe_click(self.ACCEPT_BUTTON_MODAL_SELECTOR, timeout=5000):
-                    self.logger.info("✅ Botón 'Aceptar' del modal presionado exitosamente")
-                    
-                    # Esperar más tiempo a que el modal se cierre y se procese el cambio
-                    self.logger.info("⏳ Esperando que se procese después del modal...")
-                    await self.page.wait_for_timeout(3000)
-                    return True
-                else:
-                    # Intentar con selector alternativo
-                    self.logger.info("🔄 Intentando con selector alternativo...")
-                    if await self.safe_click("paper-button:has-text('Aceptar')", timeout=5000):
-                        self.logger.info("✅ Botón 'Aceptar' alternativo presionado exitosamente")
+                # Intentar con múltiples selectores
+                accept_selectors = [
+                    self.SELECTORS['actions']['modal_accept'],
+                    "paper-button:has-text('Aceptar')"
+                ]
+                
+                for selector in accept_selectors:
+                    if await self.safe_click(selector, timeout=5000):
+                        self.logger.info("✅ Botón 'Aceptar' del modal presionado exitosamente")
                         await self.page.wait_for_timeout(3000)
                         return True
-                    else:
-                        self.logger.error("❌ No se pudo hacer clic en el botón 'Aceptar' del modal")
-                        return False
+                
+                self.logger.error("❌ No se pudo hacer clic en el botón 'Aceptar' del modal")
+                return False
             else:
                 self.logger.info("✅ No se detectó modal opcional")
                 return True
                 
         except Exception as e:
             self.logger.warning(f"⚠️ Error verificando modal opcional: {e}")
-            return True  # No bloqueamos el flujo si hay error verificando el modal
+            return True  # No bloqueamos el flujo
 
     async def check_and_handle_continuity_modal(self) -> bool:
         """Verifica y maneja específicamente el modal de continuidad de placa."""
         self.logger.info("🔍 Verificando modal de continuidad de placa...")
         
         try:
-            # Verificar si apareció el modal con mensaje de continuidad
-            modal_message_visible = await self.is_visible_safe("div:has-text('La placa ingresada al momento de la cotización  cumple con continuidad')", timeout=3000)
-            
-            if modal_message_visible:
+            if await self.is_visible_safe("div:has-text('La placa ingresada al momento de la cotización  cumple con continuidad')", timeout=3000):
                 self.logger.info("📋 Modal de continuidad detectado, haciendo clic en Aceptar...")
                 
-                # Intentar hacer clic en el botón Aceptar del modal
                 if await self.safe_click("#btnOne", timeout=5000):
                     self.logger.info("✅ Modal de continuidad cerrado exitosamente")
                     await self.page.wait_for_timeout(2000)
@@ -576,14 +487,11 @@ class FasecoldaPage(BasePage):
         self.logger.info("🎯 Haciendo clic en 'Ver cotización'...")
         
         try:
-            # Hacer clic en el botón Ver cotización
-            if not await self.safe_click(self.VER_COTIZACION_BUTTON_SELECTOR, timeout=10000):
+            if not await self.safe_click(self.SELECTORS['actions']['ver_cotizacion'], timeout=10000):
                 self.logger.error("❌ No se pudo hacer clic en 'Ver cotización'")
                 return False
             
             self.logger.info("✅ Clic en 'Ver cotización' exitoso")
-            
-            # Esperar un poco para que se procese
             await self.page.wait_for_timeout(2000)
             return True
             
@@ -596,14 +504,11 @@ class FasecoldaPage(BasePage):
         self.logger.info("📱 Activando menú flotante...")
         
         try:
-            # Hacer clic en el botón de menú (apps)
-            if not await self.safe_click(self.MENU_TOGGLE_BUTTON_SELECTOR, timeout=10000):
+            if not await self.safe_click(self.SELECTORS['actions']['menu_toggle'], timeout=10000):
                 self.logger.error("❌ No se pudo hacer clic en el botón de menú")
                 return False
             
             self.logger.info("✅ Menú flotante activado exitosamente")
-            
-            # Esperar un poco para que aparezcan las opciones
             await self.page.wait_for_timeout(1500)
             return True
             
@@ -612,18 +517,14 @@ class FasecoldaPage(BasePage):
             return False
 
     async def download_pdf_quote(self) -> bool:
-        """Descarga el PDF de la cotización usando únicamente el método de conversión blob → base64."""
-        self.logger.info("📄 Iniciando descarga de PDF (solo Método 2)...")
+        """Descarga el PDF de la cotización usando conversión blob → base64."""
+        self.logger.info("📄 Iniciando descarga de PDF...")
 
         try:
-            from ....shared.utils import Utils
-            import base64
-            import os
-
-            # Esperar por una nueva pestaña cuando se haga clic en PDF
+            # Esperar por nueva pestaña y hacer clic en PDF
             self.logger.info("🌐 Detectando nueva pestaña con el PDF...")
             async with self.page.context.expect_page() as new_page_info:
-                if not await self.safe_click(self.PDF_DOWNLOAD_BUTTON_SELECTOR, timeout=10000):
+                if not await self.safe_click(self.SELECTORS['actions']['pdf_download'], timeout=10000):
                     self.logger.error("❌ No se pudo hacer clic en el botón de descarga PDF")
                     return False
                 self.logger.info("✅ Clic en botón PDF exitoso")
@@ -631,12 +532,11 @@ class FasecoldaPage(BasePage):
             nuevo_popup = await new_page_info.value
             await nuevo_popup.wait_for_load_state("networkidle")
 
-            # Esperar hasta 45 segundos a que la URL cambie de about:blank a la URL real del PDF
+            # Esperar URL real del PDF (máximo 45 segundos)
             self.logger.info("⏳ Esperando que aparezca la URL real del PDF (máximo 45 segundos)...")
             pdf_url = None
             for attempt in range(45):
                 current_url = nuevo_popup.url
-                self.logger.debug(f"Intento {attempt + 1}: URL actual = {current_url}")
                 if current_url != "about:blank" and (current_url.startswith("blob:") or current_url.startswith("http")):
                     pdf_url = current_url
                     self.logger.info(f"✅ URL del PDF encontrada: {pdf_url}")
@@ -648,7 +548,7 @@ class FasecoldaPage(BasePage):
                 await nuevo_popup.close()
                 return False
 
-            # Preparar directorio y ruta de guardado
+            # Preparar ruta de guardado
             nombre = Utils.generate_filename('sura', 'Cotizacion')
             downloads_dir = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))),
@@ -657,8 +557,8 @@ class FasecoldaPage(BasePage):
             Utils.ensure_directory(downloads_dir)
             ruta = os.path.join(downloads_dir, nombre)
 
-            # MÉTODO 2: convertir blob a base64 con JavaScript
-            self.logger.info("🔄 Método 2: Convirtiendo blob a base64 con JavaScript…")
+            # Convertir blob a base64 con JavaScript
+            self.logger.info("🔄 Convirtiendo blob a base64 con JavaScript…")
             try:
                 js = f"""
                     async () => {{
@@ -687,7 +587,7 @@ class FasecoldaPage(BasePage):
                     return False
 
             except Exception as e:
-                self.logger.error(f"❌ Método 2 falló: {e}")
+                self.logger.error(f"❌ Error en conversión blob: {e}")
                 return False
 
             finally:
@@ -701,14 +601,10 @@ class FasecoldaPage(BasePage):
         """Proceso completo para extraer prima inicial, seleccionar plan clásico y extraer segunda prima."""
         self.logger.info("🔄 Procesando extracción de primas y selección de plan...")
         
-        results = {
-            'prima_global': None,
-            'prima_clasico': None,
-            'success': False
-        }
+        results = {'prima_global': None, 'prima_clasico': None, 'success': False}
         
         try:
-            # 1. Extraer primer valor de prima anual (Plan Global)
+            # 1. Extraer prima del Plan Global
             self.logger.info("📊 Extrayendo prima del Plan Global...")
             prima_global = await self.extract_prima_anual_value(max_wait_seconds=20)
             
@@ -719,21 +615,18 @@ class FasecoldaPage(BasePage):
             results['prima_global'] = prima_global
             self.logger.info(f"✅ Prima Plan Global: ${prima_global:,.0f}")
             
-            # 2. Hacer clic en Plan Autos Clásico
+            # 2. Cambiar a Plan Autos Clásico
             self.logger.info("🎯 Cambiando a Plan Autos Clásico...")
             if not await self.click_plan_autos_clasico():
                 self.logger.error("❌ No se pudo seleccionar Plan Autos Clásico")
                 return results
             
-            # 3. Verificar y manejar modal de continuidad específico
+            # 3. Manejar modales
             await self.check_and_handle_continuity_modal()
+            await self.handle_optional_modal()
             
-            # 4. Manejar cualquier otro modal opcional
-            if not await self.handle_optional_modal():
-                self.logger.warning("⚠️ Hubo problemas manejando el modal opcional, pero continuando...")
-            
-            # 5. Extraer segundo valor de prima anual (Plan Clásico) - DESPUÉS del cambio de plan
-            self.logger.info("📊 Extrayendo prima del Plan Autos Clásico (después del cambio)...")
+            # 4. Extraer prima del Plan Clásico
+            self.logger.info("📊 Extrayendo prima del Plan Autos Clásico...")
             prima_clasico = await self.extract_prima_anual_value(max_wait_seconds=20)
             
             if prima_clasico is None:
@@ -745,14 +638,13 @@ class FasecoldaPage(BasePage):
             
             self.logger.info(f"✅ Prima Plan Autos Clásico: ${prima_clasico:,.0f}")
             
-            # Verificar que los valores sean diferentes (como validación)
+            # Validación
             if prima_global == prima_clasico:
-                self.logger.warning(f"⚠️ Ambas primas tienen el mismo valor (${prima_global:,.0f}). Verificar si el cambio de plan fue efectivo.")
+                self.logger.warning(f"⚠️ Ambas primas tienen el mismo valor (${prima_global:,.0f}). Verificar cambio de plan.")
             else:
-                self.logger.info(f"✅ Primas diferentes detectadas - Global: ${prima_global:,.0f}, Clásico: ${prima_clasico:,.0f}")
+                self.logger.info(f"✅ Primas diferentes - Global: ${prima_global:,.0f}, Clásico: ${prima_clasico:,.0f}")
             
             self.logger.info("🎉 Proceso de extracción de primas completado exitosamente")
-            
             return results
             
         except Exception as e:
@@ -763,39 +655,24 @@ class FasecoldaPage(BasePage):
         """Proceso completo para llenar la información adicional del vehículo después del Fasecolda."""
         self.logger.info("📋 Completando información del vehículo...")
         
-        results = {
-            'prima_global': None,
-            'prima_clasico': None,
-            'success': False
-        }
+        results = {'prima_global': None, 'prima_clasico': None, 'success': False}
         
         try:
-            # 1. Seleccionar tipo de servicio: Particular
-            if not await self.select_service_type():
-                self.logger.warning("⚠️ No se pudo seleccionar tipo de servicio")
-                return results
+            # Llenar información del vehículo usando método de clase base
+            vehicle_steps = [
+                (self._select_dropdown_option, ['service_type'], "tipo de servicio"),
+                (self.fill_city, [], "ciudad"),
+                (self.fill_plate, [], "placa"),
+                (self.select_zero_kilometers, [], "cero kilómetros"),
+                (self.trigger_quote_calculation, [], "cálculo de cotización")
+            ]
             
-            # 2. Llenar ciudad
-            if not await self.fill_city():
-                self.logger.warning("⚠️ No se pudo llenar la ciudad")
-                return results
+            for step_func, step_args, step_desc in vehicle_steps:
+                if not await step_func(*step_args):
+                    self.logger.warning(f"⚠️ No se pudo completar: {step_desc}")
+                    return results
             
-            # 3. Llenar placa
-            if not await self.fill_plate():
-                self.logger.warning("⚠️ No se pudo llenar la placa")
-                return results
-            
-            # 4. Seleccionar cero kilómetros
-            if not await self.select_zero_kilometers():
-                self.logger.warning("⚠️ No se pudo seleccionar cero kilómetros")
-                return results
-            
-            # 5. Activar cálculo de cotización
-            if not await self.trigger_quote_calculation():
-                self.logger.warning("⚠️ No se pudo activar el cálculo de cotización")
-                return results
-            
-            # 6. Procesar extracción de primas y selección de planes
+            # Procesar extracción de primas
             results = await self.process_prima_and_plan_selection()
             
             if results['success']:
@@ -813,15 +690,10 @@ class FasecoldaPage(BasePage):
         """Proceso completo de obtención y llenado de códigos Fasecolda, información del vehículo y descarga de cotización."""
         self.logger.info("🔍 Procesando llenado de código Fasecolda, información del vehículo y descarga...")
         
-        results = {
-            'prima_global': None,
-            'prima_clasico': None,
-            'success': False,
-            'pdf_downloaded': False
-        }
+        results = {'prima_global': None, 'prima_clasico': None, 'success': False, 'pdf_downloaded': False}
         
         try:
-            # Obtener códigos Fasecolda (solo para vehículos nuevos)
+            # Obtener y llenar códigos Fasecolda (solo para vehículos nuevos)
             codes = await self.get_fasecolda_code()
             if codes:
                 if not await self.fill_fasecolda_with_retry(codes):
@@ -829,9 +701,8 @@ class FasecoldaPage(BasePage):
                     return results
             else:
                 self.logger.info("⏭️ No se obtuvieron códigos Fasecolda (vehículo usado o búsqueda deshabilitada)")
-                # Para vehículos usados, aún necesitamos llenar la información adicional
             
-            # Completar el llenado de información adicional del vehículo y extraer primas
+            # Completar información del vehículo y extraer primas
             results = await self.complete_vehicle_information_filling()
             
             if results['success']:
@@ -851,45 +722,33 @@ class FasecoldaPage(BasePage):
         except Exception as e:
             self.logger.error(f"❌ Error procesando llenado de Fasecolda: {e}")
             return results
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error procesando llenado de Fasecolda: {e}")
-            return results
 
     async def complete_quote_and_download(self) -> bool:
         """Proceso completo para finalizar cotización y descargar PDF."""
         self.logger.info("🎯 Completando cotización y descarga de PDF...")
         
         try:
-            # 1. Volver a Plan Autos Global (ya maneja modales internamente)
-            self.logger.info("🔄 Regresando a Plan Autos Global...")
-            if not await self.click_plan_autos_global():
-                self.logger.error("❌ No se pudo seleccionar Plan Autos Global")
-                return False
+            # Lista de pasos para completar la cotización
+            final_steps = [
+                (self.click_plan_autos_global, [], "regresar a Plan Autos Global"),
+                (lambda: self.page.wait_for_timeout(3000), [], "esperar carga del Plan Global"),
+                (self.click_ver_cotizacion, [], "hacer clic en 'Ver cotización'"),
+                (self.activate_menu_toggle, [], "activar menú flotante"),
+                (self.download_pdf_quote, [], "descargar PDF")
+            ]
             
-            # 2. Esperar que cargue el valor del Plan Global nuevamente
-            self.logger.info("⏳ Esperando que cargue el valor del Plan Global...")
-            await self.page.wait_for_timeout(3000)
-            
-            # 3. Hacer clic en "Ver cotización"
-            if not await self.click_ver_cotizacion():
-                self.logger.error("❌ No se pudo hacer clic en 'Ver cotización'")
-                return False
-            
-            # 4. Manejar modal opcional que puede aparecer después de "Ver cotización"
-            await self.check_and_handle_continuity_modal()
-            if not await self.handle_optional_modal():
-                self.logger.warning("⚠️ Hubo problemas manejando el modal opcional, pero continuando...")
-            
-            # 5. Activar menú flotante antes de buscar el botón PDF
-            if not await self.activate_menu_toggle():
-                self.logger.error("❌ No se pudo activar el menú flotante")
-                return False
-            
-            # 6. Descargar PDF
-            if not await self.download_pdf_quote():
-                self.logger.error("❌ No se pudo descargar el PDF")
-                return False
+            for step_func, step_args, step_desc in final_steps:
+                if asyncio.iscoroutinefunction(step_func):
+                    if not await step_func(*step_args):
+                        self.logger.error(f"❌ No se pudo {step_desc}")
+                        return False
+                else:
+                    await step_func(*step_args)
+                
+                # Manejar modales después de pasos específicos
+                if step_desc in ["regresar a Plan Autos Global", "hacer clic en 'Ver cotización'"]:
+                    await self.check_and_handle_continuity_modal()
+                    await self.handle_optional_modal()
             
             self.logger.info("🎉 Proceso de cotización y descarga completado exitosamente")
             return True
