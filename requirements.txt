@@ -8,6 +8,15 @@ playwright==1.48.0
 # Python-dotenv - Manejo de variables de entorno
 python-dotenv==1.0.1
 
+# PyPDF2 - Para extraer texto de archivos PDF
+PyPDF2==3.0.1
+
+# Pandas - Para manipulación de datos y creación de Excel
+pandas==2.2.0
+
+# OpenPyXL - Para trabajar con archivos Excel
+openpyxl==3.1.2
+
 # Asyncio - Para programación asíncrona (incluido en Python 3.7+)
 # logging - Para sistema de logs (incluido en Python estándar)
 # os - Para operaciones del sistema (incluido en Python estándar)

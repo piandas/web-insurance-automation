@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from ..core.automation_manager import AutomationManager
 from ..factory.automation_factory import AutomationFactory
+from ..consolidation.cotizacion_consolidator import CotizacionConsolidator
 
 class CLIInterface:
     """Interfaz de línea de comandos para ejecutar automatizaciones."""
@@ -149,11 +150,33 @@ Ejemplos de uso:
                 print(f"  {company.upper()}: {status}")
                 if not success:
                     all_success = False
+            
             if all_success:
                 print("\n🎉 ¡TODAS LAS AUTOMATIZACIONES COMPLETADAS EXITOSAMENTE!")
+                
+                # Si ambas compañías fueron ejecutadas exitosamente, ejecutar consolidación
+                if len(parsed_args.companies) >= 2 and 'sura' in parsed_args.companies and 'allianz' in parsed_args.companies:
+                    print("\n" + "="*50)
+                    print("📋 INICIANDO CONSOLIDACIÓN DE COTIZACIONES...")
+                    print("="*50)
+                    
+                    try:
+                        consolidator = CotizacionConsolidator()
+                        consolidation_success = consolidator.consolidate()
+                        
+                        if consolidation_success:
+                            print("\n✅ ¡CONSOLIDACIÓN COMPLETADA EXITOSAMENTE!")
+                            print("📄 El archivo Excel consolidado ha sido creado en la carpeta 'Consolidados'")
+                        else:
+                            print("\n⚠️ Error durante la consolidación. Revisa los logs para más detalles.")
+                            
+                    except Exception as e:
+                        print(f"\n❌ Error inesperado durante la consolidación: {e}")
+                
                 return 0
             else:
                 print("\n⚠️ Algunas automatizaciones fallaron. Revisa los logs para más detalles.")
+                print("💡 La consolidación solo se ejecuta cuando ambas automatizaciones son exitosas.")
                 return 1
                 
         except KeyboardInterrupt:

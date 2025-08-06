@@ -78,8 +78,8 @@ class LoginPage(BasePage):
             await self.page.wait_for_timeout(2000)
             current_url = self.page.url
             
-            # Verificar si ya está logueado (perfil persistente)
-            if "asesores.segurossura.com.co" in current_url:
+            # Verificar si ya está logueado (debe estar EN el dominio, no solo como parámetro)
+            if current_url.startswith("https://asesores.segurossura.com.co") and "login.sura.com" not in current_url:
                 self.logger.info("✅ ¡Ya estás logueado! (sesión activa desde perfil persistente)")
                 self.logger.info(f"📍 URL actual: {current_url}")
                 return True
@@ -92,7 +92,7 @@ class LoginPage(BasePage):
         except Exception as e:
             # Verificar una vez más si ya está logueado por si hay un redirect lento
             current_url = self.page.url
-            if "asesores.segurossura.com.co" in current_url:
+            if current_url.startswith("https://asesores.segurossura.com.co") and "login.sura.com" not in current_url:
                 self.logger.info("✅ ¡Ya estás logueado! (detectado después de error inicial)")
                 self.logger.info(f"📍 URL actual: {current_url}")
                 return True
@@ -318,8 +318,8 @@ class LoginPage(BasePage):
             current_url = self.page.url
             self.logger.info(f"📍 URL actual después del login: {current_url}")
             
-            # Verificar si es login exitoso directo
-            if "asesores.segurossura.com.co" in current_url:
+            # Verificar si es login exitoso directo (debe estar EN el dominio, no solo como parámetro)
+            if current_url.startswith("https://asesores.segurossura.com.co") and "login.sura.com" not in current_url:
                 self.logger.info("✅ Login verificado exitosamente")
                 return True
             
@@ -334,7 +334,7 @@ class LoginPage(BasePage):
             current_url = self.page.url
             self.logger.info(f"📍 URL después de espera adicional: {current_url}")
             
-            if "asesores.segurossura.com.co" in current_url:
+            if current_url.startswith("https://asesores.segurossura.com.co") and "login.sura.com" not in current_url:
                 self.logger.info("✅ Login verificado exitosamente tras espera adicional")
                 return True
             elif "mfa/process" in current_url:
@@ -410,11 +410,12 @@ class LoginPage(BasePage):
             
             # Verificar si ya está logueado después de navegar
             current_url = self.page.url
-            if "asesores.segurossura.com.co" in current_url:
+            if current_url.startswith("https://asesores.segurossura.com.co") and "login.sura.com" not in current_url:
                 self.logger.info("🎉 Ya estás logueado - omitiendo pasos de login")
                 return True
             
             # Si no está logueado, proceder con el login normal
+            self.logger.info("🔐 Procediendo con el proceso de login...")
             if not await self.select_tipo_documento():
                 return False
             if not await self.fill_credentials(usuario, contrasena):

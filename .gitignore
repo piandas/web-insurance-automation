@@ -35,3 +35,5 @@ browser_profiles/
 
 # Carpetas de logs - ignorar archivos pero mantener carpetas  
 LOGS/
+
+Consolidados/

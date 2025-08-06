@@ -1,4 +1,16 @@
-# 🚗 Sistema de Automatización Multi-Compañía - Cotizaciones de Seguros
+# 🚗 SistMCP/
+├── main.py                          # 🎯 Punto de entrada principal
+├── consolidar_cotizaciones.py       # 📊 Script independiente de consolidación
+├── requirements.txt                 # 📦 Dependencias
+├── .env                            # 🔒 Variables de entorno
+├── Consolidados/                   # 📋 Reportes Excel generados
+├── downloads/                      # 📄 PDFs generados
+│   ├── allianz/                   # PDFs de Allianz
+│   └── sura/                      # PDFs de Sura
+├── LOGS/                          # 📝 Logs del sistema
+│   ├── allianz/                   # Logs de Allianz
+│   ├── sura/                      # Logs de Sura
+│   └── consolidator/              # Logs de consolidaciónomatización Multi-Compañía - Cotizaciones de Seguros
 
 ## 📋 Descripción del Proyecto
 
@@ -28,6 +40,8 @@ MCP/
     │   ├── base_config.py         # Configuración base
     │   ├── allianz_config.py      # Config específica Allianz
     │   └── sura_config.py         # Config específica Sura
+    ├── consolidation/             # 📊 Módulo de consolidación
+    │   └── cotizacion_consolidator.py  # Consolidador de cotizaciones
     ├── shared/                    # 🔄 Recursos compartidos
     │   ├── base_page.py           # Página base común
     │   ├── utils.py               # Utilidades generales
@@ -74,6 +88,12 @@ MCP/
 - **Logs separados**: Cada compañía tiene su propio log
 - **Dual output**: Consola + archivo
 - **Factory pattern**: Gestión centralizada de loggers
+
+### 📋 **Consolidación Automática**
+- **Reporte Excel**: Genera automáticamente archivo Excel consolidado
+- **Extracción de PDFs**: Lee y extrae valores de los PDFs generados
+- **Nomenclatura inteligente**: Archivos con fecha y numeración automática
+- **Ejecución condicional**: Solo se ejecuta cuando ambas automatizaciones son exitosas
 
 ## 🚀 Instalación y Configuración
 
@@ -129,6 +149,35 @@ python -m src.interfaces.cli_interface --companies allianz --user mi_usuario --p
 # Modo verbose
 python -m src.interfaces.cli_interface --companies allianz --verbose
 ```
+
+### 📊 Consolidación de Cotizaciones
+
+#### Automática (Recomendado)
+La consolidación se ejecuta automáticamente cuando ambas automatizaciones (Sura y Allianz) se completan exitosamente:
+
+```bash
+# Ejecutar ambas automatizaciones - la consolidación ocurre automáticamente al final
+python -m src.interfaces.cli_interface --companies allianz sura --parallel
+```
+
+#### Manual/Independiente
+También puedes ejecutar solo la consolidación de forma independiente:
+
+```bash
+# Consolidar con los PDFs más recientes encontrados
+python consolidar_cotizaciones.py
+
+# Ver detalles del proceso
+python consolidar_cotizaciones.py --verbose
+```
+
+**Características del consolidador:**
+- 📋 Genera archivo Excel en carpeta `Consolidados/`
+- 📅 Nomenclatura automática con fecha: `CotizacionDD-MM-YY.xlsx`
+- 🔢 Numeración automática si ya existe: `CotizacionDD-MM-YY(1).xlsx`
+- 📄 Extrae datos de configuración de Sura
+- 💰 Extrae valores de planes desde PDFs de ambas aseguradoras
+- 📊 Estructura organizada por hojas (Sura y Allianz)
 
 ### Uso Programático
 
