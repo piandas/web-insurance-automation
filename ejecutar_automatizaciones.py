@@ -4,12 +4,37 @@ Script principal para ejecutar automatizaciones de cotizaciones.
 
 Este script evita problemas de importación de módulos y proporciona
 una interfaz directa para ejecutar las automatizaciones.
+ejecutar_automatizaciones.py --companies allianz sura --parallel
 """
 
 import sys
 import os
 import asyncio
+import subprocess
 from pathlib import Path
+
+def get_venv_python():
+    """Obtiene la ruta del Python del entorno virtual."""
+    project_dir = Path(__file__).parent
+    venv_python = project_dir / ".venv" / "Scripts" / "python.exe"
+    
+    if venv_python.exists():
+        return str(venv_python)
+    return None
+
+def restart_with_venv():
+    """Reinicia el script usando el Python del entorno virtual."""
+    venv_python = get_venv_python()
+    if venv_python and sys.executable != venv_python:
+        print("🔄 Reiniciando con entorno virtual...")
+        # Ejecutar este mismo script con el Python del entorno virtual
+        subprocess.run([venv_python] + [__file__] + sys.argv[1:])
+        return True
+    return False
+
+# Verificar si necesita reiniciar con entorno virtual
+if restart_with_venv():
+    sys.exit(0)
 
 # Asegurar que el directorio del proyecto esté en el path
 project_dir = Path(__file__).parent
