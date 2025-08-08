@@ -5,6 +5,7 @@ from typing import Optional
 from playwright.async_api import Page
 from ....shared.base_page import BasePage
 from ....config.sura_config import SuraConfig
+from ....config.client_config import ClientConfig
 from ....shared.utils import Utils
 
 class PolicyPage(BasePage):
@@ -82,12 +83,12 @@ class PolicyPage(BasePage):
             fecha_formateada = today.strftime("%d/%m/%Y")
             fecha_limpia = Utils.clean_date(fecha_formateada)
             
-            self.logger.info(f"📄 Póliza: {self.config.POLIZA_NUMBER}")
+            self.logger.info(f"📄 Póliza: {ClientConfig.get_policy_number('sura')}")
             self.logger.info(f"📅 Fecha: {fecha_formateada} -> {fecha_limpia}")
             
             # Llenar ambos campos usando la función base
             field_map = {
-                self.POLIZA_INPUT: self.config.POLIZA_NUMBER,
+                self.POLIZA_INPUT: ClientConfig.get_policy_number('sura'),
                 self.FECHA_INPUT: fecha_limpia
             }
             
@@ -117,8 +118,8 @@ class PolicyPage(BasePage):
         try:
             # Verificar campo de póliza
             poliza_value = await self.page.input_value(self.POLIZA_INPUT)
-            if poliza_value != self.config.POLIZA_NUMBER:
-                self.logger.warning(f"⚠️ Póliza - Esperado: '{self.config.POLIZA_NUMBER}', Actual: '{poliza_value}'")
+            if poliza_value != ClientConfig.get_policy_number('sura'):
+                self.logger.warning(f"⚠️ Póliza - Esperado: '{ClientConfig.get_policy_number('sura')}', Actual: '{poliza_value}'")
                 return False
             
             # Verificar campo de fecha (con validación flexible)
@@ -265,8 +266,9 @@ class PolicyPage(BasePage):
                 return False
             
             # 2. Seleccionar el plan configurado (por defecto "Plan Autos Global")
-            if not await self.select_plan(self.config.SELECTED_PLAN):
-                self.logger.error(f"❌ No se pudo seleccionar el plan: {self.config.SELECTED_PLAN}")
+            selected_plan = ClientConfig.get_company_specific_config('sura').get('selected_plan', 'Plan Autos Global')
+            if not await self.select_plan(selected_plan):
+                self.logger.error(f"❌ No se pudo seleccionar el plan: {selected_plan}")
                 return False
             
             # 3. Llenar la fecha de inicio de vigencia

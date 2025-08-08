@@ -4,6 +4,7 @@ Script principal para ejecutar automatizaciones de cotizaciones.
 
 Este script evita problemas de importación de módulos y proporciona
 una interfaz directa para ejecutar las automatizaciones.
+
 ejecutar_automatizaciones.py --companies allianz sura --parallel
 """
 

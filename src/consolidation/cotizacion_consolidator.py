@@ -14,7 +14,7 @@ from pathlib import Path
 import PyPDF2
 import pandas as pd
 
-from ..config.sura_config import SuraConfig
+from ..config.client_config import ClientConfig
 from ..core.logger_factory import LoggerFactory
 
 
@@ -52,31 +52,29 @@ class CotizacionConsolidator:
         """Extrae los datos de configuración de Sura."""
         self.logger.info("Extrayendo datos de configuración de Sura...")
         
-        config = SuraConfig()
-        
         sura_data = {
-            'CLIENT_DOCUMENT_NUMBER': config.CLIENT_DOCUMENT_NUMBER,
-            'CLIENT_DOCUMENT_TYPE': config.CLIENT_DOCUMENT_TYPE,
-            'CLIENT_FIRST_NAME': config.CLIENT_FIRST_NAME,
-            'CLIENT_SECOND_NAME': config.CLIENT_SECOND_NAME,
-            'CLIENT_FIRST_LASTNAME': config.CLIENT_FIRST_LASTNAME,
-            'CLIENT_SECOND_LASTNAME': config.CLIENT_SECOND_LASTNAME,
-            'CLIENT_BIRTH_DATE': config.CLIENT_BIRTH_DATE,
-            'CLIENT_GENDER': config.CLIENT_GENDER,
-            'CLIENT_PHONE': config.CLIENT_PHONE,
-            'CLIENT_EMAIL': config.CLIENT_EMAIL,
-            'CLIENT_EMAIL_TYPE': config.CLIENT_EMAIL_TYPE,
-            'CLIENT_OCCUPATION': config.CLIENT_OCCUPATION,
-            'CLIENT_ADDRESS': config.CLIENT_ADDRESS,
-            'CLIENT_PHONE_WORK': config.CLIENT_PHONE_WORK,
-            'CLIENT_CITY': config.CLIENT_CITY,
-            'POLIZA_NUMBER': config.POLIZA_NUMBER,
-            'VEHICLE_CATEGORY': config.VEHICLE_CATEGORY,
-            'VEHICLE_STATE': config.VEHICLE_STATE,
-            'VEHICLE_MODEL_YEAR': config.VEHICLE_MODEL_YEAR,
-            'VEHICLE_BRAND': config.VEHICLE_BRAND,
-            'VEHICLE_REFERENCE': config.VEHICLE_REFERENCE,
-            'VEHICLE_FULL_REFERENCE': config.VEHICLE_FULL_REFERENCE,
+            'CLIENT_DOCUMENT_NUMBER': ClientConfig.CLIENT_DOCUMENT_NUMBER,
+            'CLIENT_DOCUMENT_TYPE': ClientConfig.get_client_document_type('sura'),
+            'CLIENT_FIRST_NAME': ClientConfig.CLIENT_FIRST_NAME,
+            'CLIENT_SECOND_NAME': ClientConfig.CLIENT_SECOND_NAME,
+            'CLIENT_FIRST_LASTNAME': ClientConfig.CLIENT_FIRST_LASTNAME,
+            'CLIENT_SECOND_LASTNAME': ClientConfig.CLIENT_SECOND_LASTNAME,
+            'CLIENT_BIRTH_DATE': ClientConfig.get_client_birth_date('sura'),
+            'CLIENT_GENDER': ClientConfig.CLIENT_GENDER,
+            'CLIENT_PHONE': getattr(ClientConfig, 'CLIENT_PHONE', ''),
+            'CLIENT_EMAIL': getattr(ClientConfig, 'CLIENT_EMAIL', ''),
+            'CLIENT_EMAIL_TYPE': getattr(ClientConfig, 'CLIENT_EMAIL_TYPE', ''),
+            'CLIENT_OCCUPATION': ClientConfig.CLIENT_OCCUPATION,
+            'CLIENT_ADDRESS': ClientConfig.CLIENT_ADDRESS,
+            'CLIENT_PHONE_WORK': ClientConfig.CLIENT_PHONE_WORK,
+            'CLIENT_CITY': ClientConfig.get_client_city('sura'),
+            'POLIZA_NUMBER': ClientConfig.get_policy_number('sura'),
+            'VEHICLE_CATEGORY': ClientConfig.VEHICLE_CATEGORY,
+            'VEHICLE_STATE': ClientConfig.VEHICLE_STATE,
+            'VEHICLE_MODEL_YEAR': ClientConfig.VEHICLE_MODEL_YEAR,
+            'VEHICLE_BRAND': ClientConfig.VEHICLE_BRAND,
+            'VEHICLE_REFERENCE': ClientConfig.VEHICLE_REFERENCE,
+            'VEHICLE_FULL_REFERENCE': ClientConfig.VEHICLE_FULL_REFERENCE,
         }
         
         return sura_data

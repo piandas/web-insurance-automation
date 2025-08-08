@@ -2,7 +2,7 @@
 
 from playwright.async_api import Page
 from ....shared.base_page import BasePage
-from ....config.allianz_config import AllianzConfig
+from ....config.client_config import ClientConfig
 
 class FlotasPage(BasePage):
     """Página de Flotas con funciones específicas para el flujo de cotización de Allianz."""
@@ -19,22 +19,22 @@ class FlotasPage(BasePage):
 
     def __init__(self, page: Page):
         super().__init__(page, 'allianz')
-        self.config = AllianzConfig()
 
     async def click_policy_cell(self) -> bool:
         """Hace clic en la celda con el número de póliza configurado."""
-        self.logger.info(f"🔲 Haciendo clic en celda {self.config.POLICY_NUMBER}...")
+        self.logger.info(f"🔲 Haciendo clic en celda {ClientConfig.get_policy_number('allianz')}...")
         return await self.click_in_frame(
-            f"{self.SELECTOR_CELL_BASE}:has-text('{self.config.POLICY_NUMBER}')",
-            f"celda {self.config.POLICY_NUMBER}"
+            f"{self.SELECTOR_CELL_BASE}:has-text('{ClientConfig.get_policy_number('allianz')}')",
+            f"celda {ClientConfig.get_policy_number('allianz')}"
         )
 
     async def click_ramos_asociados(self) -> bool:
         """Hace clic en el ramo de seguro configurado."""
-        self.logger.info(f"🚗 Haciendo clic en '{self.config.RAMO_SEGURO}'...")
+        ramo_seguro = ClientConfig.get_company_specific_config('allianz').get('ramo_seguro', 'Livianos Particulares')
+        self.logger.info(f"🚗 Haciendo clic en '{ramo_seguro}'...")
         return await self.click_in_frame(
-            f"text={self.config.RAMO_SEGURO}",
-            f"'{self.config.RAMO_SEGURO}'"
+            f"text={ramo_seguro}",
+            f"'{ramo_seguro}'"
         )
 
     async def click_aceptar(self) -> bool:
@@ -59,7 +59,7 @@ class FlotasPage(BasePage):
         """Selecciona el tipo de documento en el dropdown."""
         # Usar el valor del config si no se proporciona uno específico
         if tipo_documento is None:
-            tipo_documento = self.config.TIPO_DOCUMENTO
+            tipo_documento = ClientConfig.get_client_document_type('allianz')
             
         tipo_map = {
             "NIT": " ", "REG_CIVIL_NACIMIENTO": "I", "NUIP": "J",
@@ -80,7 +80,7 @@ class FlotasPage(BasePage):
         """Llena el campo de número de documento."""
         # Usar el valor del config si no se proporciona uno específico
         if numero_documento is None:
-            numero_documento = self.config.NUMERO_DOCUMENTO
+            numero_documento = ClientConfig.CLIENT_DOCUMENT_NUMBER
             
         return await self.fill_in_frame(
             self.SELECTOR_DOC_NUM,

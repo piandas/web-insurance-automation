@@ -3,6 +3,7 @@
 from playwright.async_api import Page
 from ....shared.base_page import BasePage
 from ....config.sura_config import SuraConfig
+from ....config.client_config import ClientConfig
 
 class QuotePage(BasePage):
     """Página de cotización para Sura."""
@@ -65,9 +66,9 @@ class QuotePage(BasePage):
         self.logger.info("🔍 Verificando datos...")
         try:
             expected_data = {
-                "Nombre": self.config.CLIENT_FIRST_NAME,
-                "Apellido": self.config.CLIENT_FIRST_LASTNAME,
-                "Documento": self.config.CLIENT_DOCUMENT_NUMBER,
+                "Nombre": ClientConfig.CLIENT_FIRST_NAME,
+                "Apellido": ClientConfig.CLIENT_FIRST_LASTNAME,
+                "Documento": ClientConfig.CLIENT_DOCUMENT_NUMBER,
             }
             self.logger.info("📋 COMPARACIÓN CONFIG vs PÁGINA:")
             self.logger.info("=" * 50)            
@@ -95,7 +96,7 @@ class QuotePage(BasePage):
 
             # Verificar sexo
             try:
-                expected_gender = self.config.CLIENT_GENDER.upper()  # 'M' o 'F'
+                expected_gender = ClientConfig.CLIENT_GENDER.upper()  # 'M' o 'F'
                 # Apuntamos al input interno de cada mat-radio-button
                 masc_input = f"{self.SEXO_MASCULINO} input[type='radio']"
                 fem_input  = f"{self.SEXO_FEMENINO} input[type='radio']"
@@ -165,7 +166,7 @@ class QuotePage(BasePage):
         """Selecciona la ocupación del cliente desde el config."""
         self.logger.info("👔 Verificando y seleccionando ocupación...")
         try:
-            ocupacion_esperada = self.config.CLIENT_OCCUPATION
+            ocupacion_esperada = ClientConfig.CLIENT_OCCUPATION
             self.logger.info(f"📋 Ocupación esperada desde config: {ocupacion_esperada}")
             
             # Buscar el elemento específico de ocupación con placeholder
@@ -237,9 +238,9 @@ class QuotePage(BasePage):
         try:
             # Corregir los selectores para evitar errores de sintaxis
             field_map = {
-                self.DIRECCION_TRABAJO_INPUT: self.config.CLIENT_ADDRESS,
-                self.TELEFONO_TRABAJO_INPUT: self.config.CLIENT_PHONE_WORK,
-                self.CIUDAD_TRABAJO_INPUT: self.config.CLIENT_CITY,
+                self.DIRECCION_TRABAJO_INPUT: ClientConfig.CLIENT_ADDRESS,
+                self.TELEFONO_TRABAJO_INPUT: ClientConfig.CLIENT_PHONE_WORK,
+                self.CIUDAD_TRABAJO_INPUT: ClientConfig.get_client_city('sura'),
             }
             
             success = await self.fill_multiple_fields(
@@ -256,7 +257,7 @@ class QuotePage(BasePage):
                 except:
                     pass
                 
-                self.logger.info(f"✅ Dirección llenada: {self.config.CLIENT_ADDRESS}, {self.config.CLIENT_PHONE_WORK}, {self.config.CLIENT_CITY}")
+                self.logger.info(f"✅ Dirección llenada: {ClientConfig.CLIENT_ADDRESS}, {ClientConfig.CLIENT_PHONE_WORK}, {ClientConfig.get_client_city('sura')}")
             
             return success
         except Exception as e:

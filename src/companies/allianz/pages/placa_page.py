@@ -6,6 +6,7 @@ from playwright.async_api import Page
 from ....shared.base_page import BasePage
 from ....shared.utils import Utils
 from ....config.allianz_config import AllianzConfig
+from ....config.client_config import ClientConfig
 
 class PlacaPage(BasePage):
     """Página para manejo de placa y comprobación en Allianz."""
@@ -43,7 +44,7 @@ class PlacaPage(BasePage):
         """Espera el input de placa y lo llena."""
         # Usar el valor del config si no se proporciona uno específico
         if placa is None:
-            placa = self.config.PLACA_VEHICULO
+            placa = ClientConfig.VEHICLE_PLATE
             
         self.logger.info(f"📝 Esperando y llenando input de placa con '{placa}'...")
         return await self.fill_in_frame(
@@ -98,9 +99,9 @@ class PlacaPage(BasePage):
         """
         # Usar valores del config si no se proporcionan específicos
         if fecha_nacimiento is None:
-            fecha_nacimiento = self.config.FECHA_NACIMIENTO
+            fecha_nacimiento = ClientConfig.get_client_birth_date('allianz')
         if genero is None:
-            genero = self.config.GENERO_ASEGURADO
+            genero = ClientConfig.CLIENT_GENDER
         
         # Limpiar fecha de nacimiento usando Utils
         fecha_limpia = Utils.clean_date(fecha_nacimiento)
@@ -146,9 +147,9 @@ class PlacaPage(BasePage):
         """
         # Usar valores del config si no se proporcionan específicos
         if departamento is None:
-            departamento = self.config.DEPARTAMENTO
+            departamento = ClientConfig.CLIENT_DEPARTMENT
         if ciudad is None:
-            ciudad = self.config.CIUDAD
+            ciudad = ClientConfig.get_client_city('allianz')
             
         self.logger.info(f"🏙️ Buscando población - Departamento: {departamento}, Ciudad: {ciudad}")
         
@@ -382,15 +383,15 @@ class PlacaPage(BasePage):
         """Ejecuta el flujo completo desde placa hasta finalización en Allianz."""
         # Usar valores del config si no se proporcionan específicos
         if placa is None:
-            placa = self.config.PLACA_VEHICULO
+            placa = ClientConfig.VEHICLE_PLATE
         if fecha_nacimiento is None:
-            fecha_nacimiento = self.config.FECHA_NACIMIENTO
+            fecha_nacimiento = ClientConfig.get_client_birth_date('allianz')
         if genero is None:
-            genero = self.config.GENERO_ASEGURADO
+            genero = ClientConfig.CLIENT_GENDER
         if departamento is None:
-            departamento = self.config.DEPARTAMENTO
+            departamento = ClientConfig.CLIENT_DEPARTMENT
         if ciudad is None:
-            ciudad = self.config.CIUDAD
+            ciudad = ClientConfig.get_client_city('allianz')
             
         self.logger.info(f"🚗 Iniciando flujo completo de placa Allianz con '{placa}', ciudad '{ciudad}'...")
         steps = [

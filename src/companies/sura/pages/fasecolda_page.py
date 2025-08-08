@@ -7,6 +7,7 @@ from typing import Optional, Dict, List
 from playwright.async_api import Page
 from ....shared.base_page import BasePage
 from ....config.sura_config import SuraConfig
+from ....config.client_config import ClientConfig
 from ....shared.fasecolda_service import FasecoldaService
 from ....shared.utils import Utils
 
@@ -62,12 +63,13 @@ class FasecoldaPage(BasePage):
         
         try:
             # Verificar configuración
-            if not self.config.AUTO_FETCH_FASECOLDA:
+            auto_fetch = ClientConfig.get_company_specific_config('sura').get('auto_fetch_fasecolda', True)
+            if not auto_fetch:
                 self.logger.info("⏭️ Búsqueda automática de Fasecolda deshabilitada")
                 return None
             
-            if self.config.VEHICLE_STATE != 'Nuevo':
-                self.logger.info(f"⏭️ Vehículo '{self.config.VEHICLE_STATE}' - no requiere código Fasecolda")
+            if ClientConfig.VEHICLE_STATE != 'Nuevo':
+                self.logger.info(f"⏭️ Vehículo '{ClientConfig.VEHICLE_STATE}' - no requiere código Fasecolda")
                 return None
             
             # Crear nueva pestaña para Fasecolda
@@ -77,12 +79,12 @@ class FasecoldaPage(BasePage):
             try:
                 fasecolda_service = FasecoldaService(new_page, self.logger)
                 codes = await fasecolda_service.get_cf_code(
-                    category=self.config.VEHICLE_CATEGORY,
-                    state=self.config.VEHICLE_STATE,
-                    model_year=self.config.VEHICLE_MODEL_YEAR,
-                    brand=self.config.VEHICLE_BRAND,
-                    reference=self.config.VEHICLE_REFERENCE,
-                    full_reference=self.config.VEHICLE_FULL_REFERENCE
+                    category=ClientConfig.VEHICLE_CATEGORY,
+                    state=ClientConfig.VEHICLE_STATE,
+                    model_year=ClientConfig.VEHICLE_MODEL_YEAR,
+                    brand=ClientConfig.VEHICLE_BRAND,
+                    reference=ClientConfig.VEHICLE_REFERENCE,
+                    full_reference=ClientConfig.VEHICLE_FULL_REFERENCE
                 )
                 
                 if codes and codes.get('cf_code'):
@@ -247,8 +249,8 @@ class FasecoldaPage(BasePage):
             },
             'model_year': {
                 'dropdown': self.SELECTORS['dropdowns']['model_year'],
-                'option': self.OPTIONS['model_year_template'].format(year=self.config.VEHICLE_MODEL_YEAR),
-                'description': f"año del modelo: {self.config.VEHICLE_MODEL_YEAR}"
+                'option': self.OPTIONS['model_year_template'].format(year=ClientConfig.VEHICLE_MODEL_YEAR),
+                'description': f"año del modelo: {ClientConfig.VEHICLE_MODEL_YEAR}"
             },
             'service_type': {
                 'dropdown': self.SELECTORS['dropdowns']['service_type'],
@@ -285,11 +287,11 @@ class FasecoldaPage(BasePage):
 
     async def fill_city(self) -> bool:
         """Llena el campo de ciudad y selecciona la opción de Medellín."""
-        self.logger.info(f"🏙️ Llenando ciudad: {self.config.CLIENT_CITY}...")
+        self.logger.info(f"🏙️ Llenando ciudad: {ClientConfig.get_client_city('sura')}...")
         
         try:
             # Llenar y seleccionar ciudad usando método reutilizable
-            await self.page.fill(self.SELECTORS['form_fields']['city'], self.config.CLIENT_CITY)
+            await self.page.fill(self.SELECTORS['form_fields']['city'], ClientConfig.get_client_city('sura'))
             await self.page.wait_for_timeout(1500)
             
             if not await self.safe_click(self.OPTIONS['city'], timeout=5000):

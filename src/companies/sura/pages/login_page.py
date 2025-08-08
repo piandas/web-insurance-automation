@@ -3,6 +3,7 @@
 from playwright.async_api import Page
 from ....shared.base_page import BasePage
 from ....config.sura_config import SuraConfig
+from ....config.client_config import ClientConfig
 from ....core.constants import Constants
 
 class LoginPage(BasePage):
@@ -102,7 +103,7 @@ class LoginPage(BasePage):
 
     async def select_tipo_documento(self, tipo: str = None) -> bool:
         """Selecciona el tipo de documento con reintentos automáticos."""
-        tipo_doc = tipo or self.config.TIPO_DOCUMENTO_LOGIN
+        tipo_doc = tipo or ClientConfig.SURA_LOGIN_DOCUMENT_TYPE
         self.logger.info(f"📋 Seleccionando tipo de documento: {tipo_doc}")
         max_intentos = 5
 
