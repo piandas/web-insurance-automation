@@ -124,12 +124,14 @@ class CotizacionConsolidator:
     def extract_text_from_pdf(self, pdf_path: Path) -> str:
         """Extrae texto de un archivo PDF."""
         try:
-            with open(pdf_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                text = ""
-                for page in pdf_reader.pages:
-                    text += page.extract_text()
-                return text
+            # with open(pdf_path, 'rb') as file:
+            #     pdf_reader = PyPDF2.PdfReader(file)
+            #     text = ""
+            #     for page in pdf_reader.pages:
+            #         text += page.extract_text()
+            #     return text
+            self.logger.warning("PyPDF2 no disponible - extracción de PDF deshabilitada temporalmente")
+            return ""
         except Exception as e:
             self.logger.error(f"Error extrayendo texto del PDF {pdf_path}: {e}")
             return ""
