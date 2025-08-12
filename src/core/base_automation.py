@@ -54,17 +54,15 @@ class BaseAutomation(ABC):
             self.logger.info(f"🚀 Lanzando navegador para {self.company.upper()}...")
             self.playwright = await async_playwright().start()
             
-            # Para Sura, usar perfil persistente para mantener las cookies/sesiones MFA
-            if self.company == 'sura':
-                self.logger.info("📁 Usando perfil persistente para SURA...")
+            # Para Sura y Allianz, usar perfil persistente para mantener las cookies/sesiones
+            if self.company in ['sura', 'allianz']:
+                self.logger.info(f"📁 Usando perfil persistente para {self.company.upper()}...")
                 user_data_dir = self._get_user_data_dir()
                 self.logger.info(f"📂 Directorio de perfil: {user_data_dir}")
-                
                 # Crear contexto persistente en lugar de navegador temporal
                 self.browser = await self.playwright.chromium.launch_persistent_context(
                     user_data_dir=user_data_dir,
                     headless=self.headless,
-                    # Configuraciones adicionales para mejor compatibilidad
                     args=[
                         '--disable-blink-features=AutomationControlled',
                         '--disable-dev-shm-usage',
@@ -77,7 +75,7 @@ class BaseAutomation(ABC):
                 else:
                     self.page = await self.browser.new_page()
             else:
-                # Para otras compañías (como Allianz), usar navegador temporal normal
+                # Para otras compañías, usar navegador temporal normal
                 self.browser = await self.playwright.chromium.launch(headless=self.headless)
                 self.page = await self.browser.new_page()
             
@@ -92,10 +90,10 @@ class BaseAutomation(ABC):
         try:
             self.logger.info(f"🔒 Cerrando navegador {self.company.upper()}...")
             if self.browser:
-                if self.company == 'sura':
-                    # Para Sura (contexto persistente), cerrar contexto
+                if self.company in ['sura', 'allianz']:
+                    # Para Sura y Allianz (contexto persistente), cerrar contexto
                     await self.browser.close()
-                    self.logger.info("📁 Perfil persistente de SURA guardado")
+                    self.logger.info(f"📁 Perfil persistente de {self.company.upper()} guardado")
                 else:
                     # Para otras compañías, cerrar navegador normal
                     await self.browser.close()
