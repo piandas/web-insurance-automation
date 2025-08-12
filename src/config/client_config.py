@@ -7,7 +7,7 @@ class ClientConfig:
     # DATOS QUE SE CAMBIAN FRECUENTEMENTE
     # ==========================================
     
-    VEHICLE_STATE: str = 'Usado'  # Opciones: "Nuevo", "Usado"
+    VEHICLE_STATE: str = 'Nuevo'  # Opciones: "Nuevo", "Usado"
     
     # DATOS PERSONALES DEL CLIENTE (cambiar para cada cliente)
     CLIENT_DOCUMENT_NUMBER: str = '1020422674'  # Número de documento del cliente

@@ -10,6 +10,15 @@ from ....config.client_config import ClientConfig
 from .fasecolda_page import FasecoldaPage
 
 class PlacaPage(BasePage):
+    async def _get_input_value_by_id(self, frame, input_id):
+        """Obtiene el valor de un input por su id dentro del frame dado."""
+        try:
+            input_elem = await frame.query_selector(f'input#{input_id}')
+            if input_elem:
+                return await input_elem.get_attribute('value')
+        except Exception as e:
+            self.logger.warning(f"No se pudo extraer el valor de {input_id}: {e}")
+        return ''
     """Página para manejo de placa y comprobación en Allianz."""
     
     # Selectores
@@ -342,9 +351,36 @@ class PlacaPage(BasePage):
             except Exception as e:
                 self.logger.warning(f"⚠️ No se detectó alert o ya fue manejado: {e}")
             
-            # Paso 9: Esperar y hacer clic en "Estudio de Seguro"
+            # Paso 9: EXTRAER VALORES DE LA PÁGINA (antes de abrir el PDF)
             await self.page.wait_for_timeout(3000)
-            
+            try:
+                frame = self.page.frame(name="appArea")
+                # 1. Número de cotización
+                cotiz_td = await frame.query_selector('td.rowAppErrorInfoTextBlock.cellNoImage')
+                cotiz_text = await cotiz_td.inner_text() if cotiz_td else ''
+                num_cotizacion = ''
+                import re
+                m = re.search(r'número (\d+)', cotiz_text)
+                if m:
+                    num_cotizacion = m.group(1)
+                self.logger.info(f"[EXTRACCIÓN] Número de cotización: {num_cotizacion}")
+
+                # 2. Autos Esencial (modalidad_1_0_primaRecibo)
+                autos_esencial = await self._get_input_value_by_id(frame, "modalidad_1_0_primaRecibo")
+                self.logger.info(f"[EXTRACCIÓN] Autos Esencial: {autos_esencial}")
+
+                # 3. Autos Plus (modalidad_2_0_primaRecibo)
+                autos_plus = await self._get_input_value_by_id(frame, "modalidad_2_0_primaRecibo")
+                self.logger.info(f"[EXTRACCIÓN] Autos Plus: {autos_plus}")
+
+                # 4. Autos Llave en Mano (modalidad_3_0_primaRecibo)
+                autos_llave = await self._get_input_value_by_id(frame, "modalidad_3_0_primaRecibo")
+                self.logger.info(f"[EXTRACCIÓN] Autos Llave en Mano: {autos_llave}")
+
+                # Si necesitas el valor de "Autos Esencial + Totales", puedes agregar lógica similar aquí si hay un campo específico
+            except Exception as e:
+                self.logger.error(f"❌ Error extrayendo valores de la página: {e}")
+            # Paso 10: Esperar y hacer clic en "Estudio de Seguro"
             if not await self.verify_element_value_in_frame(
                 self.SELECTOR_ESTUDIO_SEGURO,
                 "enlace 'Estudio de Seguro'",
@@ -355,13 +391,12 @@ class PlacaPage(BasePage):
             ):
                 self.logger.error("❌ El enlace 'Estudio de Seguro' no apareció")
                 return False
-            
             if not await self.click_in_frame(
                 self.SELECTOR_ESTUDIO_SEGURO,
                 "enlace 'Estudio de Seguro'"
             ):
                 self.logger.error("❌ Error al hacer clic en 'Estudio de Seguro'")
-                return False          
+                return False
             
             # Paso 10: Descargar PDF directamente desde la URL
             self.logger.info("🌐 Detectando nueva pestaña con el PDF...")
