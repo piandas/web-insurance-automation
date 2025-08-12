@@ -5,7 +5,7 @@ from typing import Optional
 
 from ...core.base_automation import BaseAutomation
 from ...config.allianz_config import AllianzConfig
-from .pages import LoginPage, DashboardPage, FlotasPage, PlacaPage
+from .pages import LoginPage, DashboardPage, FlotasPage, PlacaPage, FasecoldaPage
 
 class AllianzAutomation(BaseAutomation):
     """Automatización específica para Allianz."""
@@ -29,6 +29,7 @@ class AllianzAutomation(BaseAutomation):
         self.dashboard_page = None
         self.flotas_page = None
         self.placa_page = None
+        self.fasecolda_page = None
 
     async def launch(self) -> bool:
         """Inicializa Playwright y abre el navegador."""
@@ -40,6 +41,7 @@ class AllianzAutomation(BaseAutomation):
         self.dashboard_page = DashboardPage(self.page)
         self.flotas_page = FlotasPage(self.page)
         self.placa_page = PlacaPage(self.page)
+        self.fasecolda_page = FasecoldaPage(self.page)
         
         self.logger.info("✅ Páginas de Allianz inicializadas")
         return True
@@ -65,6 +67,12 @@ class AllianzAutomation(BaseAutomation):
     async def execute_quote_flow(self) -> bool:
         """Ejecuta el flujo de cotización específico de Allianz."""
         self.logger.info("💰 Ejecutando flujo de cotización Allianz...")
+        
+        # Obtener códigos FASECOLDA si están disponibles
+        fasecolda_codes = await self.fasecolda_page.get_fasecolda_code()
+        if fasecolda_codes:
+            self.logger.info("📋 Códigos FASECOLDA disponibles para Allianz")
+            await self.fasecolda_page.use_fasecolda_codes_in_flow(fasecolda_codes)
         
         # Paso 1: Flujo de flotas
         if not await self.flotas_page.execute_flotas_flow():

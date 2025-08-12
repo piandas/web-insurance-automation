@@ -23,6 +23,7 @@ class CLIInterface:
 Ejemplos de uso:
   # Ejecutar solo Allianz
   python -m src.interfaces.cli_interface --companies allianz
+  python -m src.interfaces.cli_interface --companies sura
   
   # Ejecutar ambas compañías en paralelo
   python -m src.interfaces.cli_interface --companies allianz sura --parallel

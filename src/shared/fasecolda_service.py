@@ -23,8 +23,8 @@ SELECTORS = {
 
 TIMEOUTS = {
     'page_load': 10000,
-    'field_enable': 5000,
-    'cf_search': 10000
+    'field_enable': 3000,  # Reducido de 5000 a 3000ms
+    'cf_search': 15000     # Aumentado para dar más tiempo a la búsqueda
 }
 
 SCORE_THRESHOLD = 0.3
@@ -145,8 +145,8 @@ class FasecoldaService:
                 field_value = await self._get_select_value(selector, value, field_name)
                 
                 if field_value is None:
-                    self.logger.error(f"❌ No se encontró {field_name}: {value}")
-                    return False
+                    self.logger.warning(f"⚠️ No se encontró {field_name}: {value} - continuando...")
+                    continue  # Continuar con el siguiente campo en lugar de fallar
                 
                 # Seleccionar el valor
                 await self._select_by_value(selector, field_value)
@@ -217,12 +217,24 @@ class FasecoldaService:
             return None
     
     async def _wait_for_field_enabled(self, selector: str, timeout: int = None):
-        """Espera a que un campo se habilite."""
+        """Espera a que un campo se habilite con manejo de errores mejorado."""
         timeout = timeout or TIMEOUTS['field_enable']
-        await self.page.wait_for_function(
-            f"document.querySelector('{selector}').disabled === false",
-            timeout=timeout
-        )
+        
+        try:
+            # Primero verificar si el elemento existe
+            await self.page.wait_for_selector(selector, timeout=2000)
+            
+            # Luego esperar a que se habilite
+            await self.page.wait_for_function(
+                f"() => {{ const el = document.querySelector('{selector}'); return el && !el.disabled; }}",
+                timeout=timeout
+            )
+            self.logger.debug(f"✅ Campo {selector} habilitado")
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ Campo {selector} no se habilitó en {timeout}ms: {e}")
+            # Continuar sin fallar, ya que algunos campos pueden no necesitar habilitación
+            pass
     
     async def _select_by_value(self, selector: str, value: str):
         """Selecciona una opción por su valor usando JavaScript."""

@@ -66,6 +66,7 @@ class ClientConfig:
     
     ALLIANZ_SPECIFIC = {
         'ramo_seguro': 'Livianos Particulares',  # Ramo de seguro
+        'auto_fetch_fasecolda': True,  # Buscar código Fasecolda automáticamente
     }
     
     # ==========================================

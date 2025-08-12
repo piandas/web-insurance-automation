@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import List, Dict, Any, Optional
 from .logger_factory import LoggerFactory
+from ..shared.fasecolda_extractor import start_global_fasecolda_extraction, cleanup_global_fasecolda_extractor
 
 class AutomationManager:
     """Orquestador principal que maneja múltiples automatizaciones."""
@@ -24,32 +25,44 @@ class AutomationManager:
             Diccionario con resultados por compañía
         """
         self.logger.info(f"🔄 Ejecutando automatizaciones secuenciales: {companies}")
+        
+        # Detectar si se debe ejecutar en modo headless
+        headless_mode = kwargs.get('headless', False)
+        
+        # Iniciar extracción de códigos FASECOLDA en paralelo
+        fasecolda_task = await start_global_fasecolda_extraction(headless=headless_mode)
+        
         results = {}
         
-        for company in companies:
-            self.logger.info(f"📋 Procesando {company.upper()}...")
-            try:
-                # Importar dinámicamente la factory
-                from ..factory.automation_factory import AutomationFactory
-                
-                automation = AutomationFactory.create(company, **kwargs)
-                await automation.launch()
-                
-                self.active_automations[company] = automation
-                result = await automation.run_complete_flow()
-                results[company] = result
-                
-                await automation.close()
-                del self.active_automations[company]
-                
-                if result:
-                    self.logger.info(f"✅ {company.upper()} completado exitosamente")
-                else:
-                    self.logger.error(f"❌ {company.upper()} falló")
+        try:
+            for company in companies:
+                self.logger.info(f"📋 Procesando {company.upper()}...")
+                try:
+                    # Importar dinámicamente la factory
+                    from ..factory.automation_factory import AutomationFactory
                     
-            except Exception as e:
-                self.logger.error(f"❌ Error en {company.upper()}: {e}")
-                results[company] = False
+                    automation = AutomationFactory.create(company, **kwargs)
+                    await automation.launch()
+                    
+                    self.active_automations[company] = automation
+                    result = await automation.run_complete_flow()
+                    results[company] = result
+                    
+                    await automation.close()
+                    del self.active_automations[company]
+                    
+                    if result:
+                        self.logger.info(f"✅ {company.upper()} completado exitosamente")
+                    else:
+                        self.logger.error(f"❌ {company.upper()} falló")
+                        
+                except Exception as e:
+                    self.logger.error(f"❌ Error en {company.upper()}: {e}")
+                    results[company] = False
+        
+        finally:
+            # Limpiar extractor global
+            await cleanup_global_fasecolda_extractor()
         
         return results
     
@@ -65,6 +78,12 @@ class AutomationManager:
             Diccionario con resultados por compañía
         """
         self.logger.info(f"⚡ Ejecutando automatizaciones en paralelo: {companies}")
+        
+        # Detectar si se debe ejecutar en modo headless
+        headless_mode = kwargs.get('headless', False)
+        
+        # Iniciar extracción de códigos FASECOLDA en paralelo
+        fasecolda_task = await start_global_fasecolda_extraction(headless=headless_mode)
         
         # Crear tasks
         tasks = []
@@ -109,6 +128,9 @@ class AutomationManager:
                     await automation.close()
                 except Exception as e:
                     self.logger.error(f"❌ Error cerrando {company}: {e}")
+            
+            # Limpiar extractor global
+            await cleanup_global_fasecolda_extractor()
     
     async def _run_single_automation(self, company: str, automation) -> bool:
         """Ejecuta una sola automatización."""
@@ -141,4 +163,8 @@ class AutomationManager:
                 self.logger.error(f"❌ Error deteniendo {company}: {e}")
         
         self.active_automations.clear()
+        
+        # Limpiar extractor global
+        await cleanup_global_fasecolda_extractor()
+        
         self.logger.info("✅ Todas las automatizaciones detenidas")

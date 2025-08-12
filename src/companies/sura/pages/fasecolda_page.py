@@ -9,6 +9,7 @@ from ....shared.base_page import BasePage
 from ....config.sura_config import SuraConfig
 from ....config.client_config import ClientConfig
 from ....shared.fasecolda_service import FasecoldaService
+from ....shared.fasecolda_extractor import get_global_fasecolda_codes
 from ....shared.utils import Utils
 
 class FasecoldaPage(BasePage):
@@ -58,8 +59,8 @@ class FasecoldaPage(BasePage):
         self.config = SuraConfig()
 
     async def get_fasecolda_code(self) -> Optional[dict]:
-        """Obtiene los códigos Fasecolda usando FasecoldaService en una nueva pestaña."""
-        self.logger.info("🔍 Obteniendo códigos Fasecolda...")
+        """Obtiene los códigos Fasecolda desde el extractor global."""
+        self.logger.info("🔍 Obteniendo códigos Fasecolda desde extractor global...")
         
         try:
             # Verificar configuración
@@ -72,32 +73,16 @@ class FasecoldaPage(BasePage):
                 self.logger.info(f"⏭️ Vehículo '{ClientConfig.VEHICLE_STATE}' - no requiere código Fasecolda")
                 return None
             
-            # Crear nueva pestaña para Fasecolda
-            self.logger.info("🌐 Abriendo nueva pestaña para Fasecolda...")
-            new_page = await self.page.context.new_page()
+            # Obtener códigos del extractor global
+            codes = await get_global_fasecolda_codes(timeout=30)
             
-            try:
-                fasecolda_service = FasecoldaService(new_page, self.logger)
-                codes = await fasecolda_service.get_cf_code(
-                    category=ClientConfig.VEHICLE_CATEGORY,
-                    state=ClientConfig.VEHICLE_STATE,
-                    model_year=ClientConfig.VEHICLE_MODEL_YEAR,
-                    brand=ClientConfig.VEHICLE_BRAND,
-                    reference=ClientConfig.VEHICLE_REFERENCE,
-                    full_reference=ClientConfig.VEHICLE_FULL_REFERENCE
-                )
-                
-                if codes and codes.get('cf_code'):
-                    ch_info = f" - CH: {codes.get('ch_code')}" if codes.get('ch_code') else ""
-                    self.logger.info(f"✅ Códigos Fasecolda obtenidos - CF: {codes['cf_code']}{ch_info}")
-                    return codes
-                else:
-                    self.logger.warning("⚠️ No se pudieron obtener códigos Fasecolda")
-                    return None
-                    
-            finally:
-                await new_page.close()
-                self.logger.info("🗂️ Pestaña de Fasecolda cerrada")
+            if codes and codes.get('cf_code'):
+                ch_info = f" - CH: {codes.get('ch_code')}" if codes.get('ch_code') else ""
+                self.logger.info(f"✅ Códigos Fasecolda obtenidos del extractor global - CF: {codes['cf_code']}{ch_info}")
+                return codes
+            else:
+                self.logger.warning("⚠️ No se pudieron obtener códigos Fasecolda del extractor global")
+                return None
                 
         except Exception as e:
             self.logger.error(f"❌ Error obteniendo códigos Fasecolda: {e}")
