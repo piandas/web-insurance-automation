@@ -19,6 +19,50 @@ from ..core.logger_factory import LoggerFactory
 
 
 class CotizacionConsolidator:
+    def extract_allianz_plans_from_logs(self) -> Dict[str, str]:
+        """Extrae los valores de los planes de Allianz desde los logs de la automatización."""
+        self.logger.info("📊 Extrayendo valores de planes de Allianz desde logs...")
+        plans = {
+            'Autos Esencial': 'No encontrado',
+            'Autos Plus': 'No encontrado',
+            'Autos Llave en Mano': 'No encontrado',
+            'Autos Esencial + Totales': 'No encontrado'
+        }
+        try:
+            allianz_log_path = self.base_path / "LOGS" / "allianz" / "allianz.log"
+            if not allianz_log_path.exists():
+                self.logger.warning("No se encontró el archivo de log de Allianz")
+                return plans
+            with open(allianz_log_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            recent_lines = lines[-500:] if len(lines) > 500 else lines
+            patterns = {
+                'Autos Esencial': r'\[EXTRACCIÓN\] Autos Esencial: ([0-9.,]+)',
+                'Autos Plus': r'\[EXTRACCIÓN\] Autos Plus: ([0-9.,]+)',
+                'Autos Llave en Mano': r'\[EXTRACCIÓN\] Autos Llave en Mano: ([0-9.,]+)'
+            }
+            for plan_name, pattern in patterns.items():
+                for line in reversed(recent_lines):
+                    match = re.search(pattern, line)
+                    if match:
+                        value = match.group(1).replace('.', '').replace(',', '.')
+                        try:
+                            numeric_value = float(value)
+                            plans[plan_name] = f"{numeric_value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+                        except Exception:
+                            plans[plan_name] = match.group(1)
+                        break
+            # Autos Esencial + Totales: suma de los otros tres si todos existen
+            try:
+                if all(plans[k] != 'No encontrado' for k in ['Autos Esencial', 'Autos Plus', 'Autos Llave en Mano']):
+                    total = sum(float(plans[k].replace('.', '').replace(',', '.')) for k in ['Autos Esencial', 'Autos Plus', 'Autos Llave en Mano'])
+                    plans['Autos Esencial + Totales'] = f"{total:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+            except Exception:
+                pass
+            return plans
+        except Exception as e:
+            self.logger.error(f"Error extrayendo valores de Allianz desde logs: {e}")
+            return plans
     """Consolidador de cotizaciones de Sura y Allianz."""
     
     def __init__(self):
@@ -137,58 +181,52 @@ class CotizacionConsolidator:
             return ""
     
     def extract_sura_plans_from_logs(self) -> Dict[str, str]:
-        """Extrae los valores de los planes de Sura desde los logs de la automatización."""
+        """Extrae los valores de los planes de Sura desde los logs de la automatización, incluyendo Pérdida Parcial 10-1 SMLMV."""
         self.logger.info("📊 Extrayendo valores de planes de Sura desde logs...")
-        
         plans = {
             'Plan Autos Global': 'No encontrado',
+            'Pérdida Parcial 10-1 SMLMV': 'No encontrado',
             'Plan Autos Clasico': 'No encontrado'
         }
-        
         try:
-            # Buscar en el log más reciente de Sura
             sura_log_path = self.base_path / "LOGS" / "sura" / "sura.log"
-            
             if not sura_log_path.exists():
                 self.logger.warning("No se encontró el archivo de log de Sura")
                 return plans
-            
-            # Leer las últimas líneas del log (más eficiente para logs grandes)
             with open(sura_log_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
-            
-            # Buscar desde las últimas líneas hacia atrás (últimas 500 líneas)
             recent_lines = lines[-500:] if len(lines) > 500 else lines
-            
             # Patrones para buscar los valores en los logs
             patterns = {
                 'Plan Autos Global': [
-                    r'Prima Plan Global:\s*\$([0-9,]+)',
-                    r'prima_global[\'\"]\s*:\s*([0-9,]+)',
-                    r'Global:\s*\$?\s*([0-9,]+)'
+                    r'Global:\s*\$([0-9,.]+)',
+                    r'Prima Plan Global:\s*\$([0-9,.]+)',
+                    r'prima_global[\'\"]\s*:\s*([0-9,.]+)'
+                ],
+                'Pérdida Parcial 10-1 SMLMV': [
+                    r'tras 10-1 SMLMV:\s*\$([0-9,.]+)',
+                    r'Pérdida Parcial 10-1 SMLMV:\s*\$([0-9,.]+)',
+                    r'prima_10_1[\'\"]\s*:\s*([0-9,.]+)'
                 ],
                 'Plan Autos Clasico': [
-                    r'Prima Plan Autos Clásico:\s*\$([0-9,]+)',
-                    r'prima_clasico[\'\"]\s*:\s*([0-9,]+)',
-                    r'Clásico:\s*\$?\s*([0-9,]+)'
+                    r'Clásico:\s*\$([0-9,.]+)',
+                    r'Prima Plan Autos Clásico:\s*\$([0-9,.]+)',
+                    r'prima_clasico[\'\"]\s*:\s*([0-9,.]+)'
                 ]
             }
-            
             for plan_name, plan_patterns in patterns.items():
                 for line in reversed(recent_lines):
                     for pattern in plan_patterns:
                         match = re.search(pattern, line, re.IGNORECASE)
                         if match:
-                            value = match.group(1).replace(',', '')
+                            value = match.group(1).replace(',', '').replace('.', '')
                             if value.isdigit():
-                                plans[plan_name] = f"{int(value):,}"
+                                plans[plan_name] = f"{int(value):,}".replace(",", ".")
                                 self.logger.info(f"✅ Encontrado {plan_name}: ${plans[plan_name]}")
                                 break
                     if plans[plan_name] != 'No encontrado':
                         break
-            
             return plans
-            
         except Exception as e:
             self.logger.error(f"Error extrayendo valores de Sura desde logs: {e}")
             return plans
@@ -384,20 +422,38 @@ class CotizacionConsolidator:
         # Sección 4: Valores de Planes Sura
         sura_rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
         sura_rows.append({'Categoría': 'COTIZACIONES SURA', 'Campo': '', 'Valor': ''})
-        for plan_name, plan_value in sura_plans.items():
-            formatted_value = f"${plan_value}" if plan_value != 'No encontrado' else plan_value
+        # Exportar según tipo de vehículo
+        if sura_data.get('VEHICLE_STATE', '').lower() == 'usado':
+            # Usado: mostrar los 3 valores
+            plan_map = [
+                ("Plan Autos Global", sura_plans.get("Plan Autos Global")),
+                ("Pérdida Parcial 10-1 SMLMV", sura_plans.get("Pérdida Parcial 10-1 SMLMV")),
+                ("Plan Autos Clásico", sura_plans.get("Plan Autos Clasico")),
+            ]
+        else:
+            # Nuevo: solo global y clásico
+            plan_map = [
+                ("Plan Autos Global", sura_plans.get("Plan Autos Global")),
+                ("Plan Autos Clásico", sura_plans.get("Plan Autos Clasico")),
+            ]
+        for plan_name, plan_value in plan_map:
+            formatted_value = f"${plan_value}" if plan_value not in [None, 'No encontrado'] else (plan_value if plan_value is not None else 'No encontrado')
             sura_rows.append({'Categoría': '', 'Campo': plan_name, 'Valor': formatted_value})
-        
         sura_df = pd.DataFrame(sura_rows)
         
         # Crear el DataFrame para Allianz con estructura clara
         allianz_rows = []
         allianz_rows.append({'Categoría': 'COTIZACIONES ALLIANZ', 'Plan': '', 'Valor': ''})
-        
-        for plan_name, plan_value in allianz_plans.items():
+        allianz_plan_names = [
+            'Autos Esencial',
+            'Autos Esencial + Totales',
+            'Autos Plus',
+            'Autos Llave en Mano'
+        ]
+        for plan_name in allianz_plan_names:
+            plan_value = allianz_plans.get(plan_name, 'No encontrado')
             formatted_value = f"${plan_value}" if plan_value != 'No encontrado' else plan_value
             allianz_rows.append({'Categoría': '', 'Plan': plan_name, 'Valor': formatted_value})
-        
         allianz_df = pd.DataFrame(allianz_rows)
         
         # Escribir a Excel con múltiples hojas
@@ -411,16 +467,26 @@ class CotizacionConsolidator:
             # Hoja resumen solo con cotizaciones
             summary_rows = []
             summary_rows.append({'Aseguradora': 'SURA', 'Plan': '', 'Valor': ''})
-            for plan_name, plan_value in sura_plans.items():
-                formatted_value = f"${plan_value}" if plan_value != 'No encontrado' else plan_value
+            # Para el resumen, mostrar los mismos valores que en SURA_COMPLETO según tipo de vehículo
+            if sura_data.get('VEHICLE_STATE', '').lower() == 'usado':
+                summary_plan_map = [
+                    ("Plan Autos Global", sura_plans.get("Plan Autos Global")),
+                    ("Pérdida Parcial 10-1 SMLMV", sura_plans.get("Pérdida Parcial 10-1 SMLMV")),
+                    ("Plan Autos Clásico", sura_plans.get("Plan Autos Clasico")),
+                ]
+            else:
+                summary_plan_map = [
+                    ("Plan Autos Global", sura_plans.get("Plan Autos Global")),
+                    ("Plan Autos Clásico", sura_plans.get("Plan Autos Clasico")),
+                ]
+            for plan_name, plan_value in summary_plan_map:
+                formatted_value = f"${plan_value}" if plan_value not in [None, 'No encontrado'] else (plan_value if plan_value is not None else 'No encontrado')
                 summary_rows.append({'Aseguradora': '', 'Plan': plan_name, 'Valor': formatted_value})
-            
             summary_rows.append({'Aseguradora': '', 'Plan': '', 'Valor': ''})
             summary_rows.append({'Aseguradora': 'ALLIANZ', 'Plan': '', 'Valor': ''})
             for plan_name, plan_value in allianz_plans.items():
                 formatted_value = f"${plan_value}" if plan_value != 'No encontrado' else plan_value
                 summary_rows.append({'Aseguradora': '', 'Plan': plan_name, 'Valor': formatted_value})
-            
             summary_df = pd.DataFrame(summary_rows)
             summary_df.to_excel(writer, sheet_name='RESUMEN_COTIZACIONES', index=False)
         
@@ -451,18 +517,8 @@ class CotizacionConsolidator:
             
             self.logger.info(f"Planes de Sura: {sura_plans}")
             
-            # 4. Extraer planes de Allianz
-            allianz_plans = {}
-            if allianz_pdf:
-                allianz_plans = self.extract_allianz_plans_from_pdf(allianz_pdf)
-            else:
-                self.logger.warning("No se pudo extraer información de planes de Allianz")
-                allianz_plans = {
-                    'Autos Esencial': 'PDF no encontrado',
-                    'Autos Esencial + Totales': 'PDF no encontrado',
-                    'Autos Plus': 'PDF no encontrado',
-                    'Autos Llave en Mano': 'PDF no encontrado'
-                }
+            # 4. Extraer planes de Allianz desde logs (no PDF)
+            allianz_plans = self.extract_allianz_plans_from_logs()
             
             # 5. Crear reporte Excel
             excel_path = self.create_excel_report(sura_data, sura_plans, allianz_plans)

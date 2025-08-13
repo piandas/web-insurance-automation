@@ -108,25 +108,13 @@ class PlacaPage(BasePage):
     async def llenar_datos_asegurado(self, fecha_nacimiento: str = None, genero: str = None) -> bool:
         """
         Llena los datos del asegurado: fecha de nacimiento y género.
-        
-        Args:
-            fecha_nacimiento (str): Fecha en formato dd/mm/yyyy (default: valor de Config)
-            genero (str): Género - M (Masculino), F (Femenino), J (Jurídico) (default: valor de Config)
-        
-        Returns:
-            bool: True si se llenaron los datos correctamente, False en caso contrario
         """
-        # Usar valores del config si no se proporcionan específicos
         if fecha_nacimiento is None:
             fecha_nacimiento = ClientConfig.get_client_birth_date('allianz')
         if genero is None:
             genero = ClientConfig.CLIENT_GENDER
-        
-        # Limpiar fecha de nacimiento usando Utils
         fecha_limpia = Utils.clean_date(fecha_nacimiento)
-            
         self.logger.info(f"👤 Llenando datos del asegurado - Fecha: {fecha_limpia}, Género: {genero}")
-        
         try:
             # Llenar fecha de nacimiento
             if not await self.fill_in_frame(
@@ -136,7 +124,6 @@ class PlacaPage(BasePage):
             ):
                 self.logger.error("❌ Error al llenar fecha de nacimiento")
                 return False
-            
             # Seleccionar género
             if not await self.select_in_frame(
                 self.SELECTOR_GENERO,
@@ -145,20 +132,7 @@ class PlacaPage(BasePage):
             ):
                 self.logger.error("❌ Error al seleccionar género")
                 return False
-            
-            #self.logger.info("✅ Datos del asegurado llenados correctamente")
-            # Llenar el campo valor asegurado recibido (siempre, nuevo o usado)
-            #valor_asegurado = ClientConfig.VEHICLE_INSURED_VALUE_RECEIVED
-            #self.logger.info(f"💵 Llenando campo valor asegurado con '{valor_asegurado}'")
-            #if not await self.fill_in_frame(
-            #    self.SELECTOR_INPUT_VALOR_ASEGURADO,
-            #    valor_asegurado,
-            #    "valor asegurado"
-            #):
-            #    self.logger.error("❌ Error al llenar campo valor asegurado")
-            #    return False
-            #return True
-            
+            return True
         except Exception as e:
             self.logger.error(f"❌ Error al llenar datos del asegurado: {e}")
             return False
@@ -377,9 +351,13 @@ class PlacaPage(BasePage):
                     num_cotizacion = m.group(1)
                 self.logger.info(f"[EXTRACCIÓN] Número de cotización: {num_cotizacion}")
 
-                # 2. Autos Esencial (modalidad_1_0_primaRecibo)
-                autos_esencial = await self._get_input_value_by_id(frame, "modalidad_1_0_primaRecibo")
+                # 2. Autos Esencial (modalidad_0_0_primaRecibo)
+                autos_esencial = await self._get_input_value_by_id(frame, "modalidad_0_0_primaRecibo")
                 self.logger.info(f"[EXTRACCIÓN] Autos Esencial: {autos_esencial}")
+
+                # 2b. Autos Esencial + Totales (modalidad_1_0_primaRecibo)
+                autos_esencial_totales = await self._get_input_value_by_id(frame, "modalidad_1_0_primaRecibo")
+                self.logger.info(f"[EXTRACCIÓN] Autos Esencial + Totales: {autos_esencial_totales}")
 
                 # 3. Autos Plus (modalidad_2_0_primaRecibo)
                 autos_plus = await self._get_input_value_by_id(frame, "modalidad_2_0_primaRecibo")
@@ -388,8 +366,6 @@ class PlacaPage(BasePage):
                 # 4. Autos Llave en Mano (modalidad_3_0_primaRecibo)
                 autos_llave = await self._get_input_value_by_id(frame, "modalidad_3_0_primaRecibo")
                 self.logger.info(f"[EXTRACCIÓN] Autos Llave en Mano: {autos_llave}")
-
-                # Si necesitas el valor de "Autos Esencial + Totales", puedes agregar lógica similar aquí si hay un campo específico
             except Exception as e:
                 self.logger.error(f"❌ Error extrayendo valores de la página: {e}")
             # Paso 10: Esperar y hacer clic en "Estudio de Seguro"
