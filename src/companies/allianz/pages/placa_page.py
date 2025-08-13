@@ -10,6 +10,8 @@ from ....config.client_config import ClientConfig
 from .fasecolda_page import FasecoldaPage
 
 class PlacaPage(BasePage):
+    # Selector para el input de valor asegurado en el iframe
+    SELECTOR_INPUT_VALOR_ASEGURADO = 'input[name="DatosVehiculoIndividualBean$valorAsegurado"]'
     async def _get_input_value_by_id(self, frame, input_id):
         """Obtiene el valor de un input por su id dentro del frame dado."""
         try:
@@ -144,8 +146,18 @@ class PlacaPage(BasePage):
                 self.logger.error("❌ Error al seleccionar género")
                 return False
             
-            self.logger.info("✅ Datos del asegurado llenados correctamente")
-            return True
+            #self.logger.info("✅ Datos del asegurado llenados correctamente")
+            # Llenar el campo valor asegurado recibido (siempre, nuevo o usado)
+            #valor_asegurado = ClientConfig.VEHICLE_INSURED_VALUE_RECEIVED
+            #self.logger.info(f"💵 Llenando campo valor asegurado con '{valor_asegurado}'")
+            #if not await self.fill_in_frame(
+            #    self.SELECTOR_INPUT_VALOR_ASEGURADO,
+            #    valor_asegurado,
+            #    "valor asegurado"
+            #):
+            #    self.logger.error("❌ Error al llenar campo valor asegurado")
+            #    return False
+            #return True
             
         except Exception as e:
             self.logger.error(f"❌ Error al llenar datos del asegurado: {e}")

@@ -13,6 +13,110 @@ from ....shared.fasecolda_extractor import get_global_fasecolda_codes
 from ....shared.utils import Utils
 
 class FasecoldaPage(BasePage):
+    async def select_10_1_smlmv_in_dropdowns(self) -> bool:
+        """Selecciona '10% - 1 SMLMV' en el dropdown de 'Pérdida Parcial' en ambos contenedores (Daños y Hurto)."""
+        self.logger.info("🔽 Seleccionando '10% - 1 SMLMV' en los dropdowns de 'Pérdida Parcial' (Daños y Hurto)...")
+        try:
+            # Buscar todos los labels 'Pérdida Parcial'
+            label_els = await self.page.query_selector_all("label.style-scope.paper-input:has-text('Pérdida Parcial')")
+            if len(label_els) < 2:
+                self.logger.error(f"❌ No se encontraron dos labels 'Pérdida Parcial' (encontrados: {len(label_els)})")
+                return False
+            for idx, label_el in enumerate(label_els[:2]):
+                input_el = await label_el.evaluate_handle("el => el.parentElement.querySelector('input[is=\\'iron-input\\']')")
+                if not input_el:
+                    self.logger.error(f"❌ No se encontró el input para 'Pérdida Parcial' #{idx+1}")
+                    return False
+                await input_el.click()
+                self.logger.info(f"✅ Desplegable 'Pérdida Parcial' #{idx+1} abierto")
+                # Buscar todas las opciones '10% - 1 SMLMV'
+                options = await self.page.query_selector_all("paper-item:has-text('10% - 1 SMLMV')")
+                if not options:
+                    self.logger.error(f"❌ No se encontró opción '10% - 1 SMLMV' en 'Pérdida Parcial' #{idx+1}")
+                    return False
+                # Para el segundo dropdown, elegir la opción que no esté aria-selected='true'
+                option_to_click = None
+                if idx == 0:
+                    option_to_click = options[0]
+                else:
+                    for opt in options:
+                        aria_selected = await opt.get_attribute('aria-selected')
+                        if aria_selected != 'true':
+                            option_to_click = opt
+                            break
+                    if not option_to_click:
+                        option_to_click = options[0]  # fallback
+                await option_to_click.click()
+                self.logger.info(f"✅ Opción '10% - 1 SMLMV' seleccionada en 'Pérdida Parcial' #{idx+1}")
+                await self.page.wait_for_timeout(500)
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ Error seleccionando '10% - 1 SMLMV' en dropdowns de 'Pérdida Parcial': {e}")
+            return False
+    async def process_used_vehicle_plate(self) -> bool:
+        """Flujo especial para vehículos usados: solo ingresar placa y dar clic en la lupa."""
+        self.logger.info("🔄 Proceso especial para vehículo USADO: solo placa y lupa...")
+        try:
+            # Input de placa (input dentro de #placa)
+            plate_selector = self.SELECTORS['form_fields']['plate']
+            lupa_selector = "#placa + paper-icon-button, #placa ~ paper-icon-button, #placa img[src*='ico-buscar'], #placa .style-scope.iron-icon, #placa ~ * img[src*='ico-buscar']"
+            # Llenar placa
+            await self.page.fill(plate_selector, ClientConfig.VEHICLE_PLATE)
+            self.logger.info(f"✅ Placa '{ClientConfig.VEHICLE_PLATE}' ingresada")
+            # Buscar y dar clic en la lupa
+            lupa_clicked = False
+            for sel in lupa_selector.split(","):
+                sel = sel.strip()
+                try:
+                    await self.page.wait_for_selector(sel, timeout=3000)
+                    await self.page.click(sel, timeout=2000)
+                    self.logger.info(f"✅ Clic en lupa con selector: {sel}")
+                    lupa_clicked = True
+                    break
+                except Exception as e:
+                    self.logger.debug(f"No se pudo hacer clic en lupa con {sel}: {e}")
+            if not lupa_clicked:
+                self.logger.error("❌ No se pudo hacer clic en la lupa de placa")
+                return False
+            # Esperar a que aparezca la marca (o algún campo de datos del vehículo)
+            # Inspirado en otros waits: intentar varios selectores y reintentar
+            marca_selectors = [
+                "#marca",  # div o input con id marca
+                "input[ng-reflect-name*='marca']",
+                "#referencia",  # a veces aparece referencia
+                "input[ng-reflect-name*='referencia']",
+                "#modelo",  # año/modelo
+                "input[ng-reflect-name*='modelo']",
+                "#clase",  # clase vehículo
+                "input[ng-reflect-name*='clase']"
+            ]
+            found = False
+            for i in range(10):  # hasta 10 intentos (10s)
+                for sel in marca_selectors:
+                    try:
+                        el = await self.page.query_selector(sel)
+                        if el:
+                            visible = await el.is_visible()
+                            if visible:
+                                self.logger.info(f"✅ Campo de datos detectado: {sel}")
+                                found = True
+                                break
+                    except Exception:
+                        continue
+                if found:
+                    break
+                await self.page.wait_for_timeout(1000)
+            if not found:
+                # Loggear HTML para debug
+                html = await self.page.content()
+                self.logger.error("❌ No se detectó ningún campo de datos del vehículo tras ingresar la placa. Dump HTML para debug:")
+                self.logger.error(html[:2000])
+                return False
+            self.logger.info("✅ Marca o campo de datos detectado, datos del vehículo cargados")
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ Error en flujo de placa usada: {e}")
+            return False
     """Página de manejo de código Fasecolda para Sura."""
     
     # Selectores principales - agrupados por funcionalidad
@@ -585,55 +689,51 @@ class FasecoldaPage(BasePage):
             return False
 
     async def process_prima_and_plan_selection(self) -> dict:
-        """Proceso completo para extraer prima inicial, seleccionar plan clásico y extraer segunda prima."""
+        """Proceso completo para extraer primas y seleccionar plan clásico. En usados, selecciona 10-1 SMLMV y extrae 3 valores."""
         self.logger.info("🔄 Procesando extracción de primas y selección de plan...")
-        
-        results = {'prima_global': None, 'prima_clasico': None, 'success': False}
-        
+        results = {'prima_global': None, 'prima_10_1_1': None, 'prima_10_1_2': None, 'prima_clasico': None, 'success': False}
         try:
             # 1. Extraer prima del Plan Global
             self.logger.info("📊 Extrayendo prima del Plan Global...")
             prima_global = await self.extract_prima_anual_value(max_wait_seconds=20)
-            
             if prima_global is None:
                 self.logger.error("❌ No se pudo extraer la prima del Plan Global")
                 return results
-            
             results['prima_global'] = prima_global
             self.logger.info(f"✅ Prima Plan Global: ${prima_global:,.0f}")
-            
+            # SOLO PARA USADOS: seleccionar 10-1 SMLMV en dos desplegables y extraer valor tras cada uno
+            if ClientConfig.VEHICLE_STATE == 'Usado':
+                if not await self.select_10_1_smlmv_in_dropdowns():
+                    self.logger.error("❌ No se pudo seleccionar '10% - 1 SMLMV' en los desplegables")
+                    return results
+                # Esperar y extraer valor solo después de actualizar ambos dropdowns
+                self.logger.info("📊 Esperando y extrayendo prima tras ambos cambios de 10-1 SMLMV...")
+                prima_10_1 = await self.extract_prima_anual_value(max_wait_seconds=20)
+                results['prima_10_1'] = prima_10_1
+                self.logger.info(f"✅ Prima tras ambos 10-1 SMLMV: ${prima_10_1 if prima_10_1 is not None else 'N/A'}")
             # 2. Cambiar a Plan Autos Clásico
             self.logger.info("🎯 Cambiando a Plan Autos Clásico...")
             if not await self.click_plan_autos_clasico():
                 self.logger.error("❌ No se pudo seleccionar Plan Autos Clásico")
                 return results
-            
             # 3. Manejar modales
             await self.check_and_handle_continuity_modal()
             await self.handle_optional_modal()
-            
             # 4. Extraer prima del Plan Clásico
             self.logger.info("📊 Extrayendo prima del Plan Autos Clásico...")
             prima_clasico = await self.extract_prima_anual_value(max_wait_seconds=20)
-            
+            results['prima_clasico'] = prima_clasico
             if prima_clasico is None:
                 self.logger.error("❌ No se pudo extraer la prima del Plan Autos Clásico")
                 return results
-            
-            results['prima_clasico'] = prima_clasico
             results['success'] = True
-            
-            self.logger.info(f"✅ Prima Plan Autos Clásico: ${prima_clasico:,.0f}")
-            
-            # Validación
-            if prima_global == prima_clasico:
-                self.logger.warning(f"⚠️ Ambas primas tienen el mismo valor (${prima_global:,.0f}). Verificar cambio de plan.")
+            # Mostrar/exportar los 3 valores en usados, 2 en nuevos
+            if ClientConfig.VEHICLE_STATE == 'Usado':
+                self.logger.info(f"✅ Primas usadas - Global: ${prima_global:,.0f}, tras 10-1 SMLMV: ${results['prima_10_1'] if results['prima_10_1'] is not None else 'N/A'}, Clásico: ${prima_clasico:,.0f}")
             else:
                 self.logger.info(f"✅ Primas diferentes - Global: ${prima_global:,.0f}, Clásico: ${prima_clasico:,.0f}")
-            
             self.logger.info("🎉 Proceso de extracción de primas completado exitosamente")
             return results
-            
         except Exception as e:
             self.logger.error(f"❌ Error procesando primas y selección de plan: {e}")
             return results
@@ -641,34 +741,35 @@ class FasecoldaPage(BasePage):
     async def complete_vehicle_information_filling(self) -> dict:
         """Proceso completo para llenar la información adicional del vehículo después del Fasecolda."""
         self.logger.info("📋 Completando información del vehículo...")
-        
         results = {'prima_global': None, 'prima_clasico': None, 'success': False}
-        
         try:
-            # Llenar información del vehículo usando método de clase base
-            vehicle_steps = [
-                (self._select_dropdown_option, ['service_type'], "tipo de servicio"),
-                (self.fill_city, [], "ciudad"),
-                (self.fill_plate, [], "placa"),
-                (self.select_zero_kilometers, [], "cero kilómetros"),
-                (self.trigger_quote_calculation, [], "cálculo de cotización")
-            ]
-            
+            # Para usados, NO volver a llenar la placa (ya se hizo en el flujo especial)
+            if ClientConfig.VEHICLE_STATE == 'Usado':
+                vehicle_steps = [
+                    (self._select_dropdown_option, ['service_type'], "tipo de servicio"),
+                    (self.fill_city, [], "ciudad"),
+                    # No fill_plate ni select_zero_kilometers aquí
+                    (self.trigger_quote_calculation, [], "cálculo de cotización")
+                ]
+            else:
+                vehicle_steps = [
+                    (self._select_dropdown_option, ['service_type'], "tipo de servicio"),
+                    (self.fill_city, [], "ciudad"),
+                    (self.fill_plate, [], "placa"),
+                    (self.select_zero_kilometers, [], "cero kilómetros"),
+                    (self.trigger_quote_calculation, [], "cálculo de cotización")
+                ]
             for step_func, step_args, step_desc in vehicle_steps:
                 if not await step_func(*step_args):
                     self.logger.warning(f"⚠️ No se pudo completar: {step_desc}")
                     return results
-            
             # Procesar extracción de primas
             results = await self.process_prima_and_plan_selection()
-            
             if results['success']:
                 self.logger.info("🎉 Información del vehículo y extracción de primas completada exitosamente")
             else:
                 self.logger.warning("⚠️ Hubo problemas en la extracción de primas")
-            
             return results
-            
         except Exception as e:
             self.logger.error(f"❌ Error completando información del vehículo: {e}")
             return results
@@ -676,25 +777,26 @@ class FasecoldaPage(BasePage):
     async def process_fasecolda_filling(self) -> dict:
         """Proceso completo de obtención y llenado de códigos Fasecolda, información del vehículo y descarga de cotización."""
         self.logger.info("🔍 Procesando llenado de código Fasecolda, información del vehículo y descarga...")
-        
         results = {'prima_global': None, 'prima_clasico': None, 'success': False, 'pdf_downloaded': False}
-        
         try:
-            # Obtener y llenar códigos Fasecolda (solo para vehículos nuevos)
-            codes = await self.get_fasecolda_code()
-            if codes:
-                if not await self.fill_fasecolda_with_retry(codes):
-                    self.logger.warning("⚠️ No se pudieron llenar los códigos Fasecolda")
+            if ClientConfig.VEHICLE_STATE == 'Usado':
+                self.logger.info("🚗 Vehículo USADO: solo se ingresa placa y lupa, sin fasecolda/modelo/clase...")
+                if not await self.process_used_vehicle_plate():
+                    self.logger.error("❌ No se pudo completar el flujo de placa usada")
                     return results
             else:
-                self.logger.info("⏭️ No se obtuvieron códigos Fasecolda (vehículo usado o búsqueda deshabilitada)")
-            
+                # Obtener y llenar códigos Fasecolda (solo para vehículos nuevos)
+                codes = await self.get_fasecolda_code()
+                if codes:
+                    if not await self.fill_fasecolda_with_retry(codes):
+                        self.logger.warning("⚠️ No se pudieron llenar los códigos Fasecolda")
+                        return results
+                else:
+                    self.logger.info("⏭️ No se obtuvieron códigos Fasecolda (vehículo usado o búsqueda deshabilitada)")
             # Completar información del vehículo y extraer primas
             results = await self.complete_vehicle_information_filling()
-            
             if results['success']:
                 self.logger.info("✅ Extracción de primas completada, procediendo con cotización final...")
-                
                 # Completar cotización y descargar PDF
                 if await self.complete_quote_and_download():
                     results['pdf_downloaded'] = True
@@ -703,9 +805,7 @@ class FasecoldaPage(BasePage):
                     self.logger.warning("⚠️ Extracción de primas exitosa pero problemas con descarga de PDF")
             else:
                 self.logger.warning("⚠️ Hubo problemas en el proceso completo")
-            
             return results
-            
         except Exception as e:
             self.logger.error(f"❌ Error procesando llenado de Fasecolda: {e}")
             return results

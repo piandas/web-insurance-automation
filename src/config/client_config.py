@@ -27,6 +27,9 @@ class ClientConfig:
     VEHICLE_BRAND: str = 'Chevrolet'  # Marca del vehículo
     VEHICLE_REFERENCE: str = 'Tracker [2] - utilitario deportivo 4x2'  # Referencia específica
     VEHICLE_FULL_REFERENCE: str = 'CHEVROLET TRACKER [2] LS TP 1200CC T'  # Referencia completa para Fasecolda
+
+    # Valor asegurado recibido (para Allianz, llenar en el input correspondiente)
+    VEHICLE_INSURED_VALUE_RECEIVED: str = '30000000'  # Valor asegurado recibido, formato string como lo espera el input
     
     # PÓLIZA
     POLICY_NUMBER: str = '040007325677'  # Número de póliza común (principalmente para Sura)
