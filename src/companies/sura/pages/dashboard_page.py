@@ -282,12 +282,13 @@ class DashboardPage(BasePage):
         ):
             return False
         
-        # Usar función optimizada para esperar navegación
+        # Usar función optimizada para esperar navegación con timeout aumentado
         cotizacion_url_parts = ["cotizador", "clientes"]
         return await self.wait_for_page_navigation(
             expected_url_parts=cotizacion_url_parts,
-            timeout=15000,
-            description="página de cotización"
+            timeout=30000,  # Incrementado de 15 a 30 segundos
+            description="página de cotización",
+            retry_attempts=2  # Agregar reintentos
         )
 
     async def complete_navigation_flow(

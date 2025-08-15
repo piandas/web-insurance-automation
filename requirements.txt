@@ -8,9 +8,6 @@ playwright==1.48.0
 # Python-dotenv - Manejo de variables de entorno
 python-dotenv==1.0.1
 
-# PyPDF2 - Para extraer texto de archivos PDF
-PyPDF2==3.0.1
-
 # Pandas - Para manipulación de datos y creación de Excel
 pandas==2.2.0
 

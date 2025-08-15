@@ -5,6 +5,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from .logger_factory import LoggerFactory
 from ..shared.fasecolda_extractor import start_global_fasecolda_extraction, cleanup_global_fasecolda_extractor
+from ..shared.global_pause_coordinator import wait_for_global_resume
 
 class AutomationManager:
     """Orquestador principal que maneja múltiples automatizaciones."""
@@ -133,11 +134,14 @@ class AutomationManager:
             await cleanup_global_fasecolda_extractor()
     
     async def _run_single_automation(self, company: str, automation) -> bool:
-        """Ejecuta una sola automatización."""
+        """Ejecuta una sola automatización con manejo de pausas globales."""
         try:
             await automation.launch()
             self.active_automations[company] = automation
-            result = await automation.run_complete_flow()
+            
+            # Crear wrapper para el flujo que incluya pausas globales
+            result = await self._run_automation_with_pause_support(company, automation)
+            
             await automation.close()
             if company in self.active_automations:
                 del self.active_automations[company]
@@ -151,6 +155,33 @@ class AutomationManager:
             if company in self.active_automations:
                 del self.active_automations[company]
             return False
+    
+    async def _run_automation_with_pause_support(self, company: str, automation) -> bool:
+        """Ejecuta la automatización con soporte para pausas globales."""
+        class PauseAwareAutomation:
+            """Wrapper que agrega soporte de pausas globales a cualquier automatización."""
+            
+            def __init__(self, automation_instance, company_name):
+                self.automation = automation_instance
+                self.company = company_name
+                self.logger = LoggerFactory.create_logger(f'{company_name}_pause_aware')
+            
+            async def run_complete_flow(self):
+                """Ejecuta el flujo completo con verificaciones de pausa global."""
+                try:
+                    # Verificar pausa antes de iniciar
+                    await wait_for_global_resume(self.company)
+                    
+                    # Ejecutar el flujo original
+                    return await self.automation.run_complete_flow()
+                    
+                except Exception as e:
+                    self.logger.error(f"❌ Error en flujo de {self.company}: {e}")
+                    return False
+        
+        # Crear el wrapper y ejecutar
+        pause_aware_automation = PauseAwareAutomation(automation, company)
+        return await pause_aware_automation.run_complete_flow()
     
     async def stop_all(self):
         """Detiene todas las automatizaciones activas."""

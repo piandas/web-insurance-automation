@@ -185,60 +185,233 @@ class BasePage:
     async def wait_for_page_navigation(
         self,
         expected_url_parts: List[str] = None,
-        timeout: int = 10000,
-        description: str = "navegación"
+        timeout: int = 20000,  # Incrementado de 10 a 20 segundos
+        description: str = "navegación",
+        retry_attempts: int = 3
     ) -> bool:
         """
-        Espera a que la página navegue a una nueva URL de manera eficiente.
+        Espera a que la página navegue a una nueva URL de manera eficiente con reintentos.
         
         Args:
             expected_url_parts: Partes que deberían estar en la nueva URL
-            timeout: Timeout en milisegundos
+            timeout: Timeout en milisegundos por intento
             description: Descripción para logging
+            retry_attempts: Número de intentos de navegación
             
         Returns:
             True si la navegación fue exitosa, False en caso contrario
         """
-        self.logger.info(f"⏳ Esperando {description}...")
-        
-        try:
-            current_url = self.page.url
-            self.logger.info(f"📍 URL actual: {current_url}")
+        for attempt in range(retry_attempts):
+            if attempt > 0:
+                self.logger.info(f"🔄 Reintentando {description} - Intento {attempt + 1}/{retry_attempts}")
+            else:
+                self.logger.info(f"⏳ Esperando {description}...")
             
-            # Verificación rápida cada 500ms en lugar de esperar todo el timeout
-            max_checks = timeout // 500  # Verificar cada 500ms
-            
-            for check in range(max_checks):
-                await asyncio.sleep(0.5)  # Esperar 500ms
+            try:
+                current_url = self.page.url
+                self.logger.info(f"📍 URL actual: {current_url}")
                 
-                new_url = self.page.url
+                # Verificación rápida cada 500ms en lugar de esperar todo el timeout
+                max_checks = timeout // 500  # Verificar cada 500ms
                 
-                # Verificar si cambió la URL
-                if new_url != current_url:
-                    self.logger.info(f"📍 Nueva URL: {new_url}")
-                    self.logger.info(f"✅ {description} - URL cambió exitosamente en {(check + 1) * 0.5:.1f}s")
+                for check in range(max_checks):
+                    await asyncio.sleep(0.5)  # Esperar 500ms
                     
-                    # Si se especificaron partes esperadas, verificarlas
-                    if expected_url_parts:
-                        for part in expected_url_parts:
-                            if part.lower() in new_url.lower():
-                                self.logger.info(f"✅ {description} - Encontrada parte esperada: {part}")
-                                return True
+                    new_url = self.page.url
+                    
+                    # Verificar si cambió la URL
+                    if new_url != current_url:
+                        self.logger.info(f"📍 Nueva URL: {new_url}")
+                        self.logger.info(f"✅ {description} - URL cambió exitosamente en {(check + 1) * 0.5:.1f}s")
                         
-                        self.logger.warning(f"⚠️ {description} - URL cambió pero no contiene partes esperadas")
-                        return True  # Aún consideramos exitoso el cambio de URL
-                    
-                    return True
-            
-            # Si llegamos aquí, no hubo cambio de URL en el tiempo especificado
-            final_url = self.page.url
-            self.logger.info(f"📍 URL final: {final_url}")
-            self.logger.warning(f"⚠️ {description} - No se detectó cambio de URL después de {timeout/1000}s")
-            return False
+                        # Si se especificaron partes esperadas, verificarlas
+                        if expected_url_parts:
+                            for part in expected_url_parts:
+                                if part.lower() in new_url.lower():
+                                    self.logger.info(f"✅ {description} - Encontrada parte esperada: {part}")
+                                    return True
+                            
+                            self.logger.warning(f"⚠️ {description} - URL cambió pero no contiene partes esperadas")
+                            return True  # Aún consideramos exitoso el cambio de URL
+                        
+                        return True
                 
-        except Exception as e:
-            self.logger.error(f"❌ Error esperando {description}: {e}")
-            return False
+                # Si llegamos aquí, no hubo cambio de URL en el tiempo especificado
+                final_url = self.page.url
+                self.logger.info(f"📍 URL final: {final_url}")
+                self.logger.warning(f"⚠️ {description} - No se detectó cambio de URL después de {timeout/1000}s")
+                
+                # Si es el último intento, fallamos
+                if attempt == retry_attempts - 1:
+                    return False
+                
+                # Esperar un poco antes del siguiente intento
+                await asyncio.sleep(2)
+                    
+            except Exception as e:
+                self.logger.error(f"❌ Error esperando {description} (intento {attempt + 1}): {e}")
+                if attempt == retry_attempts - 1:
+                    return False
+                await asyncio.sleep(2)
+        
+        return False
+
+    async def wait_for_critical_navigation(
+        self,
+        expected_url_parts: List[str] = None,
+        timeout: int = 45000,  # 45 segundos para navegación crítica
+        description: str = "navegación crítica",
+        retry_attempts: int = 3,
+        check_interval: float = 0.5
+    ) -> bool:
+        """
+        Espera navegación crítica con timeouts y reintentos extendidos.
+        Útil para navegaciones que pueden tardar más tiempo debido a procesamiento del servidor.
+        
+        Args:
+            expected_url_parts: Partes que deberían estar en la nueva URL
+            timeout: Timeout en milisegundos por intento (por defecto 45s)
+            description: Descripción para logging
+            retry_attempts: Número de intentos de navegación (por defecto 3)
+            check_interval: Intervalo entre verificaciones en segundos
+            
+        Returns:
+            True si la navegación fue exitosa, False en caso contrario
+        """
+        self.logger.info(f"🔥 Iniciando {description} con timeout extendido de {timeout/1000}s")
+        
+        for attempt in range(retry_attempts):
+            if attempt > 0:
+                self.logger.info(f"🔄 Reintentando {description} - Intento {attempt + 1}/{retry_attempts}")
+                # Actualizar la página antes del reintento
+                try:
+                    await self.page.reload(wait_until="domcontentloaded", timeout=10000)
+                    self.logger.info("🔄 Página recargada antes del reintento")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ No se pudo recargar la página: {e}")
+            else:
+                self.logger.info(f"⏳ Esperando {description}...")
+            
+            try:
+                current_url = self.page.url
+                self.logger.info(f"📍 URL actual: {current_url}")
+                
+                # Verificación con intervalo configurable
+                max_checks = int(timeout // (check_interval * 1000))
+                
+                for check in range(max_checks):
+                    await asyncio.sleep(check_interval)
+                    
+                    new_url = self.page.url
+                    
+                    # Verificar si cambió la URL
+                    if new_url != current_url:
+                        self.logger.info(f"📍 Nueva URL: {new_url}")
+                        elapsed_time = (check + 1) * check_interval
+                        self.logger.info(f"✅ {description} - URL cambió exitosamente en {elapsed_time:.1f}s")
+                        
+                        # Si se especificaron partes esperadas, verificarlas
+                        if expected_url_parts:
+                            for part in expected_url_parts:
+                                if part.lower() in new_url.lower():
+                                    self.logger.info(f"✅ {description} - Encontrada parte esperada: {part}")
+                                    return True
+                            
+                            self.logger.warning(f"⚠️ {description} - URL cambió pero no contiene partes esperadas")
+                            return True  # Aún consideramos exitoso el cambio de URL
+                        
+                        return True
+                
+                # Si llegamos aquí, no hubo cambio de URL en el tiempo especificado
+                final_url = self.page.url
+                self.logger.info(f"📍 URL final: {final_url}")
+                self.logger.warning(f"⚠️ {description} - No se detectó cambio de URL después de {timeout/1000}s")
+                
+                # Si es el último intento, fallamos
+                if attempt == retry_attempts - 1:
+                    return False
+                
+                # Esperar antes del siguiente intento
+                wait_before_retry = 3 + (attempt * 2)  # Espera progresiva
+                self.logger.info(f"⏸️ Esperando {wait_before_retry}s antes del siguiente intento...")
+                await asyncio.sleep(wait_before_retry)
+                    
+            except Exception as e:
+                self.logger.error(f"❌ Error esperando {description} (intento {attempt + 1}): {e}")
+                if attempt == retry_attempts - 1:
+                    return False
+                await asyncio.sleep(3)
+        
+        return False
+
+    async def click_and_wait_navigation(
+        self,
+        selector: str,
+        expected_url_parts: List[str] = None,
+        click_timeout: int = 10000,
+        navigation_timeout: int = 30000,
+        description: str = "clic y navegación",
+        retry_attempts: int = 2
+    ) -> bool:
+        """
+        Realiza un clic y espera a que ocurra navegación con reintentos robustos.
+        
+        Args:
+            selector: Selector del elemento a hacer clic
+            expected_url_parts: Partes esperadas en la nueva URL
+            click_timeout: Timeout para el clic en milisegundos
+            navigation_timeout: Timeout para la navegación en milisegundos
+            description: Descripción para logging
+            retry_attempts: Número de intentos completos
+            
+        Returns:
+            True si el clic y navegación fueron exitosos, False en caso contrario
+        """
+        for attempt in range(retry_attempts):
+            if attempt > 0:
+                self.logger.info(f"🔄 Reintentando {description} - Intento {attempt + 1}/{retry_attempts}")
+                # Esperar un poco antes del reintento
+                await asyncio.sleep(2)
+            
+            try:
+                # Guardar URL actual antes del clic
+                current_url = self.page.url
+                self.logger.info(f"📍 URL antes del clic: {current_url}")
+                
+                # Esperar a que el elemento sea visible y clicable
+                element = self.page.locator(selector)
+                await element.wait_for(state="visible", timeout=click_timeout)
+                await element.wait_for(state="attached", timeout=click_timeout)
+                
+                # Hacer clic
+                await element.click(timeout=click_timeout)
+                self.logger.info(f"✅ Clic en {description} exitoso")
+                
+                # Esperar navegación usando el método mejorado
+                navigation_success = await self.wait_for_page_navigation(
+                    expected_url_parts=expected_url_parts,
+                    timeout=navigation_timeout,
+                    description=f"navegación después de {description}",
+                    retry_attempts=1  # Ya estamos en un bucle de reintentos
+                )
+                
+                if navigation_success:
+                    return True
+                
+                # Si la navegación falló y no es el último intento, continuar
+                if attempt < retry_attempts - 1:
+                    self.logger.warning(f"⚠️ Navegación falló para {description}, reintentando...")
+                    continue
+                
+                return False
+                
+            except Exception as e:
+                self.logger.error(f"❌ Error en {description} (intento {attempt + 1}): {e}")
+                if attempt == retry_attempts - 1:
+                    return False
+                await asyncio.sleep(2)
+        
+        return False
 
     async def select_from_material_dropdown(
         self,

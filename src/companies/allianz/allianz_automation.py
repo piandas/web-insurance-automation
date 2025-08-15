@@ -5,6 +5,7 @@ from typing import Optional
 
 from ...core.base_automation import BaseAutomation
 from ...config.allianz_config import AllianzConfig
+from ...shared.global_pause_coordinator import wait_for_global_resume
 from .pages import LoginPage, DashboardPage, FlotasPage, PlacaPage, FasecoldaPage
 
 class AllianzAutomation(BaseAutomation):
@@ -85,6 +86,42 @@ class AllianzAutomation(BaseAutomation):
             return False
         
         return True
+
+    async def run_complete_flow(self) -> bool:
+        """Ejecuta el flujo completo de automatización de Allianz con soporte de pausas globales."""
+        self.logger.info("🚀 Iniciando flujo completo de Allianz...")
+        
+        try:
+            # Verificar pausa global antes de iniciar
+            await wait_for_global_resume('allianz')
+            
+            # 1. Ejecutar login
+            self.logger.info("🔐 Iniciando flujo de login...")
+            await wait_for_global_resume('allianz')
+            if not await self.execute_login_flow():
+                self.logger.error("❌ Error en el flujo de login")
+                return False
+            
+            # 2. Ejecutar navegación
+            self.logger.info("🧭 Iniciando flujo de navegación...")
+            await wait_for_global_resume('allianz')
+            if not await self.execute_navigation_flow():
+                self.logger.error("❌ Error en el flujo de navegación")
+                return False
+            
+            # 3. Ejecutar cotización
+            self.logger.info("💰 Iniciando flujo de cotización...")
+            await wait_for_global_resume('allianz')
+            if not await self.execute_quote_flow():
+                self.logger.error("❌ Error en el flujo de cotización")
+                return False
+            
+            self.logger.info("🎉 ¡Flujo completo de Allianz completado exitosamente!")
+            return True
+            
+        except Exception as e:
+            self.logger.exception(f"❌ Error en el flujo completo de Allianz: {e}")
+            return False
 
     # Métodos específicos de Allianz (compatibilidad con código existente)
     async def execute_flotas_flow(self) -> bool:

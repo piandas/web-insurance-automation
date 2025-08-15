@@ -163,14 +163,19 @@ class FasecoldaPage(BasePage):
         self.config = SuraConfig()
 
     async def get_fasecolda_code(self) -> Optional[dict]:
-        """Obtiene los códigos Fasecolda desde el extractor global."""
-        self.logger.info("🔍 Obteniendo códigos Fasecolda desde extractor global...")
+        """Obtiene los códigos Fasecolda desde el extractor global o usa el código por defecto."""
+        self.logger.info("🔍 Obteniendo códigos Fasecolda...")
         
         try:
-            # Verificar configuración
-            auto_fetch = ClientConfig.get_company_specific_config('sura').get('auto_fetch_fasecolda', True)
-            if not auto_fetch:
-                self.logger.info("⏭️ Búsqueda automática de Fasecolda deshabilitada")
+            # Verificar si Fasecolda está habilitado globalmente
+            if not ClientConfig.is_fasecolda_enabled():
+                manual_codes = ClientConfig.get_manual_fasecolda_codes()
+                self.logger.info(f"📋 Fasecolda deshabilitado - usando códigos manuales - CF: {manual_codes['cf_code']}, CH: {manual_codes['ch_code']}")
+                return manual_codes
+            
+            # Verificar configuración específica de Sura
+            if not ClientConfig.should_use_fasecolda_for_company('sura'):
+                self.logger.info("⏭️ Búsqueda automática de Fasecolda deshabilitada para Sura")
                 return None
             
             if ClientConfig.VEHICLE_STATE != 'Nuevo':

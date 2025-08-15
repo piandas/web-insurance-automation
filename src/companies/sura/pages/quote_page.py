@@ -264,23 +264,16 @@ class QuotePage(BasePage):
             self.logger.error(f"❌ Error llenando dirección: {e}")
             return False
     async def click_continue(self) -> bool:
-        """Hace clic en el botón Continuar y verifica la navegación."""
+        """Hace clic en el botón Continuar y verifica la navegación usando método robusto."""
         self.logger.info("➡️ Haciendo clic en Continuar...")
-        try:
-            current_url = self.page.url
-            self.logger.info(f"📍 URL actual: {current_url}")
-            
-            await self.page.locator(self.CONTINUAR_BUTTON).click(timeout=5000)
-            self.logger.info("✅ Clic en Continuar exitoso")
-            
-            # Usar función optimizada de navegación de la clase base
-            expected_url_parts = ["cotizadores.sura.com", "Clientes"]
-            return await self.wait_for_page_navigation(
-                expected_url_parts=expected_url_parts,
-                timeout=3000,
-                description="página de Clientes"
-            )
-                
-        except Exception as e:
-            self.logger.error(f"❌ Error haciendo clic en Continuar: {e}")
-            return False
+        
+        # Usar el nuevo método robusto de clic + navegación
+        expected_url_parts = ["cotizadores.sura.com", "Clientes"]
+        return await self.click_and_wait_navigation(
+            selector=self.CONTINUAR_BUTTON,
+            expected_url_parts=expected_url_parts,
+            click_timeout=10000,
+            navigation_timeout=45000,  # 45 segundos para navegación crítica
+            description="botón Continuar hacia página de Clientes",
+            retry_attempts=3  # 3 intentos completos
+        )

@@ -5,6 +5,7 @@ from typing import Optional
 
 from ...core.base_automation import BaseAutomation
 from ...config.sura_config import SuraConfig
+from ...shared.global_pause_coordinator import wait_for_global_resume
 from .pages import LoginPage, DashboardPage, QuotePage, PolicyPage, FasecoldaPage
 
 class SuraAutomation(BaseAutomation):
@@ -135,26 +136,37 @@ class SuraAutomation(BaseAutomation):
             return False
 
     async def run_complete_flow(self) -> bool:
-        """Ejecuta el flujo completo de automatización de Sura."""
+        """Ejecuta el flujo completo de automatización de Sura con soporte de pausas globales."""
         self.logger.info("🚀 Iniciando flujo completo de Sura...")
         
         try:
+            # Verificar pausa global antes de iniciar
+            await wait_for_global_resume('sura')
+            
             # 1. Ejecutar login
+            self.logger.info("🔐 Iniciando flujo de login...")
+            await wait_for_global_resume('sura')
             if not await self.execute_login_flow():
                 self.logger.error("❌ Error en el flujo de login")
                 return False
             
             # 2. Ejecutar navegación
+            self.logger.info("🧭 Iniciando flujo de navegación...")
+            await wait_for_global_resume('sura')
             if not await self.execute_navigation_flow():
                 self.logger.error("❌ Error en el flujo de navegación")
                 return False
             
             # 3. Ejecutar cotización
+            self.logger.info("💰 Iniciando flujo de cotización...")
+            await wait_for_global_resume('sura')
             if not await self.execute_quote_flow():
                 self.logger.error("❌ Error en el flujo de cotización")
                 return False
             
             # 4. Ejecutar consulta de póliza
+            self.logger.info("📋 Iniciando flujo de consulta de póliza...")
+            await wait_for_global_resume('sura')
             if not await self.execute_policy_flow():
                 self.logger.error("❌ Error en el flujo de consulta de póliza")
                 return False

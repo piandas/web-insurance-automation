@@ -30,6 +30,11 @@ class FasecoldaExtractor:
         """
         self.logger.info("🚀 Iniciando extracción de códigos FASECOLDA en paralelo...")
         
+        # Verificar si Fasecolda está habilitado globalmente
+        if not ClientConfig.is_fasecolda_enabled():
+            self.logger.info("⚙️ Fasecolda deshabilitado - usando código por defecto")
+            return asyncio.create_task(self._return_default_codes())
+        
         # Verificar si es necesario extraer códigos
         if not self._should_extract_codes():
             self.logger.info("⏭️ Extracción de códigos FASECOLDA no necesaria")
@@ -77,20 +82,23 @@ class FasecoldaExtractor:
     def _should_extract_codes(self) -> bool:
         """Determina si es necesario extraer códigos FASECOLDA."""
         try:
+            # Verificar configuración global de Fasecolda
+            if not ClientConfig.is_fasecolda_enabled():
+                self.logger.info("⏭️ Búsqueda de códigos FASECOLDA deshabilitada globalmente")
+                return False
+            
             # Verificar configuración general
             if ClientConfig.VEHICLE_STATE != 'Nuevo':
                 self.logger.info(f"⏭️ Vehículo '{ClientConfig.VEHICLE_STATE}' - no requiere código FASECOLDA")
                 return False
             
             # Verificar configuración específica de Sura
-            sura_config = ClientConfig.get_company_specific_config('sura')
-            auto_fetch_sura = sura_config.get('auto_fetch_fasecolda', True)
+            sura_enabled = ClientConfig.should_use_fasecolda_for_company('sura')
             
-            # Verificar configuración específica de Allianz (cuando esté implementada)
-            allianz_config = ClientConfig.get_company_specific_config('allianz')
-            auto_fetch_allianz = allianz_config.get('auto_fetch_fasecolda', False)  # Por defecto False hasta implementar
+            # Verificar configuración específica de Allianz
+            allianz_enabled = ClientConfig.should_use_fasecolda_for_company('allianz')
             
-            if not auto_fetch_sura and not auto_fetch_allianz:
+            if not sura_enabled and not allianz_enabled:
                 self.logger.info("⏭️ Búsqueda automática de FASECOLDA deshabilitada para todas las compañías")
                 return False
             
@@ -112,6 +120,12 @@ class FasecoldaExtractor:
     async def _return_empty_codes(self) -> Optional[Dict[str, str]]:
         """Retorna None para casos donde no se necesita extracción."""
         return None
+    
+    async def _return_default_codes(self) -> Dict[str, str]:
+        """Retorna códigos manuales cuando Fasecolda está deshabilitado."""
+        manual_codes = ClientConfig.get_manual_fasecolda_codes()
+        self.logger.info(f"📋 Usando códigos Fasecolda manuales - CF: {manual_codes['cf_code']}, CH: {manual_codes['ch_code']}")
+        return manual_codes
     
     async def _extract_codes_async(self) -> Optional[Dict[str, str]]:
         """Ejecuta la extracción de códigos de forma asíncrona."""

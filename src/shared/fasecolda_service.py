@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Optional
 from playwright.async_api import Page
+from ..shared.global_pause_coordinator import request_pause_for_fasecolda_selection
 
 # Constantes para configuración
 FASECOLDA_URL = 'https://www.fasecolda.com/guia-de-valores-old/'
@@ -351,6 +352,17 @@ class FasecoldaService:
             ref2 = await ref2_element.inner_text() if ref2_element else ""
             ref3 = await ref3_element.inner_text() if ref3_element else ""
             
+            # Extraer el valor asegurado del h3 dentro de car-value
+            insured_value = ""
+            try:
+                value_element = await container.query_selector('.car-value h3')
+                if value_element:
+                    insured_value = await value_element.inner_text()
+                    insured_value = insured_value.strip()
+            except Exception as e:
+                self.logger.debug(f"⚠️ No se pudo extraer valor asegurado para resultado {index + 1}: {e}")
+                insured_value = "No disponible"
+            
             # Construir referencia completa: BRAND + REF2 + REF3
             result_full_ref = f"{brand} {ref2} {ref3}".strip()
             
@@ -364,6 +376,7 @@ class FasecoldaService:
                 'cf_code': cf_code,
                 'ch_code': ch_code,
                 'full_reference': result_full_ref,
+                'insured_value': insured_value,
                 'score': score
             }
             
@@ -394,9 +407,11 @@ class FasecoldaService:
         return await self._select_best_result(best_match, best_score, result_containers[0])
     
     async def _process_multiple_codes_results(self, result_containers, full_reference: str = None) -> Optional[dict]:
-        """Procesa múltiples resultados y encuentra la mejor coincidencia retornando códigos CF y CH."""
+        """Procesa múltiples resultados con opción de selección manual."""
         self.logger.info(f"🔍 Múltiples resultados, analizando similitudes...")
         
+        # Extraer datos de todos los resultados
+        all_results = []
         best_match = None
         best_score = -1
         
@@ -404,15 +419,50 @@ class FasecoldaService:
             result_data = await self._extract_result_data(container, i, full_reference)
             
             if result_data:
+                all_results.append(result_data)
                 ch_info = f" - CH: {result_data['ch_code']}" if result_data['ch_code'] else ""
-                self.logger.info(f"📝 Resultado {result_data['index']}: CF: {result_data['cf_code']}{ch_info} - {result_data['full_reference']} (Score: {result_data['score']:.2f})")
+                value_info = f" - Valor: {result_data['insured_value']}" if result_data.get('insured_value') else ""
+                self.logger.info(f"📝 Resultado {result_data['index']}: CF: {result_data['cf_code']}{ch_info}{value_info} - {result_data['full_reference']} (Score: {result_data['score']:.2f})")
                 
                 # Verificar si es la mejor coincidencia hasta ahora
                 if result_data['score'] > best_score:
                     best_score = result_data['score']
                     best_match = result_data
         
-        # Determinar el resultado a retornar
+        # Si hay múltiples resultados, permitir selección manual
+        if len(all_results) > 1:
+            # Verificar si el mejor resultado tiene un score suficientemente alto
+            SCORE_THRESHOLD = 0.8
+            if best_score < SCORE_THRESHOLD:
+                # Score bajo, solicitar selección manual
+                self.logger.info(f"⚠️ Score más alto es {best_score:.2f} (< {SCORE_THRESHOLD}), solicitando selección manual...")
+                
+                # Preparar opciones para selección
+                formatted_results = []
+                for result in all_results:
+                    formatted_results.append({
+                        'cf_code': result['cf_code'],
+                        'ch_code': result['ch_code'],
+                        'description': result['full_reference'],
+                        'insured_value': result.get('insured_value', 'No disponible'),
+                        'score': result['score']
+                    })
+                
+                # Solicitar selección manual (pausará todas las automatizaciones)
+                selected_index = await request_pause_for_fasecolda_selection(
+                    company='fasecolda',  # Identificador genérico
+                    options=list(range(1, len(formatted_results) + 1)),
+                    results=formatted_results
+                )
+                
+                # Retornar el resultado seleccionado
+                selected_result = all_results[selected_index]
+                return {
+                    'cf_code': selected_result['cf_code'], 
+                    'ch_code': selected_result['ch_code']
+                }
+        
+        # Si solo hay un resultado o el score es alto, usar lógica automática
         return await self._select_best_codes_result(best_match, best_score, result_containers[0])
     
     async def _select_best_result(self, best_match: dict, best_score: float, first_container) -> str:

@@ -1,5 +1,7 @@
 """Configuración unificada del cliente para todas las aseguradoras."""
 
+from typing import Dict
+
 class ClientConfig:
     """Configuración común del cliente que se usa en todas las aseguradoras."""
     
@@ -7,29 +9,36 @@ class ClientConfig:
     # DATOS QUE SE CAMBIAN FRECUENTEMENTE
     # ==========================================
     
-    VEHICLE_STATE: str = 'Usado'  # Opciones: "Nuevo", "Usado"
+    VEHICLE_STATE: str = 'Nuevo'  # Opciones: "Nuevo", "Usado"
     
     # DATOS PERSONALES DEL CLIENTE (cambiar para cada cliente)
-    CLIENT_DOCUMENT_NUMBER: str = '1020422674'  # Número de documento del cliente
+    CLIENT_DOCUMENT_NUMBER: str = '71750823'  # Número de documento del cliente
     CLIENT_FIRST_NAME: str = 'SERGIO'
     CLIENT_SECOND_NAME: str = 'ALEXIS'
     CLIENT_FIRST_LASTNAME: str = 'AREIZA'
     CLIENT_SECOND_LASTNAME: str = 'LOAIZA'
-    CLIENT_BIRTH_DATE: str = '1989-06-01'  # Formato YYYY-MM-DD 
+    CLIENT_BIRTH_DATE: str = '1974-07-06'  # Formato YYYY-DD-MM
     CLIENT_GENDER: str = 'M'  # M = Masculino, F = Femenino
   
     CLIENT_CITY: str = 'MEDELLIN'           # Ciudad del cliente 
     CLIENT_DEPARTMENT: str = 'ANTIOQUIA'    # Departamento
     
     # DATOS DEL VEHÍCULO (cambiar para cada vehículo)
-    VEHICLE_PLATE: str = 'IOS190'  # Placa del vehículo
-    VEHICLE_MODEL_YEAR: str = '2025'  # Año del modelo
-    VEHICLE_BRAND: str = 'Chevrolet'  # Marca del vehículo
-    VEHICLE_REFERENCE: str = 'Tracker [2] - utilitario deportivo 4x2'  # Referencia específica
-    VEHICLE_FULL_REFERENCE: str = 'CHEVROLET TRACKER [2] LS TP 1200CC T'  # Referencia completa para Fasecolda
+    VEHICLE_PLATE: str = 'GEN294'  # Placa del vehículo
+    VEHICLE_MODEL_YEAR: str = '2026'  # Año del modelo
+    VEHICLE_BRAND: str = 'Mazda'  # Marca del vehículo
+    VEHICLE_REFERENCE: str = 'Cx50 - utilitario deportivo 4x4'  # Referencia específica
+    VEHICLE_FULL_REFERENCE: str = 'MAZDA CX-50 GRAND TOURING'  # Referencia completa para Fasecolda
 
     # Valor asegurado recibido (para Allianz, llenar en el input correspondiente)
     VEHICLE_INSURED_VALUE_RECEIVED: str = '30000000'  # Valor asegurado recibido, formato string como lo espera el input
+    
+    # CONFIGURACIÓN DE FASECOLDA
+    ENABLE_FASECOLDA_SEARCH: bool = True  # Habilitar/deshabilitar búsqueda automática de códigos Fasecolda
+    
+    # Códigos Fasecolda manuales (usados cuando la búsqueda automática está deshabilitada)
+    MANUAL_CF_CODE: str = '20900024001'  # Código CF manual
+    MANUAL_CH_CODE: str = '20900024001'  # Código CH manual (puede ser diferente al CF)
     
     # PÓLIZA
     POLICY_NUMBER: str = '040007325677'  # Número de póliza común (principalmente para Sura)
@@ -40,7 +49,7 @@ class ClientConfig:
     
     
     # ==========================================
-    # ⚙️ CONFIGURACIONES POR DEFECTO (rara vez se cambian)
+    # ⚙️ CONFIGURACIONES POR DEFECTO
     # ==========================================
     
     # Tipos de documento (formatos diferentes por aseguradora)
@@ -64,12 +73,12 @@ class ClientConfig:
     # Configuraciones específicas por aseguradora
     SURA_SPECIFIC = {
         'selected_plan': 'Plan Autos Global',  # Plan seleccionado por defecto
-        'auto_fetch_fasecolda': True,  # Buscar código Fasecolda automáticamente
+        'auto_fetch_fasecolda': True,  # Buscar código Fasecolda automáticamente (respeta configuración global)
     }
     
     ALLIANZ_SPECIFIC = {
         'ramo_seguro': 'Livianos Particulares',  # Ramo de seguro
-        'auto_fetch_fasecolda': True,  # Buscar código Fasecolda automáticamente
+        'auto_fetch_fasecolda': True,  # Buscar código Fasecolda automáticamente (respeta configuración global)
     }
     
     # ==========================================
@@ -145,3 +154,94 @@ class ClientConfig:
         
         full_name = ' '.join(filter(None, names + lastnames))
         return full_name.strip()
+    
+    @classmethod
+    def is_fasecolda_enabled(cls) -> bool:
+        """
+        Verifica si la búsqueda de códigos Fasecolda está habilitada.
+        
+        Returns:
+            bool: True si está habilitada, False si no
+        """
+        return cls.ENABLE_FASECOLDA_SEARCH
+    
+    @classmethod
+    def get_default_fasecolda_code(cls) -> str:
+        """
+        Obtiene el código CF manual (método mantenido por compatibilidad).
+        
+        Returns:
+            str: Código CF manual
+        """
+        return cls.MANUAL_CF_CODE
+    
+    @classmethod
+    def get_manual_cf_code(cls) -> str:
+        """
+        Obtiene el código CF manual configurado.
+        
+        Returns:
+            str: Código CF manual
+        """
+        return cls.MANUAL_CF_CODE
+    
+    @classmethod
+    def get_manual_ch_code(cls) -> str:
+        """
+        Obtiene el código CH manual configurado.
+        
+        Returns:
+            str: Código CH manual
+        """
+        return cls.MANUAL_CH_CODE
+    
+    @classmethod
+    def get_manual_fasecolda_codes(cls) -> Dict[str, str]:
+        """
+        Obtiene ambos códigos Fasecolda manuales en el formato esperado por el sistema.
+        
+        Returns:
+            Dict[str, str]: Diccionario con códigos CF y CH manuales
+        """
+        return {
+            'cf_code': cls.MANUAL_CF_CODE,
+            'ch_code': cls.MANUAL_CH_CODE
+        }
+    
+    @classmethod
+    def should_use_fasecolda_for_company(cls, company: str) -> bool:
+        """
+        Determina si se debe usar Fasecolda para una compañía específica.
+        Combina la configuración global con la configuración específica de la compañía.
+        
+        Args:
+            company: Nombre de la compañía ('sura', 'allianz')
+            
+        Returns:
+            bool: True si se debe usar Fasecolda, False si no
+        """
+        # Primero verificar la configuración global
+        if not cls.is_fasecolda_enabled():
+            return False
+            
+        # Luego verificar la configuración específica de la compañía
+        company_config = cls.get_company_specific_config(company)
+        return company_config.get('auto_fetch_fasecolda', True)
+    
+    @classmethod
+    def get_fasecolda_code_for_company(cls, company: str) -> Dict[str, str]:
+        """
+        Obtiene los códigos Fasecolda a usar para una compañía.
+        Si Fasecolda está deshabilitado, devuelve los códigos manuales.
+        
+        Args:
+            company: Nombre de la compañía ('sura', 'allianz')
+            
+        Returns:
+            Dict[str, str]: Códigos Fasecolda a usar (manuales si está deshabilitado, None si debe buscar automáticamente)
+        """
+        if not cls.should_use_fasecolda_for_company(company):
+            return cls.get_manual_fasecolda_codes()
+        
+        # Si está habilitado, devolver None para indicar que se debe buscar automáticamente
+        return None

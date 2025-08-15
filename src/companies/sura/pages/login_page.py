@@ -5,6 +5,7 @@ from ....shared.base_page import BasePage
 from ....config.sura_config import SuraConfig
 from ....config.client_config import ClientConfig
 from ....core.constants import Constants
+from ....shared.global_pause_coordinator import request_pause_for_mfa, resume_after_mfa
 
 class LoginPage(BasePage):
     """Página de login con sus selectores y métodos específicos para Sura."""
@@ -349,9 +350,13 @@ class LoginPage(BasePage):
             return False
 
     async def _handle_mfa(self) -> bool:
-        """Maneja el proceso de autenticación de dos factores con intervención manual."""
+        """Maneja el proceso de autenticación de dos factores con pausa global."""
         self.logger.info("📱 Iniciando proceso de MFA...")
-        self.logger.info("⏸️ PAUSA PARA INTERVENCIÓN MANUAL")
+        
+        # Solicitar pausa global para todas las automatizaciones
+        await request_pause_for_mfa('sura')
+        
+        self.logger.info("⏸️ PAUSA GLOBAL ACTIVADA - TODAS LAS AUTOMATIZACIONES PAUSADAS")
         self.logger.info("=" * 70)
         self.logger.info("🔔 ACCIÓN REQUERIDA:")
         self.logger.info("   1. Ingresa manualmente el código MFA en el navegador")
@@ -378,6 +383,9 @@ class LoginPage(BasePage):
                     self.logger.info(f"📍 URL cambió a: {current_url}")
                     if "asesores.segurossura.com.co" in current_url:
                         self.logger.info("✅ MFA completado exitosamente")
+                        
+                        # Reanudar todas las automatizaciones
+                        await resume_after_mfa('sura')
                         self.logger.info("🎉 Si marcaste 'recordar dispositivo', no volverá a pedirse por 8 días")
                         return True
                     else:
@@ -388,6 +396,7 @@ class LoginPage(BasePage):
                         if "asesores.segurossura.com.co" in final_url:
                             self.logger.info("✅ MFA completado exitosamente tras verificación adicional")
                             self.logger.info("🎉 Si marcaste 'recordar dispositivo', no volverá a pedirse por 8 días")
+                            await resume_after_mfa('sura')
                             return True
                 
                 # Mostrar progreso cada 30 segundos
@@ -396,10 +405,14 @@ class LoginPage(BasePage):
                     self.logger.info(f"⏳ Esperando intervención manual... ({minutes_elapsed} min transcurridos)")
             
             self.logger.error("❌ Tiempo de espera agotado para MFA (5 minutos)")
+            # Reanudar automatizaciones incluso si falló
+            await resume_after_mfa('sura')
             return False
             
         except Exception as e:
             self.logger.exception(f"❌ Error durante el proceso de MFA: {e}")
+            # Reanudar automatizaciones incluso si hubo error
+            await resume_after_mfa('sura')
             return False
 
     async def login(self, usuario: str, contrasena: str) -> bool:

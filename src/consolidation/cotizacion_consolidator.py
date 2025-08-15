@@ -11,7 +11,6 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
 from pathlib import Path
-import PyPDF2
 import pandas as pd
 
 from ..config.client_config import ClientConfig
@@ -164,21 +163,6 @@ class CotizacionConsolidator:
         
         self.logger.info(f"PDF más reciente de Allianz: {pdf_files[0].name}")
         return pdf_files[0]
-    
-    def extract_text_from_pdf(self, pdf_path: Path) -> str:
-        """Extrae texto de un archivo PDF."""
-        try:
-            # with open(pdf_path, 'rb') as file:
-            #     pdf_reader = PyPDF2.PdfReader(file)
-            #     text = ""
-            #     for page in pdf_reader.pages:
-            #         text += page.extract_text()
-            #     return text
-            self.logger.warning("PyPDF2 no disponible - extracción de PDF deshabilitada temporalmente")
-            return ""
-        except Exception as e:
-            self.logger.error(f"Error extrayendo texto del PDF {pdf_path}: {e}")
-            return ""
     
     def extract_sura_plans_from_logs(self) -> Dict[str, str]:
         """Extrae los valores de los planes de Sura desde los logs de la automatización, incluyendo Pérdida Parcial 10-1 SMLMV."""
