@@ -1,11 +1,13 @@
 """Extractor de códigos FASECOLDA que se ejecuta en paralelo al inicio."""
 
+import os
 import asyncio
 from typing import Optional, Dict
 from playwright.async_api import async_playwright, Playwright, Browser, Page
 
 from .fasecolda_service import FasecoldaService
 from ..config.client_config import ClientConfig
+from ..config.base_config import BaseConfig
 from ..core.logger_factory import LoggerFactory
 
 
@@ -134,13 +136,35 @@ class FasecoldaExtractor:
             
             # Inicializar Playwright
             self.playwright = await async_playwright().start()
+            
+            # Determinar configuración de headless
+            gui_show_browser = os.getenv('GUI_SHOW_BROWSER', 'False').lower() == 'true'
+            should_hide = not gui_show_browser  # Si GUI dice mostrar = False, ocultar = True
+            
+            # Configurar argumentos del navegador
+            browser_args = [
+                '--disable-blink-features=AutomationControlled',
+                '--disable-dev-shm-usage',
+                '--no-sandbox'
+            ]
+            
+            # Si debe estar oculto, usar ventana minimizada en lugar de headless
+            if should_hide:
+                browser_args.extend([
+                    '--start-minimized',
+                    '--window-position=-32000,-32000',  # Mover fuera de la pantalla
+                    '--window-size=1,1',  # Tamaño mínimo
+                    '--disable-background-timer-throttling',  # Evita que se ralenticen los timers
+                    '--disable-renderer-backgrounding',  # Evita que el renderer se pause
+                    '--disable-backgrounding-occluded-windows'  # No pausar ventanas ocultas
+                ])
+                headless_mode = False  # No usar headless real para evitar problemas
+            else:
+                headless_mode = False
+            
             self.browser = await self.playwright.chromium.launch(
-                headless=self.headless,  # Usar el mismo modo que las automatizaciones
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--disable-dev-shm-usage',
-                    '--no-sandbox'
-                ]
+                headless=headless_mode,
+                args=browser_args
             )
             self.page = await self.browser.new_page()
             

@@ -122,7 +122,7 @@ Ejemplos de uso:
         if parsed_args.password:
             automation_kwargs['contrasena'] = parsed_args.password
         if parsed_args.headless:
-            automation_kwargs['headless'] = True
+            automation_kwargs['headless'] = True  # Modo oculto/minimizado, no verdadero headless
         
         try:
             print(f"🚀 Iniciando automatización para: {', '.join(parsed_args.companies)}")

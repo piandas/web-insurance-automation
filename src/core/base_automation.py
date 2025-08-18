@@ -7,6 +7,7 @@ from typing import Optional
 from playwright.async_api import async_playwright, Browser, Page, Playwright
 
 from .logger_factory import LoggerFactory
+from ..config.base_config import BaseConfig
 
 class BaseAutomation(ABC):
     """Clase base abstracta que define la interfaz común para todas las automatizaciones."""
@@ -21,7 +22,7 @@ class BaseAutomation(ABC):
         self.company = company.lower()
         self.usuario = usuario
         self.contrasena = contrasena
-        self.headless = headless if headless is not None else True
+        self.headless = headless if headless is not None else False  # Por defecto False para evitar problemas
         
         # Playwright
         self.playwright: Optional[Playwright] = None
@@ -107,23 +108,64 @@ class BaseAutomation(ABC):
                 self._clean_browser_profile(user_data_dir)
                 
                 # Crear contexto persistente en lugar de navegador temporal
+                # Usar ventanas minimizadas en lugar de headless para evitar problemas
+                browser_args = [
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-dev-shm-usage',
+                    '--no-sandbox'
+                ]
+                
+                # Si debe estar oculto, usar ventana minimizada en lugar de headless
+                if self.headless:
+                    browser_args.extend([
+                        '--start-minimized',
+                        '--window-position=-32000,-32000',  # Mover fuera de la pantalla
+                        '--window-size=1,1',  # Tamaño mínimo
+                        '--disable-background-timer-throttling',  # Evita que se ralenticen los timers
+                        '--disable-renderer-backgrounding',  # Evita que el renderer se pause
+                        '--disable-backgrounding-occluded-windows'  # No pausar ventanas ocultas
+                    ])
+                    headless_mode = False  # No usar headless real para evitar problemas
+                else:
+                    headless_mode = False
+                
                 self.browser = await self.playwright.chromium.launch_persistent_context(
                     user_data_dir=user_data_dir,
-                    headless=self.headless,
-                    args=[
-                        '--disable-blink-features=AutomationControlled',
-                        '--disable-dev-shm-usage',
-                        '--no-sandbox'
-                    ]
+                    headless=headless_mode,
+                    args=browser_args
                 )
                 # En contexto persistente, la página ya está disponible
                 if len(self.browser.pages) > 0:
                     self.page = self.browser.pages[0]
                 else:
                     self.page = await self.browser.new_page()
+                    
             else:
                 # Para otras compañías, usar navegador temporal normal
-                self.browser = await self.playwright.chromium.launch(headless=self.headless)
+                browser_args = [
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-dev-shm-usage',
+                    '--no-sandbox'
+                ]
+                
+                # Si debe estar oculto, usar ventana minimizada en lugar de headless
+                if self.headless:
+                    browser_args.extend([
+                        '--start-minimized',
+                        '--window-position=-32000,-32000',  # Mover fuera de la pantalla
+                        '--window-size=1,1',  # Tamaño mínimo
+                        '--disable-background-timer-throttling',  # Evita que se ralenticen los timers
+                        '--disable-renderer-backgrounding',  # Evita que el renderer se pause
+                        '--disable-backgrounding-occluded-windows'  # No pausar ventanas ocultas
+                    ])
+                    headless_mode = False  # No usar headless real para evitar problemas
+                else:
+                    headless_mode = False
+                
+                self.browser = await self.playwright.chromium.launch(
+                    headless=headless_mode,
+                    args=browser_args
+                )
                 self.page = await self.browser.new_page()
             
             self.logger.info("✅ Navegador lanzado exitosamente")

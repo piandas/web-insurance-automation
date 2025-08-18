@@ -1,6 +1,7 @@
 """Automatización específica para Allianz."""
 
 import asyncio
+import os
 from typing import Optional
 
 from ...core.base_automation import BaseAutomation
@@ -17,6 +18,17 @@ class AllianzAutomation(BaseAutomation):
         contrasena: Optional[str] = None, 
         headless: Optional[bool] = None
     ):
+        # Determinar el valor de headless basado en variables de entorno de la GUI
+        if headless is None:
+            # Verificar si la GUI está controlando la visibilidad
+            gui_show_browser = os.getenv('GUI_SHOW_BROWSER', 'False').lower() == 'true'
+            if gui_show_browser:
+                # Si la GUI dice que muestre las ventanas, mostrar normalmente
+                headless = False
+            else:
+                # Si la GUI dice que las oculte, usar modo "oculto" (no verdadero headless)
+                headless = True  # Esto activa el modo minimizado/oculto, no headless real
+        
         super().__init__('allianz', usuario, contrasena, headless)
         
         # Configuración específica de Allianz

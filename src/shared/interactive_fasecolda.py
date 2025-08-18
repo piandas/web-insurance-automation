@@ -12,7 +12,22 @@ from ..core.logger_factory import LoggerFactory
 
 
 class InteractiveFasecoldaSelector:
-    """Servicio interactivo de Fasecolda que permite selección manual de opciones."""
+    """Servicio interactivo para búsqueda de códigos Fasecolda."""
+
+import os
+import asyncio
+import re
+from typing import Optional, Dict, List, Tuple
+from playwright.async_api import Page, Browser, async_playwright
+
+from .fasecolda_service import FasecoldaService
+from ..config.client_config import ClientConfig
+from ..config.base_config import BaseConfig
+from ..core.logger_factory import LoggerFactory
+
+
+class InteractiveFasecoldaSelector:
+    """Servicio interactivo para búsqueda de códigos Fasecolda."""
     
     def __init__(self, headless: bool = False):
         self.logger = LoggerFactory.create_logger('interactive_fasecolda')
@@ -51,9 +66,31 @@ class InteractiveFasecoldaSelector:
         """Inicializa el navegador y la página."""
         try:
             self.playwright = await async_playwright().start()
+            
+            # Determinar configuración de headless
+            gui_show_browser = os.getenv('GUI_SHOW_BROWSER', 'False').lower() == 'true'
+            should_hide = not gui_show_browser  # Si GUI dice mostrar = False, ocultar = True
+            
+            # Configurar argumentos del navegador
+            browser_args = ['--no-sandbox', '--disable-dev-shm-usage']
+            
+            # Si debe estar oculto, usar ventana minimizada en lugar de headless
+            if should_hide:
+                browser_args.extend([
+                    '--start-minimized',
+                    '--window-position=-32000,-32000',  # Mover fuera de la pantalla
+                    '--window-size=1,1',  # Tamaño mínimo
+                    '--disable-background-timer-throttling',  # Evita que se ralenticen los timers
+                    '--disable-renderer-backgrounding',  # Evita que el renderer se pause
+                    '--disable-backgrounding-occluded-windows'  # No pausar ventanas ocultas
+                ])
+                headless_mode = False  # No usar headless real para evitar problemas
+            else:
+                headless_mode = False
+            
             self.browser = await self.playwright.chromium.launch(
-                headless=self.headless,
-                args=['--no-sandbox', '--disable-dev-shm-usage']
+                headless=headless_mode,
+                args=browser_args
             )
             self.page = await self.browser.new_page()
             

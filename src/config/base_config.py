@@ -12,6 +12,7 @@ class BaseConfig:
     
     # Configuraciones generales desde .env
     HEADLESS: bool = os.getenv('HEADLESS', 'False').lower() == 'true'
+    MINIMIZED: bool = os.getenv('MINIMIZED', 'True').lower() == 'true'
     TIMEOUT: int = int(os.getenv('TIMEOUT', '30000'))
     
     # Directorio base del proyecto
