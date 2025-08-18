@@ -82,14 +82,24 @@ class DashboardPage(BasePage):
     async def navigate_to_cotizador(self) -> bool:
         """Navega al cotizador de Sura y abre la nueva pestaña."""
         self.logger.info("💰 Navegando al cotizador de Sura...")
-        max_attempts = 20
+        max_attempts = 8  # Reducido de 20 a 8
+        
+        # Primero verificar que estemos en una página válida de Sura
+        try:
+            current_url = self.page.url
+            if "asesores.segurossura.com.co" not in current_url:
+                self.logger.error(f"❌ No estamos en la página de Sura. URL actual: {current_url}")
+                return False
+        except Exception as e:
+            self.logger.error(f"❌ Error verificando URL actual: {e}")
+            return False
         
         for attempt in range(1, max_attempts + 1):
             try:
                 self.logger.info(f"🔄 Intento {attempt} de {max_attempts} para encontrar el cotizador...")
                 
                 for sel in self.COTIZADOR_SELECTORS:
-                    if await self.is_visible_safe(sel, timeout=2000):
+                    if await self.is_visible_safe(sel, timeout=3000):  # Timeout más corto
                         self.logger.info(f"✅ Cotizador encontrado con selector: {sel}")
                         
                         # Esperar un poco para asegurar que el elemento esté completamente interactivo

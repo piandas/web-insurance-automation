@@ -23,9 +23,11 @@ SELECTORS = {
 }
 
 TIMEOUTS = {
-    'page_load': 10000,
-    'field_enable': 3000,  # Reducido de 5000 a 3000ms
-    'cf_search': 15000     # Aumentado para dar más tiempo a la búsqueda
+    'page_load': 10000,    # Reducido para detección más rápida
+    'field_enable': 5000,  # Tiempo para que se habiliten los campos
+    'cf_search': 15000,    # Tiempo para búsqueda de resultados
+    'retry_interval': 2000, # Intervalo entre reintentos (2 segundos)
+    'max_retries': 5       # Máximo 5 reintentos (10 segundos total)
 }
 
 SCORE_THRESHOLD = 0.3
@@ -108,11 +110,31 @@ class FasecoldaService:
             return None
     
     async def _navigate_to_fasecolda(self):
-        """Navega a la página de Fasecolda."""
+        """Navega a la página de Fasecolda con reintentos."""
         self.logger.info("🌐 Navegando a Fasecolda...")
-        await self.page.goto(FASECOLDA_URL)
-        await self.page.wait_for_load_state('networkidle')
-        self.logger.info("✅ Página de Fasecolda cargada")
+        
+        for attempt in range(1, TIMEOUTS['max_retries'] + 1):
+            try:
+                self.logger.info(f"🔄 Intento {attempt}/{TIMEOUTS['max_retries']} - Navegando a Fasecolda...")
+                
+                await self.page.goto(FASECOLDA_URL, timeout=TIMEOUTS['page_load'])
+                await self.page.wait_for_load_state('networkidle', timeout=TIMEOUTS['page_load'])
+                
+                # Verificar que la página cargó correctamente buscando el selector de categoría
+                await self.page.wait_for_selector(SELECTORS['category'], timeout=5000)
+                
+                self.logger.info("✅ Página de Fasecolda cargada correctamente")
+                return
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ Intento {attempt} falló: {e}")
+                
+                if attempt < TIMEOUTS['max_retries']:
+                    self.logger.info(f"⏳ Esperando {TIMEOUTS['retry_interval']/1000} segundos antes del siguiente intento...")
+                    await asyncio.sleep(TIMEOUTS['retry_interval'] / 1000)
+                else:
+                    self.logger.error(f"❌ Error navegando a Fasecolda después de {TIMEOUTS['max_retries']} intentos")
+                    raise
         
     async def _fill_vehicle_form(
         self,
@@ -122,35 +144,43 @@ class FasecoldaService:
         brand: str,
         reference: str
     ) -> bool:
-        """Llena el formulario con los datos del vehículo usando el método optimizado."""
+        """Llena el formulario con los datos del vehículo usando el método optimizado con reintentos."""
         self.logger.info("📝 Llenando formulario de vehículo...")
         
         try:
-            # Configuración de campos: (nombre, emoji, selector, valor, wait_enabled)
+            # Configuración de campos: (nombre, emoji, selector, valor, wait_enabled, is_category)
             fields = [
-                ("categoría", "📋", SELECTORS['category'], category, False),
-                ("estado", "🏷️", SELECTORS['state'], state, True),
-                ("modelo", "📅", SELECTORS['model'], model_year, True),
-                ("marca", "🚗", SELECTORS['brand'], brand, True),
-                ("referencia", "🔍", SELECTORS['reference'], reference, True),
+                ("categoría", "📋", SELECTORS['category'], category, False, True),
+                ("estado", "🏷️", SELECTORS['state'], state, True, False),
+                ("modelo", "📅", SELECTORS['model'], model_year, True, False),
+                ("marca", "🚗", SELECTORS['brand'], brand, True, False),
+                ("referencia", "🔍", SELECTORS['reference'], reference, True, False),
             ]
             
-            for field_name, emoji, selector, value, wait_enabled in fields:
+            for field_name, emoji, selector, value, wait_enabled, is_category in fields:
                 self.logger.info(f"{emoji} Seleccionando {field_name}: {value}")
                 
-                # Esperar a que el campo se habilite si es necesario
-                if wait_enabled:
-                    await self._wait_for_field_enabled(selector)
+                # Para la categoría, usar reintentos especiales
+                if is_category:
+                    success = await self._select_category_with_retries(selector, value, field_name)
+                    if not success:
+                        self.logger.error(f"❌ No se pudo seleccionar {field_name} después de múltiples intentos")
+                        return False
+                else:
+                    # Para otros campos, usar lógica normal
+                    if wait_enabled:
+                        await self._wait_for_field_enabled(selector)
+                    
+                    # Obtener el valor para el select
+                    field_value = await self._get_select_value(selector, value, field_name)
+                    
+                    if field_value is None:
+                        self.logger.warning(f"⚠️ No se encontró {field_name}: {value} - continuando...")
+                        continue  # Continuar con el siguiente campo en lugar de fallar
+                    
+                    # Seleccionar el valor
+                    await self._select_by_value(selector, field_value)
                 
-                # Obtener el valor para el select
-                field_value = await self._get_select_value(selector, value, field_name)
-                
-                if field_value is None:
-                    self.logger.warning(f"⚠️ No se encontró {field_name}: {value} - continuando...")
-                    continue  # Continuar con el siguiente campo en lugar de fallar
-                
-                # Seleccionar el valor
-                await self._select_by_value(selector, field_value)
                 await asyncio.sleep(SLEEP_DURATION)
             
             self.logger.info("✅ Formulario llenado correctamente")
@@ -161,6 +191,44 @@ class FasecoldaService:
             import traceback
             traceback.print_exc()
             return False
+    
+    async def _select_category_with_retries(self, selector: str, category: str, field_name: str) -> bool:
+        """Selecciona la categoría con reintentos robustos."""
+        for attempt in range(1, TIMEOUTS['max_retries'] + 1):
+            try:
+                self.logger.info(f"🔄 Intento {attempt}/{TIMEOUTS['max_retries']} - Seleccionando {field_name}: {category}")
+                
+                # Esperar a que el selector exista
+                await self.page.wait_for_selector(selector, timeout=5000)
+                
+                # Obtener el valor para el select
+                field_value = await self._get_select_value(selector, category, field_name)
+                
+                if field_value is None:
+                    raise Exception(f"No se encontró la opción {category}")
+                
+                # Seleccionar el valor
+                await self._select_by_value(selector, field_value)
+                
+                # Verificar que la selección funcionó
+                selected_value = await self.page.evaluate(f"document.querySelector('{selector}').value")
+                if selected_value == field_value:
+                    self.logger.info(f"✅ {field_name} seleccionado correctamente: {category}")
+                    return True
+                else:
+                    raise Exception(f"La selección no se aplicó correctamente")
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ Intento {attempt} falló para {field_name}: {e}")
+                
+                if attempt < TIMEOUTS['max_retries']:
+                    self.logger.info(f"⏳ Esperando {TIMEOUTS['retry_interval']/1000} segundos antes del siguiente intento...")
+                    await asyncio.sleep(TIMEOUTS['retry_interval'] / 1000)
+                else:
+                    self.logger.error(f"❌ Error seleccionando {field_name} después de {TIMEOUTS['max_retries']} intentos")
+                    return False
+        
+        return False
     
     async def _get_select_value(self, selector: str, search_value: str, field_type: str) -> Optional[str]:
         """
@@ -218,24 +286,33 @@ class FasecoldaService:
             return None
     
     async def _wait_for_field_enabled(self, selector: str, timeout: int = None):
-        """Espera a que un campo se habilite con manejo de errores mejorado."""
+        """Espera a que un campo se habilite con manejo de errores mejorado y reintentos."""
         timeout = timeout or TIMEOUTS['field_enable']
         
-        try:
-            # Primero verificar si el elemento existe
-            await self.page.wait_for_selector(selector, timeout=2000)
-            
-            # Luego esperar a que se habilite
-            await self.page.wait_for_function(
-                f"() => {{ const el = document.querySelector('{selector}'); return el && !el.disabled; }}",
-                timeout=timeout
-            )
-            self.logger.debug(f"✅ Campo {selector} habilitado")
-            
-        except Exception as e:
-            self.logger.warning(f"⚠️ Campo {selector} no se habilitó en {timeout}ms: {e}")
-            # Continuar sin fallar, ya que algunos campos pueden no necesitar habilitación
-            pass
+        for attempt in range(1, 4):  # 3 intentos máximo para campos
+            try:
+                self.logger.debug(f"🔄 Intento {attempt}/3 - Esperando que se habilite {selector}")
+                
+                # Primero verificar si el elemento existe
+                await self.page.wait_for_selector(selector, timeout=3000)
+                
+                # Luego esperar a que se habilite
+                await self.page.wait_for_function(
+                    f"() => {{ const el = document.querySelector('{selector}'); return el && !el.disabled; }}",
+                    timeout=timeout
+                )
+                self.logger.debug(f"✅ Campo {selector} habilitado")
+                return
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ Intento {attempt} - Campo {selector} no se habilitó: {e}")
+                
+                if attempt < 3:
+                    await asyncio.sleep(1)  # Esperar 1 segundo entre intentos
+                else:
+                    self.logger.warning(f"⚠️ Campo {selector} no se habilitó después de 3 intentos")
+                    # Continuar sin fallar, ya que algunos campos pueden no necesitar habilitación
+                    pass
     
     async def _select_by_value(self, selector: str, value: str):
         """Selecciona una opción por su valor usando JavaScript."""

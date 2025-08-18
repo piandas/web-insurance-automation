@@ -45,9 +45,6 @@ class ClientConfig:
     POLICY_NUMBER_ALLIANZ: str = '23541048'  # Número de póliza específico para Allianz
     
     
-    
-    
-    
     # ==========================================
     # ⚙️ CONFIGURACIONES POR DEFECTO
     # ==========================================
@@ -159,11 +156,26 @@ class ClientConfig:
     def is_fasecolda_enabled(cls) -> bool:
         """
         Verifica si la búsqueda de códigos Fasecolda está habilitada.
+        Aplica overrides de GUI si están disponibles.
         
         Returns:
             bool: True si está habilitada, False si no
         """
+        # Cargar overrides de la GUI
+        cls._load_gui_overrides()
         return cls.ENABLE_FASECOLDA_SEARCH
+    
+    @classmethod
+    def get_vehicle_state(cls) -> str:
+        """
+        Obtiene el estado del vehículo con overrides de GUI.
+        
+        Returns:
+            str: Estado del vehículo ('Nuevo' o 'Usado')
+        """
+        # Cargar overrides de la GUI
+        cls._load_gui_overrides()
+        return cls.VEHICLE_STATE
     
     @classmethod
     def get_default_fasecolda_code(cls) -> str:
@@ -245,3 +257,53 @@ class ClientConfig:
         
         # Si está habilitado, devolver None para indicar que se debe buscar automáticamente
         return None
+
+    # ==========================================
+    # MÉTODOS PARA ACTUALIZACIÓN DINÁMICA (GUI)
+    # ==========================================
+    
+    @classmethod
+    def _load_gui_overrides(cls):
+        """Carga configuraciones desde variables de entorno (GUI tiene prioridad)."""
+        import os
+        
+        # Override del estado del vehículo desde la GUI
+        gui_vehicle_state = os.environ.get('GUI_VEHICLE_STATE')
+        if gui_vehicle_state and gui_vehicle_state in ['Nuevo', 'Usado']:
+            cls.VEHICLE_STATE = gui_vehicle_state
+        
+        # Override de Fasecolda desde la GUI
+        gui_fasecolda = os.environ.get('GUI_FASECOLDA_ENABLED')
+        if gui_fasecolda is not None:
+            cls.ENABLE_FASECOLDA_SEARCH = gui_fasecolda.lower() == 'true'
+    
+    @classmethod
+    def update_vehicle_state(cls, state: str) -> None:
+        """Actualiza el estado del vehículo."""
+        if state in ['Nuevo', 'Usado']:
+            cls.VEHICLE_STATE = state
+        else:
+            raise ValueError(f"Estado inválido: {state}. Debe ser 'Nuevo' o 'Usado'")
+    
+    @classmethod
+    def update_fasecolda_search(cls, enabled: bool) -> None:
+        """Actualiza la configuración de búsqueda automática de Fasecolda."""
+        cls.ENABLE_FASECOLDA_SEARCH = enabled
+    
+    @classmethod
+    def get_current_config(cls) -> Dict[str, any]:
+        """Obtiene la configuración actual (con overrides de GUI si aplican)."""
+        # Cargar overrides de la GUI antes de devolver la configuración
+        cls._load_gui_overrides()
+        
+        return {
+            'vehicle_state': cls.VEHICLE_STATE,
+            'fasecolda_enabled': cls.ENABLE_FASECOLDA_SEARCH,
+            'vehicle_brand': cls.VEHICLE_BRAND,
+            'vehicle_reference': cls.VEHICLE_REFERENCE,
+            'vehicle_year': cls.VEHICLE_MODEL_YEAR,
+            'client_name': f"{cls.CLIENT_FIRST_NAME} {cls.CLIENT_FIRST_LASTNAME}",
+            'vehicle_plate': cls.VEHICLE_PLATE
+        }
+    
+    

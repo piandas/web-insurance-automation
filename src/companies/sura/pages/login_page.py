@@ -77,17 +77,30 @@ class LoginPage(BasePage):
             await self.page.goto(self.config.LOGIN_URL)
             
             # Esperar un poco para que la página cargue completamente
-            await self.page.wait_for_timeout(2000)
+            await self.page.wait_for_timeout(3000)  # Aumentado a 3 segundos
             current_url = self.page.url
             
             # Verificar si ya está logueado (debe estar EN el dominio, no solo como parámetro)
             if current_url.startswith("https://asesores.segurossura.com.co") and "login.sura.com" not in current_url:
-                self.logger.info("✅ ¡Ya estás logueado! (sesión activa desde perfil persistente)")
-                self.logger.info(f"📍 URL actual: {current_url}")
-                return True
+                # Verificar que realmente esté logueado mirando elementos específicos
+                try:
+                    # Buscar elementos que indican que está logueado
+                    await self.page.wait_for_selector('body', timeout=5000)
+                    page_content = await self.page.content()
+                    
+                    # Si hay elementos de login, no está realmente logueado
+                    if any(selector in page_content for selector in ['#tipoDocumento', 'input[name="usuario"]', 'input[name="password"]']):
+                        self.logger.info("⚠️ Detectados elementos de login, no está realmente logueado")
+                        # Continuar con el proceso normal de login
+                    else:
+                        self.logger.info("✅ ¡Ya estás logueado! (sesión activa desde perfil persistente)")
+                        self.logger.info(f"📍 URL actual: {current_url}")
+                        return True
+                except Exception as verify_error:
+                    self.logger.warning(f"⚠️ Error verificando estado de login: {verify_error}")
             
-            # Si no está logueado, esperar a que aparezcan los elementos de login
-            await self.page.wait_for_selector(self.TIPO_DOCUMENTO_SELECT, timeout=10000)
+            # Si no está logueado, esperar a que aparezcan los elementos de login con timeout más corto
+            await self.page.wait_for_selector(self.TIPO_DOCUMENTO_SELECT, timeout=6000)
             self.logger.info("✅ Página de login Sura cargada correctamente")
             return True
             
@@ -106,7 +119,14 @@ class LoginPage(BasePage):
         """Selecciona el tipo de documento con reintentos automáticos."""
         tipo_doc = tipo or ClientConfig.SURA_LOGIN_DOCUMENT_TYPE
         self.logger.info(f"📋 Seleccionando tipo de documento: {tipo_doc}")
-        max_intentos = 5
+        max_intentos = 3  # Reducido de 5 a 3
+
+        # Primero verificar que el elemento esté disponible
+        try:
+            await self.page.wait_for_selector(self.TIPO_DOCUMENTO_SELECT, state="visible", timeout=5000)
+        except Exception as e:
+            self.logger.error(f"❌ Campo de tipo de documento no encontrado: {e}")
+            return False
 
         for intento in range(1, max_intentos + 1):
             try:

@@ -48,6 +48,49 @@ class BaseAutomation(ABC):
         user_data_dir = os.path.join(base_dir, 'browser_profiles', self.company)
         os.makedirs(user_data_dir, exist_ok=True)
         return user_data_dir
+    
+    def _clean_browser_profile(self, user_data_dir: str) -> None:
+        """Limpia archivos innecesarios del perfil del navegador manteniendo la sesión."""
+        try:
+            import shutil
+            
+            # Archivos y carpetas a limpiar (mantener sesión pero limpiar cache/logs)
+            items_to_clean = [
+                'GraphiteDawnCache',
+                'GrShaderCache', 
+                'ShaderCache',
+                'component_crx_cache',
+                'extensions_crx_cache',
+                'Crashpad',
+                'Safe Browsing',
+                'segmentation_platform'
+            ]
+            
+            for item in items_to_clean:
+                item_path = os.path.join(user_data_dir, item)
+                if os.path.exists(item_path):
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path, ignore_errors=True)
+                    else:
+                        os.remove(item_path)
+                        
+            # Limpiar archivos de logs específicos en Default
+            default_dir = os.path.join(user_data_dir, 'Default')
+            if os.path.exists(default_dir):
+                log_files = ['LOG', 'LOG.old', 'MANIFEST*']
+                for pattern in log_files:
+                    import glob
+                    for file in glob.glob(os.path.join(default_dir, pattern)):
+                        try:
+                            os.remove(file)
+                        except:
+                            pass
+                            
+            self.logger.info("🧹 Perfil del navegador limpiado")
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error limpiando perfil: {e}")
+    
     async def launch(self) -> bool:
         """Inicializa Playwright y abre el navegador."""
         try:
@@ -59,6 +102,10 @@ class BaseAutomation(ABC):
                 self.logger.info(f"📁 Usando perfil persistente para {self.company.upper()}...")
                 user_data_dir = self._get_user_data_dir()
                 self.logger.info(f"📂 Directorio de perfil: {user_data_dir}")
+                
+                # Limpiar archivos innecesarios del perfil
+                self._clean_browser_profile(user_data_dir)
+                
                 # Crear contexto persistente en lugar de navegador temporal
                 self.browser = await self.playwright.chromium.launch_persistent_context(
                     user_data_dir=user_data_dir,

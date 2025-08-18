@@ -152,7 +152,8 @@ class GlobalPauseCoordinator:
                 
                 # En un entorno real, aquí usarías input() con timeout
                 # Por simplicidad, usamos input() normal
-                response = input("👉 Tu respuesta: ").strip()
+                print("👉 Tu respuesta: ", end="", flush=True)
+                response = input().strip()
                 
                 if valid_options and response not in map(str, valid_options):
                     print(f"❌ Opción inválida. Opciones válidas: {', '.join(map(str, valid_options))}")

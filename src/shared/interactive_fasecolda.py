@@ -434,7 +434,7 @@ class InteractiveFasecoldaSelector:
             # Obtener selección del usuario
             while True:
                 try:
-                    print(f"👆 Seleccione una opción (1-{len(results)}) o 'q' para cancelar: ", end="")
+                    print(f"👆 Seleccione una opción (1-{len(results)}) o 'q' para cancelar: ", end="", flush=True)
                     selection = input().strip().lower()
                     
                     if selection == 'q':
