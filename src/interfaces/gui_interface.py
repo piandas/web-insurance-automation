@@ -28,7 +28,18 @@ class AutomationGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Sistema de Automatización de Cotizaciones")
-        self.root.geometry("600x500")
+        
+        # Configurar tamaño y centrar ventana
+        window_width = 600
+        window_height = 750  # Aumentado para acomodar consola más larga
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # Calcular posición para centrar
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        
+        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
         self.root.resizable(True, True)
         
         # Variables de configuración
@@ -187,10 +198,10 @@ class AutomationGUI:
         self.console_frame.columnconfigure(0, weight=1)
         self.console_frame.rowconfigure(0, weight=1)
         
-        # Área de texto con scroll
+        # Área de texto con scroll (más larga)
         self.console_text = scrolledtext.ScrolledText(
             self.console_frame,
-            height=12,
+            height=18,  # Aumentado de 15 a 18
             width=70,
             wrap=tk.WORD,
             state=tk.DISABLED,
@@ -496,25 +507,40 @@ class AutomationGUI:
         self.agregar_mensaje("⚠️ Deteniendo automatización...", "warning")
         
         try:
+            # Cerrar navegadores ANTES de terminar el proceso principal para evitar procesos zombie
+            self.agregar_mensaje("🔒 Cerrando navegadores...", "info")
+            self._close_all_browsers()
+            
             # Terminar el proceso si está ejecutándose
             if self.proceso_subprocess:
-                self.agregar_mensaje("🔄 Terminando procesos de navegadores...", "info")
+                self.agregar_mensaje("🔄 Terminando proceso principal...", "info")
+                
+                # Cerrar stdin para evitar errores de EOF
+                try:
+                    if self.proceso_subprocess.stdin:
+                        self.proceso_subprocess.stdin.close()
+                except:
+                    pass
                 
                 # Intentar terminación graceful primero
                 self.proceso_subprocess.terminate()
                 
                 # Esperar un poco para terminación graceful
                 try:
-                    self.proceso_subprocess.wait(timeout=10)
-                    self.agregar_mensaje("✅ Procesos terminados correctamente", "success")
+                    self.proceso_subprocess.wait(timeout=5)
+                    self.agregar_mensaje("✅ Proceso principal terminado correctamente", "success")
                 except subprocess.TimeoutExpired:
                     # Si no termina gracefully, forzar terminación
-                    self.agregar_mensaje("⚡ Forzando terminación de procesos...", "warning")
+                    self.agregar_mensaje("⚡ Forzando terminación del proceso principal...", "warning")
                     self.proceso_subprocess.kill()
                     self.proceso_subprocess.wait()
-                    self.agregar_mensaje("✅ Procesos terminados forzosamente", "success")
+                    self.agregar_mensaje("✅ Proceso principal terminado forzosamente", "success")
                 
                 self.proceso_subprocess = None
+            
+            # Hacer una segunda pasada para asegurar que todos los navegadores estén cerrados
+            self.agregar_mensaje("🔒 Verificando cierre de navegadores...", "info")
+            self._close_all_browsers()
             
             # Resetear estado de la interfaz
             self.proceso_finalizado_manual()
@@ -672,9 +698,31 @@ class AutomationGUI:
     
     def es_mensaje_importante(self, linea: str) -> bool:
         """Determina si una línea contiene información importante para mostrar en modo normal."""
+        
+        # Filtrar errores esperados al detener la automatización
+        errores_esperados_al_detener = [
+            "Target page, context or browser has been closed",
+            "Page.fill: Target page, context or browser has been closed",
+            "Page.goto: Target page, context or browser has been closed",
+            "BrowserContext.close: Target page, context or browser has been closed",
+            "Error cerrando navegador",
+            "Error en el flujo de login",
+            "Error llenando usuario",
+            "Error navegando a login"
+        ]
+        
+        # Si contiene errores esperados de cierre, no mostrar en modo normal
+        if any(error in linea for error in errores_esperados_al_detener):
+            return False
+        
         # En modo normal, SOLO mostrar opciones de Fasecolda, MFA y errores críticos
         palabras_fasecolda_mfa_y_criticas = [
-            # Solo opciones de Fasecolda que requieren selección del usuario
+            # Nuevos mensajes de Fasecolda limpios
+            "🔍 SELECCIÓN DE CÓDIGO FASECOLDA",
+            "Opción ", "Vehículo:", "Score:", 
+            ">> Seleccionado:", "Valor:",
+            
+            # Opciones tradicionales de Fasecolda que requieren selección del usuario
             "Selecciona el código a usar",
             "👆 Seleccione una opción", 
             "CF:", "CH:",
@@ -683,8 +731,8 @@ class AutomationGUI:
             "código MFA", "Por favor, ingresa el código MFA que recibiste",
             "👉 Tu respuesta:", "Ingresa el código MFA", "autenticación de dos factores",
             
-            # Solo errores críticos que requieren atención inmediata
-            "❌", "[ERROR]", "Error crítico", "Fallo crítico", "FATAL"
+            # Solo errores críticos que requieren atención inmediata (no los de cierre)
+            "Error crítico", "Fallo crítico", "FATAL", "Error de configuración"
         ]
         
         return any(palabra in linea for palabra in palabras_fasecolda_mfa_y_criticas)
@@ -776,6 +824,18 @@ class AutomationGUI:
         self.detener_btn.config(state=tk.DISABLED)  # Deshabilitar botón de detener
         self.actualizar_cliente_btn.config(state=tk.NORMAL)  # Rehabilitar botón de actualizar
         
+        # Limpiar referencia al proceso y cerrar stdin si existe
+        if self.proceso_subprocess:
+            try:
+                if self.proceso_subprocess.stdin:
+                    self.proceso_subprocess.stdin.close()
+            except:
+                pass
+            self.proceso_subprocess = None
+        
+        # Ocultar input si está visible
+        self.ocultar_input()
+        
         # Ocultar indicador de carga inmediatamente
         self.ocultar_carga()
         
@@ -803,7 +863,76 @@ class AutomationGUI:
             else:
                 return  # No cerrar si el usuario cancela
         
+        # Cerrar todos los navegadores Chrome que puedan estar abiertos
+        self._close_all_browsers()
+        
         self.root.destroy()
+    
+    def _close_all_browsers(self):
+        """Cierra todos los procesos de Chrome que puedan estar abiertos por la automatización."""
+        try:
+            import subprocess
+            import platform
+            import time
+            
+            closed_processes = False
+            
+            if platform.system() == "Windows":
+                # En Windows, usar taskkill SOLO para cerrar Chrome y chromedriver
+                # NO cerrar python.exe porque eso cerraría la GUI también
+                processes_to_kill = ["chrome.exe", "chromedriver.exe"]
+                
+                for process_name in processes_to_kill:
+                    try:
+                        result = subprocess.run(
+                            ["taskkill", "/F", "/IM", process_name], 
+                            capture_output=True, 
+                            check=False,
+                            timeout=10
+                        )
+                        if result.returncode == 0:
+                            closed_processes = True
+                            self.agregar_mensaje(f"🔒 Cerrado: {process_name}", "info")
+                    except Exception:
+                        pass
+                
+                # También intentar cerrar por nombre de ventana si contiene "Chrome"
+                try:
+                    result = subprocess.run(
+                        ["taskkill", "/F", "/FI", "WINDOWTITLE eq *Chrome*"], 
+                        capture_output=True, 
+                        check=False,
+                        timeout=10
+                    )
+                    if result.returncode == 0:
+                        closed_processes = True
+                except Exception:
+                    pass
+                    
+            else:
+                # En sistemas Unix, usar pkill SOLO para chrome
+                try:
+                    result = subprocess.run(
+                        ["pkill", "-f", "chrome"], 
+                        capture_output=True, 
+                        check=False,
+                        timeout=10
+                    )
+                    if result.returncode == 0:
+                        closed_processes = True
+                        self.agregar_mensaje("🔒 Navegadores cerrados", "info")
+                except Exception:
+                    pass
+            
+            # Dar tiempo para que los procesos se cierren
+            if closed_processes:
+                time.sleep(2)
+                self.agregar_mensaje("✅ Navegadores cerrados correctamente", "success")
+            else:
+                self.agregar_mensaje("ℹ️ No se encontraron navegadores para cerrar", "info")
+                    
+        except Exception as e:
+            self.agregar_mensaje(f"⚠️ Error cerrando navegadores: {e}", "warning")
     
     def run(self):
         """Inicia la interfaz gráfica."""

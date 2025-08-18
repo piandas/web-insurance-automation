@@ -153,7 +153,16 @@ class GlobalPauseCoordinator:
                 # En un entorno real, aquí usarías input() con timeout
                 # Por simplicidad, usamos input() normal
                 print("👉 Tu respuesta: ", end="", flush=True)
-                response = input().strip()
+                
+                try:
+                    response = input().strip()
+                except EOFError:
+                    # Si se cierra stdin (por ejemplo, al detener la GUI), salir gracefully
+                    print("\n⚠️ Proceso detenido - finalizando...")
+                    return "1"  # Retornar valor por defecto para evitar crash
+                except KeyboardInterrupt:
+                    print("\n⚠️ Operación cancelada por el usuario")
+                    raise
                 
                 if valid_options and response not in map(str, valid_options):
                     print(f"❌ Opción inválida. Opciones válidas: {', '.join(map(str, valid_options))}")
@@ -164,9 +173,14 @@ class GlobalPauseCoordinator:
             except KeyboardInterrupt:
                 print("\n⚠️ Operación cancelada por el usuario")
                 raise
+            except EOFError:
+                # Manejo específico para EOF - proceso detenido
+                print("\n⚠️ Proceso detenido - finalizando...")
+                return "1"  # Retornar valor por defecto
             except Exception as e:
                 print(f"❌ Error capturando input: {e}")
-                continue
+                # Si hay demasiados errores consecutivos, retornar valor por defecto
+                return "1"
 
 
 # Instancia global del coordinador
@@ -208,9 +222,9 @@ async def request_pause_for_fasecolda_selection(
         }
     )
     
-    # Mostrar opciones al usuario
-    print(f"\n🔍 SELECCIÓN DE CÓDIGO FASECOLDA - {company.upper()}")
-    print("="*50)
+    # Mostrar opciones al usuario con formato limpio
+    print(f"\n🔍 SELECCIÓN DE CÓDIGO FASECOLDA")
+    print("="*60)
     
     for i, result in enumerate(results, 1):
         cf_code = result.get('cf_code', 'N/A')
@@ -219,10 +233,9 @@ async def request_pause_for_fasecolda_selection(
         insured_value = result.get('insured_value', 'No disponible')
         score = result.get('score', 0)
         
-        print(f"{i}. CF: {cf_code} - CH: {ch_code}")
-        print(f"   📝 {description}")
-        print(f"   💰 Valor Asegurado: {insured_value}")
-        print(f"   📊 Score: {score:.2f}")
+        print(f"Opción {i}: CF: {cf_code} | CH: {ch_code} | Valor: {insured_value}")
+        print(f"   Vehículo: {description}")
+        print(f"   Score: {score:.2f}")
         print()
     
     # Solicitar selección del usuario
@@ -239,8 +252,8 @@ async def request_pause_for_fasecolda_selection(
     selected_ch = selected_result.get('ch_code', 'N/A')
     selected_value = selected_result.get('insured_value', 'No disponible')
     
-    print(f"✅ Seleccionado: CF: {selected_cf} - CH: {selected_ch}")
-    print(f"   💰 Valor Asegurado: {selected_value}")
+    print(f"\n>> Seleccionado: CF: {selected_cf} | CH: {selected_ch}")
+    print(f"   Valor: {selected_value}")
     print()
     await global_pause_coordinator.resume_global_operations()
     
