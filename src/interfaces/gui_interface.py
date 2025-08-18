@@ -335,16 +335,46 @@ class AutomationGUI:
         if respuesta:
             self.agregar_mensaje(f"👉 Tu respuesta: {respuesta}", "info")
             
-            # Enviar respuesta al proceso
-            if self.proceso_subprocess and self.proceso_subprocess.poll() is None:
-                try:
-                    self.proceso_subprocess.stdin.write(f"{respuesta}\n")
-                    self.proceso_subprocess.stdin.flush()
-                    self.agregar_mensaje(f"✅ Respuesta enviada al proceso", "success")
-                except Exception as e:
-                    self.agregar_mensaje(f"❌ Error enviando respuesta: {e}", "error")
+            # Detectar si es un código MFA para Sura
+            if self._is_mfa_code(respuesta):
+                self.agregar_mensaje("📱 Detectado código MFA - enviando a proceso Sura...", "info")
+                if self._send_mfa_code_to_sura(respuesta):
+                    self.agregar_mensaje("✅ Código MFA enviado correctamente", "success")
+                else:
+                    self.agregar_mensaje("❌ Error enviando código MFA", "error")
+            else:
+                # Enviar respuesta normal al proceso
+                if self.proceso_subprocess and self.proceso_subprocess.poll() is None:
+                    try:
+                        self.proceso_subprocess.stdin.write(f"{respuesta}\n")
+                        self.proceso_subprocess.stdin.flush()
+                        self.agregar_mensaje(f"✅ Respuesta enviada al proceso", "success")
+                    except Exception as e:
+                        self.agregar_mensaje(f"❌ Error enviando respuesta: {e}", "error")
             
             self.ocultar_input()
+    
+    def _is_mfa_code(self, respuesta: str) -> bool:
+        """Detecta si la respuesta es un código MFA (4-6 dígitos)."""
+        return respuesta.isdigit() and 4 <= len(respuesta) <= 6
+    
+    def _send_mfa_code_to_sura(self, mfa_code: str) -> bool:
+        """Envía el código MFA a Sura mediante archivo temporal."""
+        try:
+            import tempfile
+            import os
+            
+            temp_dir = tempfile.gettempdir()
+            mfa_file = os.path.join(temp_dir, "sura_mfa_input.txt")
+            
+            # Escribir el código MFA al archivo temporal
+            with open(mfa_file, 'w') as f:
+                f.write(mfa_code)
+            
+            return True
+        except Exception as e:
+            self.agregar_mensaje(f"❌ Error escribiendo código MFA: {e}", "error")
+            return False
     
     def mostrar_carga(self, mensaje: str = "Procesando..."):
         """Muestra el indicador de carga animado."""
@@ -568,6 +598,7 @@ class AutomationGUI:
                         "para cancelar:",
                         "Ingrese el código",
                         "código MFA",
+                        "Por favor, ingresa el código MFA que recibiste",
                         "selecciona"
                     ]
                     
@@ -645,21 +676,22 @@ class AutomationGUI:
     
     def es_mensaje_importante(self, linea: str) -> bool:
         """Determina si una línea contiene información importante para mostrar en modo normal."""
-        # En modo normal, SOLO mostrar opciones de Fasecolda y errores críticos
-        palabras_fasecolda_y_criticas = [
+        # En modo normal, SOLO mostrar opciones de Fasecolda, MFA y errores críticos
+        palabras_fasecolda_mfa_y_criticas = [
             # Solo opciones de Fasecolda que requieren selección del usuario
             "Selecciona el código a usar",
             "👆 Seleccione una opción", 
             "CF:", "CH:",
             
-            # Solo errores críticos que requieren atención inmediata
-            "❌", "[ERROR]", "Error crítico", "Fallo crítico", "FATAL",
+            # Mensajes MFA que requieren input del usuario
+            "código MFA", "Por favor, ingresa el código MFA que recibiste",
+            "👉 Tu respuesta:", "Ingresa el código MFA", "autenticación de dos factores",
             
-            # Solo solicitudes directas de input del usuario
-            "👉 Tu respuesta:", "Ingresa el código MFA", "Introduce el código"
+            # Solo errores críticos que requieren atención inmediata
+            "❌", "[ERROR]", "Error crítico", "Fallo crítico", "FATAL"
         ]
         
-        return any(palabra in linea for palabra in palabras_fasecolda_y_criticas)
+        return any(palabra in linea for palabra in palabras_fasecolda_mfa_y_criticas)
     
     def extraer_opciones_fasecolda(self, linea: str) -> str:
         """Extrae el rango de opciones de una línea de Fasecolda."""
