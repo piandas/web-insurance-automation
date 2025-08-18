@@ -1,5 +1,5 @@
 # ================================================
-# DEPENDENCIAS PRINCIPALES - Automatización Allianz
+# DEPENDENCIAS PRINCIPALES - Automatización Cotizaciones
 # ================================================
 
 # Playwright - Automatización de navegador web
@@ -8,37 +8,11 @@ playwright==1.48.0
 # Python-dotenv - Manejo de variables de entorno
 python-dotenv==1.0.1
 
-# Pandas - Para manipulación de datos y creación de Excel
-pandas==2.2.0
+# Pandas - Para manipulación de datos y creación de Excel (última versión con binarios)
+pandas>=2.0.0
+
+# NumPy - Dependencia de pandas (última versión con binarios)
+numpy>=1.24.0
 
 # OpenPyXL - Para trabajar con archivos Excel
 openpyxl==3.1.2
-
-# Asyncio - Para programación asíncrona (incluido en Python 3.7+)
-# logging - Para sistema de logs (incluido en Python estándar)
-# os - Para operaciones del sistema (incluido en Python estándar)
-# datetime - Para manejo de fechas (incluido en Python estándar)
-# typing - Para type hints (incluido en Python 3.5+)
-
-# ================================================
-# DEPENDENCIAS OPCIONALES DE DESARROLLO
-# ================================================
-
-# Para testing (opcional)
-# pytest==7.4.3
-# pytest-asyncio==0.21.1
-
-# ================================================
-# NOTAS DE INSTALACIÓN
-# ================================================
-# 
-# 1. Instalar dependencias:
-#    pip install -r requirements.txt
-#
-# 2. Instalar navegadores de Playwright:
-#    playwright install
-#
-# 3. Verificar instalación:
-#    python -c "import playwright; print('✅ Playwright instalado correctamente')"
-#    python -c "import dotenv; print('✅ Python-dotenv instalado correctamente')"
-#
