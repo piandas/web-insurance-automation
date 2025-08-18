@@ -559,7 +559,7 @@ class AutomationGUI:
             # Comando a ejecutar
             cmd = [
                 sys.executable,
-                str(project_dir / "ejecutar_automatizaciones.py"),
+                str(project_dir / "scripts" / "ejecutar_automatizaciones.py"),
                 "--companies", "allianz", "sura",
                 "--parallel"
             ]

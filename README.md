@@ -1,8 +1,35 @@
-# 🚗 SistMCP/
-├── main.py                          # 🎯 Punto de entrada principal
-├── consolidar_cotizaciones.py       # 📊 Script independiente de consolidación
+# 🚗 Sistema de Automatización Multi-Compañía - Cotizaciones de Seguros
+
+## 🚀 Ejecución Rápida
+
+**Para usuarios finales:**
+1. Doble clic en `ejecutar_cotizaciones.bat`
+2. ¡Listo! Todo se configura automáticamente
+
+**Para desarrolladores:**
+- Ver documentación completa en `docs/`
+- Scripts ejecutables en `scripts/`
+
+## 📋 Descripción del Proyecto
+
+Sistema modular y escalable para automatizar procesos de cotización en múltiples aseguradoras. Actualmente soporta **Allianz** (completamente implementado) y **Sura** (estructura base preparada). Utiliza **Playwright** para automatización web y sigue patrones de diseño escalables.
+
+## 🏗️ Estructura del Proyecto (Organizada)
+
+```
+MCP/
+├── ejecutar_cotizaciones.bat        # 🎯 PUNTO DE ENTRADA (Doble clic aquí)
+├── ejecutar_automatizacion_directa.bat  # ⚡ Ejecución sin GUI
 ├── requirements.txt                 # 📦 Dependencias
 ├── .env                            # 🔒 Variables de entorno
+├── scripts/                        # 🔧 Scripts ejecutables
+│   ├── ejecutar_gui.py             # Interfaz gráfica principal  
+│   ├── ejecutar_gui_ascii.py       # Interfaz compatible
+│   └── ejecutar_automatizaciones.py # Automatización directa
+├── docs/                           # 📚 Documentación
+│   ├── MANUAL_USUARIO.md           # Manual completo del usuario
+│   ├── INSTALACION_MANUAL.md       # Guía de instalación manual
+│   └── Notas.txt                   # Notas de desarrollo
 ├── Consolidados/                   # 📋 Reportes Excel generados
 ├── downloads/                      # 📄 PDFs generados
 │   ├── allianz/                   # PDFs de Allianz
@@ -10,44 +37,7 @@
 ├── LOGS/                          # 📝 Logs del sistema
 │   ├── allianz/                   # Logs de Allianz
 │   ├── sura/                      # Logs de Sura
-│   └── consolidator/              # Logs de consolidaciónomatización Multi-Compañía - Cotizaciones de Seguros
-
-## 📋 Descripción del Proyecto
-
-Sistema modular y escalable para automatizar procesos de cotización en múltiples aseguradoras. Actualmente soporta **Allianz** (completamente implementado) y **Sura** (estructura base preparada). Utiliza **Playwright** para automatización web y sigue patrones de diseño escalables.
-
-## 🏗️ Estructura del Proyecto (Nueva Arquitectura)
-
-```
-MCP/
-├── main.py                          # 🎯 Punto de entrada principal
-├── requirements.txt                 # � Dependencias
-├── .env                            # � Variables de entorno
-├── downloads/                      # � PDFs generados
-│   ├── allianz/                   # PDFs de Allianz
-│   └── sura/                      # PDFs de Sura
-├── LOGS/                          # � Logs del sistema
-│   ├── allianz/                   # Logs de Allianz
-│   └── sura/                      # Logs de Sura
-└── src/
-    ├── __init__.py                # Módulo principal
-    ├── core/                      # 🏛️ Núcleo del sistema
-    │   ├── base_automation.py     # Clase base abstracta
-    │   ├── automation_manager.py  # Orquestador principal
-    │   ├── logger_factory.py      # Factory de loggers
-    │   └── constants.py           # Constantes globales
-    ├── config/                    # ⚙️ Configuraciones
-    │   ├── base_config.py         # Configuración base
-    │   ├── allianz_config.py      # Config específica Allianz
-    │   └── sura_config.py         # Config específica Sura
-    ├── consolidation/             # 📊 Módulo de consolidación
-    │   └── cotizacion_consolidator.py  # Consolidador de cotizaciones
-    ├── shared/                    # 🔄 Recursos compartidos
-    │   ├── base_page.py           # Página base común
-    │   ├── utils.py               # Utilidades generales
-    │   └── exceptions.py          # Excepciones personalizadas
-    ├── companies/                 # 🏢 Módulos por compañía
-    │   ├── allianz/              # Implementación Allianz
+│   └── consolidator/              # Logs de consolidación
     │   │   ├── allianz_automation.py
     │   │   └── pages/            # Páginas específicas
     │   │       ├── login_page.py

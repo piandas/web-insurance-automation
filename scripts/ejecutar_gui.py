@@ -21,7 +21,7 @@ if sys.platform.startswith('win'):
     os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 # Asegurar que el directorio del proyecto esté en el path
-project_dir = Path(__file__).parent
+project_dir = Path(__file__).parent.parent  # Subir un nivel desde scripts/ a la raíz
 sys.path.insert(0, str(project_dir))
 
 # Cambiar al directorio del proyecto

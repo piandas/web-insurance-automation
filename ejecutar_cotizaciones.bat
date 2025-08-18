@@ -56,13 +56,13 @@ echo [START] Iniciando interfaz grafica...
 echo.
 
 :: Ejecutar la GUI principal
-python ejecutar_gui.py
+python scripts\ejecutar_gui.py
 
 :: Si hay problemas de codificación, intentar con versión ASCII
 if errorlevel 1 (
     echo.
     echo [WARNING] Problema detectado, intentando modo compatibilidad...
-    python ejecutar_gui_ascii.py
+    python scripts\ejecutar_gui_ascii.py
 )
 
 :: Si la GUI se cierra, el bat también se cierra automáticamente

@@ -16,7 +16,7 @@ from pathlib import Path
 
 def get_venv_python():
     """Obtiene la ruta del Python del entorno virtual."""
-    project_dir = Path(__file__).parent
+    project_dir = Path(__file__).parent.parent  # Subir un nivel desde scripts/ a la raíz
     venv_python = project_dir / ".venv" / "Scripts" / "python.exe"
     
     if venv_python.exists():
@@ -38,7 +38,7 @@ if restart_with_venv():
     sys.exit(0)
 
 # Asegurar que el directorio del proyecto esté en el path
-project_dir = Path(__file__).parent
+project_dir = Path(__file__).parent.parent  # Subir un nivel desde scripts/ a la raíz
 sys.path.insert(0, str(project_dir))
 
 # Cambiar al directorio del proyecto
