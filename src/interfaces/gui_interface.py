@@ -35,6 +35,7 @@ class AutomationGUI:
         self.estado_vehiculo = tk.StringVar(value=ClientConfig.VEHICLE_STATE)
         self.fasecolda_automatico = tk.BooleanVar(value=ClientConfig.ENABLE_FASECOLDA_SEARCH)
         self.mostrar_ventanas = tk.BooleanVar(value=False)  # Por defecto en segundo plano
+        self.modo_debug = tk.BooleanVar(value=False)  # Modo debug desactivado por defecto
         
         # Variables de control
         self.proceso_activo = False
@@ -129,6 +130,15 @@ class AutomationGUI:
         )
         ventanas_check.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=5)
         
+        # Opción: Modo debug
+        debug_check = ttk.Checkbutton(
+            config_frame,
+            text="🔧 Modo Debug (mostrar todos los logs en consola)",
+            variable=self.modo_debug,
+            command=self.toggle_debug_mode
+        )
+        debug_check.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=5)
+        
         # Frame de controles
         control_frame = ttk.Frame(main_frame)
         control_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
@@ -172,14 +182,14 @@ class AutomationGUI:
         self.loading_icon = ttk.Label(self.loading_frame, text="", font=("Arial", 16))
         
         # Frame de consola
-        console_frame = ttk.LabelFrame(main_frame, text="Consola de Estado", padding="5")
-        console_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
-        console_frame.columnconfigure(0, weight=1)
-        console_frame.rowconfigure(0, weight=1)
+        self.console_frame = ttk.LabelFrame(main_frame, text="Consola de Estado", padding="5")
+        self.console_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        self.console_frame.columnconfigure(0, weight=1)
+        self.console_frame.rowconfigure(0, weight=1)
         
         # Área de texto con scroll
         self.console_text = scrolledtext.ScrolledText(
-            console_frame,
+            self.console_frame,
             height=12,
             width=70,
             wrap=tk.WORD,
@@ -189,13 +199,14 @@ class AutomationGUI:
         self.console_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Input para respuestas (inicialmente oculto)
-        self.input_frame = ttk.Frame(console_frame)
+        self.input_frame = ttk.Frame(self.console_frame)
         self.input_var = tk.StringVar()
         self.input_entry = ttk.Entry(self.input_frame, textvariable=self.input_var, width=50)
         self.input_button = ttk.Button(self.input_frame, text="Enviar", command=self.enviar_respuesta)
         
         # Mensaje inicial
         self.agregar_mensaje("✅ Sistema listo. Configure las opciones y presione 'Ejecutar Automatización'.", "info")
+        self.agregar_mensaje(" Active 'Modo Debug' para ver todos los logs del proceso.", "info")
     
     def crear_campos_cliente(self, parent_frame):
         """Crea los campos de información del cliente."""
@@ -256,6 +267,17 @@ class AutomationGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Error actualizando información del cliente: {e}")
             self.agregar_mensaje(f"❌ Error actualizando información: {e}", "error")
+    
+    def toggle_debug_mode(self):
+        """Maneja el cambio del modo debug."""
+        if self.modo_debug.get():
+            # Activar modo debug
+            self.console_frame.config(text="🔧 Consola de Estado - MODO DEBUG (todos los logs)")
+            self.agregar_mensaje("🔧 MODO DEBUG ACTIVADO - Se mostrarán todos los logs del proceso", "warning")
+        else:
+            # Desactivar modo debug
+            self.console_frame.config(text="Consola de Estado")
+            self.agregar_mensaje("💭 Modo normal - Solo se mostrarán opciones de Fasecolda", "info")
     
     def agregar_mensaje(self, mensaje: str, tipo: str = "info"):
         """Agrega un mensaje a la consola."""
@@ -377,10 +399,13 @@ class AutomationGUI:
             ClientConfig.update_vehicle_state(self.estado_vehiculo.get())
             ClientConfig.update_fasecolda_search(self.fasecolda_automatico.get())
             
-            # Agregar mensaje confirmando la configuración aplicada
-            self.agregar_mensaje(f"⚙️ Configuración aplicada - Estado: {self.estado_vehiculo.get()}", "info")
-            fasecolda_status = "Activada" if self.fasecolda_automatico.get() else "Desactivada"
-            self.agregar_mensaje(f"🔍 Fasecolda: {fasecolda_status}", "info")
+            # Agregar mensaje confirmando la configuración aplicada solo en debug
+            if self.modo_debug.get():
+                self.agregar_mensaje(f"⚙️ Configuración aplicada - Estado: {self.estado_vehiculo.get()}", "info")
+                fasecolda_status = "Activada" if self.fasecolda_automatico.get() else "Desactivada"
+                self.agregar_mensaje(f"🔍 Fasecolda: {fasecolda_status}", "info")
+                debug_status = "Activado" if self.modo_debug.get() else "Desactivado"
+                self.agregar_mensaje(f"🔧 Modo Debug: {debug_status}", "info")
             
         except Exception as e:
             messagebox.showerror("Error de configuración", f"Error actualizando configuración: {e}")
@@ -400,19 +425,26 @@ class AutomationGUI:
         # Mostrar indicador de carga
         self.mostrar_carga("Iniciando automatización...")
         
-        # Agregar mensajes iniciales
-        self.agregar_mensaje("🚀 Iniciando automatización para Allianz y Sura...", "info")
-        self.agregar_mensaje(f"⚙️ Estado del vehículo: {self.estado_vehiculo.get()}", "info")
-        fasecolda_status = "Activada" if self.fasecolda_automatico.get() else "Desactivada"
-        self.agregar_mensaje(f"🔍 Búsqueda automática Fasecolda: {fasecolda_status}", "info")
-        ventanas_status = "Visibles" if self.mostrar_ventanas.get() else "Ocultas"
-        self.agregar_mensaje(f"👁️ Ventanas del navegador: {ventanas_status}", "info")
-        
-        # Mostrar información del vehículo
-        config = ClientConfig.get_current_config()
-        self.agregar_mensaje(f"👤 Cliente: {config['client_name']}", "info")
-        self.agregar_mensaje(f"🚗 Vehículo: {config['vehicle_brand']} {config['vehicle_reference']} ({config['vehicle_year']})", "info")
-        self.agregar_mensaje(f"🔖 Placa: {config['vehicle_plate']}", "info")
+        # Agregar mensajes iniciales solo en modo debug
+        if self.modo_debug.get():
+            self.agregar_mensaje("🚀 Iniciando automatización para Allianz y Sura...", "info")
+            self.agregar_mensaje(f"⚙️ Estado del vehículo: {self.estado_vehiculo.get()}", "info")
+            fasecolda_status = "Activada" if self.fasecolda_automatico.get() else "Desactivada"
+            self.agregar_mensaje(f"🔍 Búsqueda automática Fasecolda: {fasecolda_status}", "info")
+            ventanas_status = "Visibles" if self.mostrar_ventanas.get() else "Ocultas"
+            self.agregar_mensaje(f"👁️ Ventanas del navegador: {ventanas_status}", "info")
+            debug_status = "Activado (todos los logs)" if self.modo_debug.get() else "Desactivado (solo mensajes importantes)"
+            self.agregar_mensaje(f"🔧 Modo Debug: {debug_status}", "info")
+            
+            # Mostrar información del vehículo solo en debug
+            config = ClientConfig.get_current_config()
+            self.agregar_mensaje(f"👤 Cliente: {config['client_name']}", "info")
+            self.agregar_mensaje(f"🚗 Vehículo: {config['vehicle_brand']} {config['vehicle_reference']} ({config['vehicle_year']})", "info")
+            self.agregar_mensaje(f"🔖 Placa: {config['vehicle_plate']}", "info")
+        else:
+            # En modo normal, solo mensaje mínimo
+            self.agregar_mensaje("🚀 Ejecutando automatización...", "info")
+            self.agregar_mensaje("💭 Esperando opciones de Fasecolda...", "info")
         
         # Ejecutar en hilo separado
         self.proceso_thread = threading.Thread(target=self.ejecutar_proceso, daemon=True)
@@ -519,9 +551,14 @@ class AutomationGUI:
                     # Limpiar caracteres problemáticos antes de procesar
                     line = self.limpiar_texto_unicode(line)
                     
-                    # Filtrar mensajes importantes
-                    if self.es_mensaje_importante(line):
+                    # Mostrar mensajes según el modo
+                    if self.modo_debug.get():
+                        # Modo debug: mostrar todo
                         self.message_queue.put(("message", ("info", line)))
+                    else:
+                        # Modo normal: filtrar mensajes importantes
+                        if self.es_mensaje_importante(line):
+                            self.message_queue.put(("message", ("info", line)))
                     
                     # Detectar solicitudes de input - Patrones mejorados
                     input_patterns = [
@@ -607,21 +644,22 @@ class AutomationGUI:
         return texto
     
     def es_mensaje_importante(self, linea: str) -> bool:
-        """Determina si una línea contiene información importante para mostrar."""
-        palabras_importantes = [
-            # Emojis originales
-            "🚀", "✅", "❌", "⚠️", "🔍", "📋", "💰", "📊",
-            # Marcadores de reemplazo
-            "[START]", "[OK]", "[ERROR]", "[WARNING]", "[SEARCH]", "[LIST]", "[MONEY]", "[CHART]",
-            "[LOADING]", "[TARGET]", "[TAG]", "[USER]", "[CAR]", "[CONFIG]", "[FINISH]", "[RELOAD]",
-            # Palabras clave
-            "Iniciando", "Completado", "Error", "Fallo", "exitosa",
-            "MFA", "Fasecolda", "Selecciona", "navegación", "login",
-            "cotización", "consolidación", "CF:", "CH:", "Valor Asegurado",
-            "Estado del vehículo", "Búsqueda automática", "Cliente:", "Vehículo:", "Placa:"
+        """Determina si una línea contiene información importante para mostrar en modo normal."""
+        # En modo normal, SOLO mostrar opciones de Fasecolda y errores críticos
+        palabras_fasecolda_y_criticas = [
+            # Solo opciones de Fasecolda que requieren selección del usuario
+            "Selecciona el código a usar",
+            "👆 Seleccione una opción", 
+            "CF:", "CH:",
+            
+            # Solo errores críticos que requieren atención inmediata
+            "❌", "[ERROR]", "Error crítico", "Fallo crítico", "FATAL",
+            
+            # Solo solicitudes directas de input del usuario
+            "👉 Tu respuesta:", "Ingresa el código MFA", "Introduce el código"
         ]
         
-        return any(palabra in linea for palabra in palabras_importantes)
+        return any(palabra in linea for palabra in palabras_fasecolda_y_criticas)
     
     def extraer_opciones_fasecolda(self, linea: str) -> str:
         """Extrae el rango de opciones de una línea de Fasecolda."""
@@ -697,7 +735,11 @@ class AutomationGUI:
         # Ocultar indicador de carga después de 3 segundos
         self.root.after(3000, self.ocultar_carga)
         
-        self.agregar_mensaje("🏁 Proceso finalizado.", "info")
+        # Mostrar mensaje final solo en debug
+        if self.modo_debug.get():
+            self.agregar_mensaje("🏁 Proceso finalizado.", "info")
+        else:
+            self.agregar_mensaje("✅ Automatización completada.", "info")
     
     def proceso_finalizado_manual(self):
         """Maneja la finalización manual del proceso (cuando se detiene manualmente)."""
