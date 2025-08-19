@@ -1,0 +1,57 @@
+{
+  "last_updated": "2025-08-19T10:21:15.358368",
+  "clients": [
+    {
+      "id": "20250819_102105",
+      "name": "SERGIOa AREIZA - 2025-08-19 10:21",
+      "created_at": "2025-08-19T10:21:05.010687",
+      "data": {
+        "client_document_number": "71750823",
+        "client_first_name": "SERGIOa",
+        "client_second_name": "ALEXIS",
+        "client_first_lastname": "AREIZA",
+        "client_second_lastname": "LOAIZA",
+        "client_birth_date": "1974-07-06",
+        "client_gender": "M",
+        "client_city": "MEDELLIN",
+        "client_department": "ANTIOQUIA",
+        "vehicle_plate": "GEN294",
+        "vehicle_model_year": "2026",
+        "vehicle_brand": "Mazda",
+        "vehicle_reference": "Cx50 - utilitario deportivo 4x4",
+        "vehicle_full_reference": "MAZDA CX-50 GRAND TOURING",
+        "vehicle_insured_value_received": "30000000",
+        "manual_cf_code": "20900024001",
+        "manual_ch_code": "20900024001",
+        "policy_number": "040007325677",
+        "policy_number_allianz": "23541048"
+      }
+    },
+    {
+      "id": "20250818_103000",
+      "name": "SERGIO AREIZA (Ejemplo)",
+      "created_at": "2025-08-18T10:30:00.000000",
+      "data": {
+        "client_document_number": "71750823",
+        "client_first_name": "SERGIO",
+        "client_second_name": "ALEXIS",
+        "client_first_lastname": "AREIZA",
+        "client_second_lastname": "LOAIZA",
+        "client_birth_date": "1974-07-06",
+        "client_gender": "M",
+        "client_city": "MEDELLIN",
+        "client_department": "ANTIOQUIA",
+        "vehicle_plate": "GEN294",
+        "vehicle_model_year": "2026",
+        "vehicle_brand": "Mazda",
+        "vehicle_reference": "Cx50 - utilitario deportivo 4x4",
+        "vehicle_full_reference": "MAZDA CX-50 GRAND TOURING",
+        "vehicle_insured_value_received": "30000000",
+        "manual_cf_code": "20900024001",
+        "manual_ch_code": "20900024001",
+        "policy_number": "040007325677",
+        "policy_number_allianz": "23541048"
+      }
+    }
+  ]
+}

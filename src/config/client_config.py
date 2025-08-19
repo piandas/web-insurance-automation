@@ -1,6 +1,7 @@
 """Configuración unificada del cliente para todas las aseguradoras."""
 
 from typing import Dict
+import os
 
 class ClientConfig:
     """Configuración común del cliente que se usa en todas las aseguradoras."""
@@ -11,40 +12,103 @@ class ClientConfig:
     
     VEHICLE_STATE: str = 'Nuevo'  # Opciones: "Nuevo", "Usado"
     
-    # DATOS PERSONALES DEL CLIENTE (cambiar para cada cliente)
-    CLIENT_DOCUMENT_NUMBER: str = '71750823'  # Número de documento del cliente
-    CLIENT_FIRST_NAME: str = 'SERGIO'
-    CLIENT_SECOND_NAME: str = 'ALEXIS'
-    CLIENT_FIRST_LASTNAME: str = 'AREIZA'
-    CLIENT_SECOND_LASTNAME: str = 'LOAIZA'
-    CLIENT_BIRTH_DATE: str = '1974-07-06'  # Formato YYYY-DD-MM
-    CLIENT_GENDER: str = 'M'  # M = Masculino, F = Femenino
-  
-    CLIENT_CITY: str = 'MEDELLIN'           # Ciudad del cliente 
-    CLIENT_DEPARTMENT: str = 'ANTIOQUIA'    # Departamento
+    # DATOS DINÁMICOS DEL CLIENTE (ahora se cargan desde GUI/historial)
+    _current_client_data = None
     
-    # DATOS DEL VEHÍCULO (cambiar para cada vehículo)
-    VEHICLE_PLATE: str = 'GEN294'  # Placa del vehículo
-    VEHICLE_MODEL_YEAR: str = '2026'  # Año del modelo
-    VEHICLE_BRAND: str = 'Mazda'  # Marca del vehículo
-    VEHICLE_REFERENCE: str = 'Cx50 - utilitario deportivo 4x4'  # Referencia específica
-    VEHICLE_FULL_REFERENCE: str = 'MAZDA CX-50 GRAND TOURING'  # Referencia completa para Fasecolda
-
-    # Valor asegurado recibido (para Allianz, llenar en el input correspondiente)
-    VEHICLE_INSURED_VALUE_RECEIVED: str = '30000000'  # Valor asegurado recibido, formato string como lo espera el input
+    # VALORES POR DEFECTO (usados cuando no hay datos cargados)
+    _DEFAULT_CLIENT_DATA = {
+        'client_document_number': '71750823',
+        'client_first_name': 'SERGIO',
+        'client_second_name': 'ALEXIS',
+        'client_first_lastname': 'AREIZA',
+        'client_second_lastname': 'LOAIZA',
+        'client_birth_date': '1974-07-06',
+        'client_gender': 'M',
+        'client_city': 'MEDELLIN',
+        'client_department': 'ANTIOQUIA',
+        'vehicle_plate': 'GEN294',
+        'vehicle_model_year': '2026',
+        'vehicle_brand': 'Mazda',
+        'vehicle_reference': 'Cx50 - utilitario deportivo 4x4',
+        'vehicle_full_reference': 'MAZDA CX-50 GRAND TOURING',
+        'vehicle_insured_value_received': '30000000',
+        'manual_cf_code': '20900024001',
+        'manual_ch_code': '20900024001',
+        'policy_number': '040007325677',
+        'policy_number_allianz': '23541048'
+    }
     
     # CONFIGURACIÓN DE FASECOLDA
     ENABLE_FASECOLDA_SEARCH: bool = True  # Habilitar/deshabilitar búsqueda automática de códigos Fasecolda
     
-    # Códigos Fasecolda manuales (usados cuando la búsqueda automática está deshabilitada)
-    MANUAL_CF_CODE: str = '20900024001'  # Código CF manual
-    MANUAL_CH_CODE: str = '20900024001'  # Código CH manual (puede ser diferente al CF)
+    # ==========================================
+    # MÉTODOS PARA ACCEDER A DATOS DINÁMICOS
+    # ==========================================
     
-    # PÓLIZA
-    POLICY_NUMBER: str = '040007325677'  # Número de póliza común (principalmente para Sura)
-    POLICY_NUMBER_ALLIANZ: str = '23541048'  # Número de póliza específico para Allianz
+    @classmethod
+    def _get_current_data(cls):
+        """Obtiene los datos actuales del cliente (desde GUI o valores por defecto)."""
+        if cls._current_client_data is not None:
+            return cls._current_client_data
+        return cls._DEFAULT_CLIENT_DATA
     
+    @classmethod
+    def load_client_data(cls, client_data: Dict[str, str]) -> None:
+        """Carga nuevos datos del cliente."""
+        cls._current_client_data = client_data.copy()
+        cls._update_class_variables()
     
+    @classmethod
+    def clear_client_data(cls) -> None:
+        """Limpia los datos del cliente (vuelve a valores por defecto)."""
+        cls._current_client_data = None
+        cls._update_class_variables()
+    
+    # Propiedades dinámicas para mantener compatibilidad (usando variables de clase que se actualizan)
+    CLIENT_DOCUMENT_NUMBER = '71750823'
+    CLIENT_FIRST_NAME = 'SERGIO'
+    CLIENT_SECOND_NAME = 'ALEXIS'
+    CLIENT_FIRST_LASTNAME = 'AREIZA'
+    CLIENT_SECOND_LASTNAME = 'LOAIZA'
+    CLIENT_BIRTH_DATE = '1974-07-06'
+    CLIENT_GENDER = 'M'
+    CLIENT_CITY = 'MEDELLIN'
+    CLIENT_DEPARTMENT = 'ANTIOQUIA'
+    VEHICLE_PLATE = 'GEN294'
+    VEHICLE_MODEL_YEAR = '2026'
+    VEHICLE_BRAND = 'Mazda'
+    VEHICLE_REFERENCE = 'Cx50 - utilitario deportivo 4x4'
+    VEHICLE_FULL_REFERENCE = 'MAZDA CX-50 GRAND TOURING'
+    VEHICLE_INSURED_VALUE_RECEIVED = '30000000'
+    MANUAL_CF_CODE = '20900024001'
+    MANUAL_CH_CODE = '20900024001'
+    POLICY_NUMBER = '040007325677'
+    POLICY_NUMBER_ALLIANZ = '23541048'
+    
+    @classmethod
+    def _update_class_variables(cls):
+        """Actualiza las variables de clase con los datos actuales."""
+        data = cls._get_current_data()
+        cls.CLIENT_DOCUMENT_NUMBER = data.get('client_document_number', cls._DEFAULT_CLIENT_DATA['client_document_number'])
+        cls.CLIENT_FIRST_NAME = data.get('client_first_name', cls._DEFAULT_CLIENT_DATA['client_first_name'])
+        cls.CLIENT_SECOND_NAME = data.get('client_second_name', cls._DEFAULT_CLIENT_DATA['client_second_name'])
+        cls.CLIENT_FIRST_LASTNAME = data.get('client_first_lastname', cls._DEFAULT_CLIENT_DATA['client_first_lastname'])
+        cls.CLIENT_SECOND_LASTNAME = data.get('client_second_lastname', cls._DEFAULT_CLIENT_DATA['client_second_lastname'])
+        cls.CLIENT_BIRTH_DATE = data.get('client_birth_date', cls._DEFAULT_CLIENT_DATA['client_birth_date'])
+        cls.CLIENT_GENDER = data.get('client_gender', cls._DEFAULT_CLIENT_DATA['client_gender'])
+        cls.CLIENT_CITY = data.get('client_city', cls._DEFAULT_CLIENT_DATA['client_city'])
+        cls.CLIENT_DEPARTMENT = data.get('client_department', cls._DEFAULT_CLIENT_DATA['client_department'])
+        cls.VEHICLE_PLATE = data.get('vehicle_plate', cls._DEFAULT_CLIENT_DATA['vehicle_plate'])
+        cls.VEHICLE_MODEL_YEAR = data.get('vehicle_model_year', cls._DEFAULT_CLIENT_DATA['vehicle_model_year'])
+        cls.VEHICLE_BRAND = data.get('vehicle_brand', cls._DEFAULT_CLIENT_DATA['vehicle_brand'])
+        cls.VEHICLE_REFERENCE = data.get('vehicle_reference', cls._DEFAULT_CLIENT_DATA['vehicle_reference'])
+        cls.VEHICLE_FULL_REFERENCE = data.get('vehicle_full_reference', cls._DEFAULT_CLIENT_DATA['vehicle_full_reference'])
+        cls.VEHICLE_INSURED_VALUE_RECEIVED = data.get('vehicle_insured_value_received', cls._DEFAULT_CLIENT_DATA['vehicle_insured_value_received'])
+        cls.MANUAL_CF_CODE = data.get('manual_cf_code', cls._DEFAULT_CLIENT_DATA['manual_cf_code'])
+        cls.MANUAL_CH_CODE = data.get('manual_ch_code', cls._DEFAULT_CLIENT_DATA['manual_ch_code'])
+        cls.POLICY_NUMBER = data.get('policy_number', cls._DEFAULT_CLIENT_DATA['policy_number'])
+        cls.POLICY_NUMBER_ALLIANZ = data.get('policy_number_allianz', cls._DEFAULT_CLIENT_DATA['policy_number_allianz'])
+
     # ==========================================
     # ⚙️ CONFIGURACIONES POR DEFECTO
     # ==========================================
@@ -103,15 +167,17 @@ class ClientConfig:
         from datetime import datetime
         
         try:
+            # Obtener la fecha desde los datos dinámicos
+            birth_date = cls.CLIENT_BIRTH_DATE
             # Parsear la fecha en formato YYYY-MM-DD
-            date_obj = datetime.strptime(cls.CLIENT_BIRTH_DATE, '%Y-%m-%d')
+            date_obj = datetime.strptime(birth_date, '%Y-%m-%d')
             
             if company.lower() == 'allianz':
                 # Formato DD/MM/YYYY para Allianz
                 return date_obj.strftime('%d/%m/%Y')
             else:
                 # Formato YYYY-MM-DD para Sura (y por defecto)
-                return cls.CLIENT_BIRTH_DATE
+                return birth_date
                 
         except ValueError:
             # Si hay error en el formato, devolver tal como está

@@ -20,6 +20,8 @@ import re
 # Importar configuración del cliente
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.client_config import ClientConfig
+from config.client_history_manager import ClientHistoryManager
+from interfaces.client_edit_window import ClientEditWindow
 
 
 class AutomationGUI:
@@ -97,14 +99,25 @@ class AutomationGUI:
         info_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         info_frame.columnconfigure(1, weight=1)
         
-        # Botón de actualizar cliente
-        self.actualizar_cliente_btn = ttk.Button(
-            info_frame,
-            text="🔄 Actualizar Cliente",
-            command=self.actualizar_informacion_cliente,
-            width=20
+        # Botones de cliente
+        buttons_frame = ttk.Frame(info_frame)
+        buttons_frame.grid(row=0, column=2, rowspan=3, padx=(20, 0), sticky=tk.N)
+        
+        self.editar_cliente_btn = ttk.Button(
+            buttons_frame,
+            text="✏️ Editar Cliente",
+            command=self.abrir_editor_cliente,
+            width=18
         )
-        self.actualizar_cliente_btn.grid(row=0, column=2, rowspan=3, padx=(20, 0), sticky=tk.N)
+        self.editar_cliente_btn.pack(pady=(0, 5))
+        
+        self.actualizar_cliente_btn = ttk.Button(
+            buttons_frame,
+            text="🔄 Actualizar",
+            command=self.actualizar_informacion_cliente,
+            width=18
+        )
+        self.actualizar_cliente_btn.pack()
         
         # Crear campos de información del cliente
         self.crear_campos_cliente(info_frame)
@@ -222,14 +235,17 @@ class AutomationGUI:
     def crear_campos_cliente(self, parent_frame):
         """Crea los campos de información del cliente."""
         try:
-            # Forzar recarga del módulo ClientConfig para obtener los valores más recientes
-            import importlib
-            from config import client_config
-            importlib.reload(client_config)
-            config = client_config.ClientConfig.get_current_config()
+            # Obtener configuración actual directamente
+            config = ClientConfig.get_current_config()
         except Exception:
             # Fallback si hay error
-            config = ClientConfig.get_current_config()
+            config = {
+                'client_name': f"{ClientConfig.CLIENT_FIRST_NAME} {ClientConfig.CLIENT_FIRST_LASTNAME}",
+                'vehicle_brand': ClientConfig.VEHICLE_BRAND,
+                'vehicle_reference': ClientConfig.VEHICLE_REFERENCE,
+                'vehicle_year': ClientConfig.VEHICLE_MODEL_YEAR,
+                'vehicle_plate': ClientConfig.VEHICLE_PLATE
+            }
         
         # Etiquetas para mostrar información
         ttk.Label(parent_frame, text="Cliente:").grid(row=0, column=0, sticky=tk.W, pady=2)
@@ -252,13 +268,8 @@ class AutomationGUI:
             return
             
         try:
-            # Forzar recarga del módulo ClientConfig para obtener los valores más recientes
-            import importlib
-            from config import client_config
-            importlib.reload(client_config)
-            
-            # Obtener la configuración actualizada
-            config = client_config.ClientConfig.get_current_config()
+            # Obtener la configuración actualizada directamente (sin recargar módulo)
+            config = ClientConfig.get_current_config()
             
             # Actualizar las etiquetas
             self.cliente_label.config(text=config['client_name'])
@@ -267,8 +278,8 @@ class AutomationGUI:
             self.placa_label.config(text=config['vehicle_plate'])
             
             # Actualizar variables de configuración
-            self.estado_vehiculo.set(client_config.ClientConfig.VEHICLE_STATE)
-            self.fasecolda_automatico.set(client_config.ClientConfig.ENABLE_FASECOLDA_SEARCH)
+            self.estado_vehiculo.set(ClientConfig.VEHICLE_STATE)
+            self.fasecolda_automatico.set(ClientConfig.ENABLE_FASECOLDA_SEARCH)
             
             self.agregar_mensaje("✅ Información del cliente actualizada correctamente", "success")
             self.agregar_mensaje(f"👤 Cliente: {config['client_name']}", "info")
@@ -278,6 +289,101 @@ class AutomationGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Error actualizando información del cliente: {e}")
             self.agregar_mensaje(f"❌ Error actualizando información: {e}", "error")
+    
+    def abrir_editor_cliente(self):
+        """Abre la ventana de edición de cliente."""
+        if self.proceso_activo:
+            messagebox.showwarning("Proceso Activo", "No se puede editar la información del cliente mientras el proceso está ejecutándose.")
+            return
+        
+        try:
+            # Callback para cuando se guarden los datos
+            def on_client_updated(client_data):
+                # Actualizar la información mostrada
+                self.actualizar_informacion_cliente()
+                self.agregar_mensaje("✅ Datos del cliente actualizados desde el editor", "success")
+            
+            # Abrir ventana de edición
+            editor = ClientEditWindow(parent_window=self.root, callback=on_client_updated)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el editor de cliente: {e}")
+            self.agregar_mensaje(f"❌ Error abriendo editor: {e}", "error")
+    
+    def guardar_cliente_automatico(self):
+        """Guarda automáticamente el cliente actual en el historial antes de ejecutar."""
+        try:
+            # Inicializar el gestor de historial
+            history_manager = ClientHistoryManager()
+            
+            # Obtener los datos actuales del cliente
+            client_data = {
+                'client_document_number': ClientConfig.CLIENT_DOCUMENT_NUMBER,
+                'client_first_name': ClientConfig.CLIENT_FIRST_NAME,
+                'client_second_name': ClientConfig.CLIENT_SECOND_NAME,
+                'client_first_lastname': ClientConfig.CLIENT_FIRST_LASTNAME,
+                'client_second_lastname': ClientConfig.CLIENT_SECOND_LASTNAME,
+                'client_birth_date': ClientConfig.CLIENT_BIRTH_DATE,
+                'client_gender': ClientConfig.CLIENT_GENDER,
+                'client_city': ClientConfig.CLIENT_CITY,
+                'client_department': ClientConfig.CLIENT_DEPARTMENT,
+                'vehicle_plate': ClientConfig.VEHICLE_PLATE,
+                'vehicle_model_year': ClientConfig.VEHICLE_MODEL_YEAR,
+                'vehicle_brand': ClientConfig.VEHICLE_BRAND,
+                'vehicle_reference': ClientConfig.VEHICLE_REFERENCE,
+                'vehicle_full_reference': ClientConfig.VEHICLE_FULL_REFERENCE,
+                'vehicle_insured_value_received': ClientConfig.VEHICLE_INSURED_VALUE_RECEIVED,
+                'manual_cf_code': ClientConfig.MANUAL_CF_CODE,
+                'manual_ch_code': ClientConfig.MANUAL_CH_CODE,
+                'policy_number': ClientConfig.POLICY_NUMBER,
+                'policy_number_allianz': ClientConfig.POLICY_NUMBER_ALLIANZ
+            }
+            
+            # Verificar si ya existe un cliente similar reciente (evitar duplicados)
+            history = history_manager.load_history()
+            client_name = f"{ClientConfig.CLIENT_FIRST_NAME} {ClientConfig.CLIENT_FIRST_LASTNAME}".strip()
+            document = ClientConfig.CLIENT_DOCUMENT_NUMBER
+            plate = ClientConfig.VEHICLE_PLATE
+            
+            # Buscar cliente similar en las últimas 3 entradas
+            duplicate_found = False
+            for recent_client in history[:3]:
+                recent_data = recent_client.get('data', {})
+                if (recent_data.get('client_document_number') == document and 
+                    recent_data.get('vehicle_plate') == plate):
+                    duplicate_found = True
+                    break
+            
+            if duplicate_found:
+                self.agregar_mensaje(f"💡 Cliente {client_name} ya existe en historial reciente", "info")
+                return
+            
+            # Crear nombre para el historial con timestamp
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            history_name = f"{client_name} - Ejecución {timestamp}"
+            
+            # Validar los datos antes de guardar
+            errors = history_manager.validate_client_data(client_data)
+            if not errors:
+                # Guardar en el historial
+                if history_manager.save_client(client_data, history_name):
+                    self.agregar_mensaje(f"💾 Cliente guardado automáticamente: {client_name}", "success")
+                else:
+                    self.agregar_mensaje("⚠️ No se pudo guardar el cliente en el historial", "warning")
+            else:
+                # Si hay errores de validación, aún intentar guardar pero con advertencia
+                if history_manager.save_client(client_data, f"{history_name} (Con errores)"):
+                    self.agregar_mensaje(f"💾 Cliente guardado con advertencias: {client_name}", "warning")
+                    if self.modo_debug.get():
+                        for field, error in errors.items():
+                            self.agregar_mensaje(f"   ⚠️ {field}: {error}", "warning")
+                else:
+                    self.agregar_mensaje("❌ Error guardando cliente en historial", "error")
+                    
+        except Exception as e:
+            self.agregar_mensaje(f"⚠️ Error guardando cliente automáticamente: {e}", "warning")
+            # No bloquear la ejecución por este error
     
     def toggle_debug_mode(self):
         """Maneja el cambio del modo debug."""
@@ -440,6 +546,9 @@ class AutomationGUI:
             ClientConfig.update_vehicle_state(self.estado_vehiculo.get())
             ClientConfig.update_fasecolda_search(self.fasecolda_automatico.get())
             
+            # GUARDAR AUTOMÁTICAMENTE EL CLIENTE ACTUAL EN EL HISTORIAL
+            self.guardar_cliente_automatico()
+            
             # Agregar mensaje confirmando la configuración aplicada solo en debug
             if self.modo_debug.get():
                 self.agregar_mensaje(f"⚙️ Configuración aplicada - Estado: {self.estado_vehiculo.get()}", "info")
@@ -456,6 +565,7 @@ class AutomationGUI:
         self.ejecutar_btn.config(state=tk.DISABLED, text="⏳ Ejecutando...")
         self.detener_btn.config(state=tk.NORMAL)  # Habilitar botón de detener
         self.actualizar_cliente_btn.config(state=tk.DISABLED)
+        self.editar_cliente_btn.config(state=tk.DISABLED)
         self.proceso_activo = True
         
         # Limpiar consola
@@ -799,6 +909,7 @@ class AutomationGUI:
         self.ejecutar_btn.config(state=tk.NORMAL, text="🚀 Ejecutar Automatización")
         self.detener_btn.config(state=tk.DISABLED)  # Deshabilitar botón de detener
         self.actualizar_cliente_btn.config(state=tk.NORMAL)  # Rehabilitar botón de actualizar
+        self.editar_cliente_btn.config(state=tk.NORMAL)  # Rehabilitar botón de editar
         
         # Limpiar referencia al proceso
         if self.proceso_subprocess:
@@ -823,6 +934,7 @@ class AutomationGUI:
         self.ejecutar_btn.config(state=tk.NORMAL, text="🚀 Ejecutar Automatización")
         self.detener_btn.config(state=tk.DISABLED)  # Deshabilitar botón de detener
         self.actualizar_cliente_btn.config(state=tk.NORMAL)  # Rehabilitar botón de actualizar
+        self.editar_cliente_btn.config(state=tk.NORMAL)  # Rehabilitar botón de editar
         
         # Limpiar referencia al proceso y cerrar stdin si existe
         if self.proceso_subprocess:
