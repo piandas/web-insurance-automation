@@ -45,10 +45,9 @@ class AutomationGUI:
         self.root.resizable(True, True)
         
         # Variables de configuración
-        self.estado_vehiculo = tk.StringVar(value=ClientConfig.VEHICLE_STATE)
         self.fasecolda_automatico = tk.BooleanVar(value=ClientConfig.ENABLE_FASECOLDA_SEARCH)
-        self.mostrar_ventanas = tk.BooleanVar(value=False)  # Por defecto en segundo plano
-        self.modo_debug = tk.BooleanVar(value=False)  # Modo debug desactivado por defecto
+        self.mostrar_ventanas = tk.BooleanVar(value=False)
+        self.modo_debug = tk.BooleanVar(value=False)
         
         # Variables de control
         self.proceso_activo = False
@@ -133,24 +132,13 @@ class AutomationGUI:
         config_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         config_frame.columnconfigure(1, weight=1)
         
-        # Opción: Estado del vehículo
-        ttk.Label(config_frame, text="Estado del vehículo:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        estado_combo = ttk.Combobox(
-            config_frame, 
-            textvariable=self.estado_vehiculo,
-            values=["Nuevo", "Usado"],
-            state="readonly",
-            width=15
-        )
-        estado_combo.grid(row=0, column=1, sticky=tk.W, pady=5, padx=(10, 0))
-        
         # Opción: Búsqueda automática de Fasecolda
         fasecolda_check = ttk.Checkbutton(
             config_frame,
             text="Activar búsqueda automática de códigos Fasecolda",
             variable=self.fasecolda_automatico
         )
-        fasecolda_check.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
+        fasecolda_check.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=5)
         
         # Opción: Mostrar ventanas del navegador
         ventanas_check = ttk.Checkbutton(
@@ -158,7 +146,7 @@ class AutomationGUI:
             text="Mostrar ventanas del navegador (por defecto están ocultas)",
             variable=self.mostrar_ventanas
         )
-        ventanas_check.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=5)
+        ventanas_check.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
         
         # Opción: Modo debug
         debug_check = ttk.Checkbutton(
@@ -167,7 +155,7 @@ class AutomationGUI:
             variable=self.modo_debug,
             command=self.toggle_debug_mode
         )
-        debug_check.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=5)
+        debug_check.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=5)
         
         # Frame de controles
         control_frame = ttk.Frame(main_frame)
@@ -310,7 +298,6 @@ class AutomationGUI:
             self.placa_label.config(text=config['vehicle_plate'])
             
             # Actualizar variables de configuración
-            self.estado_vehiculo.set(ClientConfig.VEHICLE_STATE)
             self.fasecolda_automatico.set(ClientConfig.ENABLE_FASECOLDA_SEARCH)
             
             self.agregar_mensaje("✅ Información del cliente actualizada correctamente", "success")
@@ -575,7 +562,6 @@ class AutomationGUI:
         # Actualizar configuraciones antes de ejecutar
         try:
             # Actualizar la configuración global
-            ClientConfig.update_vehicle_state(self.estado_vehiculo.get())
             ClientConfig.update_fasecolda_search(self.fasecolda_automatico.get())
             
             # GUARDAR AUTOMÁTICAMENTE EL CLIENTE ACTUAL EN EL HISTORIAL
@@ -583,7 +569,6 @@ class AutomationGUI:
             
             # Agregar mensaje confirmando la configuración aplicada solo en debug
             if self.modo_debug.get():
-                self.agregar_mensaje(f"⚙️ Configuración aplicada - Estado: {self.estado_vehiculo.get()}", "info")
                 fasecolda_status = "Activada" if self.fasecolda_automatico.get() else "Desactivada"
                 self.agregar_mensaje(f"🔍 Fasecolda: {fasecolda_status}", "info")
                 debug_status = "Activado" if self.modo_debug.get() else "Desactivado"
@@ -611,7 +596,6 @@ class AutomationGUI:
         # Agregar mensajes iniciales solo en modo debug
         if self.modo_debug.get():
             self.agregar_mensaje("🚀 Iniciando automatización para Allianz y Sura...", "info")
-            self.agregar_mensaje(f"⚙️ Estado del vehículo: {self.estado_vehiculo.get()}", "info")
             fasecolda_status = "Activada" if self.fasecolda_automatico.get() else "Desactivada"
             self.agregar_mensaje(f"🔍 Búsqueda automática Fasecolda: {fasecolda_status}", "info")
             ventanas_status = "Visibles" if self.mostrar_ventanas.get() else "Ocultas"
@@ -675,12 +659,10 @@ class AutomationGUI:
             env['PYTHONIOENCODING'] = 'utf-8'
             
             # Pasar configuración de la GUI como variables de entorno (prioridad sobre archivo)
-            env['GUI_VEHICLE_STATE'] = self.estado_vehiculo.get()
             env['GUI_FASECOLDA_ENABLED'] = str(self.fasecolda_automatico.get())
             env['GUI_SHOW_BROWSER'] = str(self.mostrar_ventanas.get())
             
             # Mensaje de debug para confirmar valores
-            self.message_queue.put(("message", ("info", f"🔧 Estado vehículo (GUI): {self.estado_vehiculo.get()}")))
             self.message_queue.put(("message", ("info", f"🔧 Fasecolda (GUI): {self.fasecolda_automatico.get()}")))
             self.message_queue.put(("message", ("info", f"🔧 Mostrar ventanas (GUI): {self.mostrar_ventanas.get()}")))
             

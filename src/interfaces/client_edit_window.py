@@ -48,8 +48,8 @@ class ClientEditWindow:
         # Crear la interfaz
         self.setup_ui()
         
-        # Cargar valores por defecto
-        self.load_default_values()
+        # Dejar campos vacíos por defecto (no cargar valores predeterminados)
+        self.clear_all_fields()
         
         # Configurar cierre
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -82,7 +82,8 @@ class ClientEditWindow:
         self.vehicle_brand = tk.StringVar()
         self.vehicle_reference = tk.StringVar()
         self.vehicle_full_reference = tk.StringVar()
-        self.vehicle_insured_value_received = tk.StringVar()
+        self.vehicle_state = tk.StringVar(value="Nuevo")
+        # Eliminamos vehicle_insured_value_received ya que no es necesario
         
         # Variables de códigos Fasecolda
         self.manual_cf_code = tk.StringVar()
@@ -94,6 +95,9 @@ class ClientEditWindow:
         
         # Variable para historial
         self.selected_history_item = tk.StringVar()
+        
+        # Variable para rastrear el cliente actualmente cargado desde historial
+        self.current_client_id = None
     
     def setup_ui(self):
         """Configura la interfaz de usuario."""
@@ -102,39 +106,39 @@ class ClientEditWindow:
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Frame de scroll
-        canvas = tk.Canvas(main_frame)
+        canvas = tk.Canvas(main_frame, borderwidth=0, highlightthickness=0)
         scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        # Crea la ventana interna y guárdala con una tag para referenciarla
+        inner_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", tags=("inner",))
         canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # Hacer que el contenido se expanda horizontalmente
-        def configure_scroll_region(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            # Ajustar el ancho del frame scrollable al ancho del canvas
-            canvas_width = canvas.winfo_width()
-            canvas.itemconfig(canvas.find_all()[0], width=canvas_width)
-        
-        scrollable_frame.bind("<Configure>", configure_scroll_region)
-        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas.find_all()[0], width=canvas.winfo_width()))
+
+        def update_layout(event=None):
+            """Ajusta ancho y bloquea scroll si no hay overflow vertical."""
+            # 1) Mantener el ancho del inner igual al del canvas
+            canvas.itemconfig("inner", width=canvas.winfo_width())
+            # 2) Recalcular región de scroll
+            bbox = canvas.bbox("inner")
+            if not bbox:
+                return
+            content_h = bbox[3] - bbox[1]
+            viewport_h = canvas.winfo_height()
+            if content_h <= viewport_h:
+                # Sin overflow: fija la región al viewport y vuelve al top
+                canvas.yview_moveto(0)
+                canvas.configure(scrollregion=(0, 0, bbox[2], viewport_h))
+            else:
+                # Con overflow: región normal al contenido
+                canvas.configure(scrollregion=bbox)
+
+        # Un solo set de binds limpio
+        scrollable_frame.bind("<Configure>", update_layout)
+        canvas.bind("<Configure>", update_layout)
         
         # Crear contenido con padding interno
         content_frame = ttk.Frame(scrollable_frame)
-        content_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-        
-        # Título
-        title_label = ttk.Label(
-            content_frame,
-            text="📝 Editor de Datos del Cliente",
-            font=("Arial", 16, "bold")
-        )
-        title_label.pack(pady=(0, 20))
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=(15, 35))
         
         # Frame de historial
         self.create_history_section(content_frame)
@@ -160,16 +164,15 @@ class ClientEditWindow:
         
         # Bind mousewheel
         def _on_mousewheel(event):
+            bbox = canvas.bbox("inner")
+            if not bbox:
+                return
+            content_h = bbox[3] - bbox[1]
+            if content_h <= canvas.winfo_height():
+                return  # no hay nada que desplazar
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
         canvas.bind("<MouseWheel>", _on_mousewheel)
-        
-        # También bind al scrollable_frame y a todos sus hijos para mejor experiencia
-        def bind_to_mousewheel(widget):
-            widget.bind("<MouseWheel>", _on_mousewheel)
-            for child in widget.winfo_children():
-                bind_to_mousewheel(child)
-        
-        bind_to_mousewheel(scrollable_frame)
     
     def create_history_section(self, parent):
         """Crea la sección de historial."""
@@ -179,6 +182,15 @@ class ClientEditWindow:
         # Combo para seleccionar del historial
         ttk.Label(history_frame, text="Seleccionar cliente del historial:").pack(anchor=tk.W, pady=(0, 5))
         
+        # Etiqueta de ayuda
+        help_label = ttk.Label(
+            history_frame, 
+            text="💡 Los campos se actualizan automáticamente al seleccionar un cliente",
+            font=("Arial", 8),
+            foreground="gray"
+        )
+        help_label.pack(anchor=tk.W, pady=(0, 5))
+        
         history_combo_frame = ttk.Frame(history_frame)
         history_combo_frame.pack(fill=tk.X, pady=(0, 10))
         
@@ -186,33 +198,36 @@ class ClientEditWindow:
             history_combo_frame,
             textvariable=self.selected_history_item,
             state="readonly",
-            width=50
+            width=35
         )
         self.history_combo.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 5))
         
+        # Bind para actualización automática al seleccionar
+        self.history_combo.bind('<<ComboboxSelected>>', self.on_history_selection_changed)
+        
         ttk.Button(
             history_combo_frame,
-            text="🔄 Actualizar",
+            text="🔄 Actualizar Historial",
             command=self.refresh_history,
-            width=12
+            width=22
         ).pack(side=tk.RIGHT, padx=(5, 0))
         
         # Botones de acción del historial
         buttons_frame = ttk.Frame(history_frame)
-        buttons_frame.pack(fill=tk.X)
+        buttons_frame.pack(fill=tk.X, pady=(10, 0))
         
         ttk.Button(
             buttons_frame,
-            text="📥 Cargar Seleccionado",
-            command=self.load_from_history,
+            text="🧹 Limpiar Campos",
+            command=self.clear_all_fields,
             width=18
         ).pack(side=tk.LEFT, padx=(0, 5))
         
         ttk.Button(
             buttons_frame,
-            text="🗑️ Eliminar Seleccionado",
+            text="🗑️Eliminar Seleccionado",
             command=self.delete_from_history,
-            width=18
+            width=25
         ).pack(side=tk.LEFT, padx=(5, 0))
         
         # Cargar historial inicial
@@ -311,20 +326,49 @@ class ClientEditWindow:
         year_entry.bind('<KeyRelease>', self.validate_year_field)
         row += 1
         
+        # Estado del vehículo
+        ttk.Label(vehicle_frame, text="Estado del vehículo:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
+        state_combo = ttk.Combobox(
+            vehicle_frame,
+            textvariable=self.vehicle_state,
+            values=["Nuevo", "Usado"],
+            state="readonly",
+            width=15
+        )
+        state_combo.grid(row=row, column=1, sticky=tk.W, pady=5, padx=(0, 15))
+        row += 1
+        
         # Marca
         ttk.Label(vehicle_frame, text="Marca:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(vehicle_frame, textvariable=self.vehicle_brand, width=20).grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
         
-        # Valor asegurado
-        ttk.Label(vehicle_frame, text="Valor asegurado:").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
-        value_entry = ttk.Entry(vehicle_frame, textvariable=self.vehicle_insured_value_received, width=15)
-        value_entry.grid(row=row, column=3, sticky=tk.W+tk.E, pady=5)
-        value_entry.bind('<KeyRelease>', self.validate_numeric_field)
+        # Lista de marcas de Fasecolda
+        marcas_fasecolda = [
+            'AUDI', 'BAIC', 'BMW', 'BRENSON', 'BYD', 'CHANGAN', 'CHERY', 'CHEVROLET',
+            'CITROEN', 'CUPRA', 'DFSK', 'DFM', 'DFZL', 'DS', 'FAW AMI', 'FIAT', 'FORD',
+            'FOTON', 'GAC', 'GREAT WALL', 'HONDA', 'HYUNDAI', 'JAC', 'JAGUAR', 'JEEP',
+            'JETOUR', 'JMC', 'KIA', 'KYC', 'LAND ROVER', 'MAXUS', 'MAZDA', 'MERCEDES BENZ',
+            'MG', 'MINI', 'MITSUBISHI', 'NISSAN', 'OPEL', 'PEUGEOT', 'PORSCHE', 'RAYSINCE',
+            'RENAULT', 'SEAT', 'SHINERAY', 'SMART', 'SSANGYONG', 'SUBARU', 'SUZUKI',
+            'TOYOTA', 'VOLKSWAGEN', 'VOLVO', 'ZEEKR'
+        ]
+        
+        self.brand_combo = ttk.Combobox(
+            vehicle_frame, 
+            textvariable=self.vehicle_brand, 
+            values=marcas_fasecolda,
+            state="normal",
+            width=20
+        )
+        self.brand_combo.grid(row=row, column=1, columnspan=3, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        self.brand_combo.bind('<<ComboboxSelected>>', self.update_full_reference)
+        self.brand_combo.bind('<KeyRelease>', self.update_full_reference)
         row += 1
         
         # Referencia
         ttk.Label(vehicle_frame, text="Referencia:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(vehicle_frame, textvariable=self.vehicle_reference, width=40).grid(row=row, column=1, columnspan=3, sticky=tk.W+tk.E, pady=5)
+        self.reference_entry = ttk.Entry(vehicle_frame, textvariable=self.vehicle_reference, width=40)
+        self.reference_entry.grid(row=row, column=1, columnspan=3, sticky=tk.W+tk.E, pady=5)
+        self.reference_entry.bind('<KeyRelease>', self.update_full_reference)
         row += 1
         
         # Referencia completa Fasecolda
@@ -333,7 +377,7 @@ class ClientEditWindow:
     
     def create_fasecolda_section(self, parent):
         """Crea la sección de códigos Fasecolda."""
-        fasecolda_frame = ttk.LabelFrame(parent, text="🔍 Códigos Fasecolda Manuales", padding="10")
+        fasecolda_frame = ttk.LabelFrame(parent, text="🔍 Códigos Fasecolda Manuales (Solo llenar si se necesita, sino dejar vacio)", padding="10")
         fasecolda_frame.pack(fill=tk.X, pady=(0, 15))
         
         # Configurar grid
@@ -372,7 +416,7 @@ class ClientEditWindow:
     def create_buttons_section(self, parent):
         """Crea la sección de botones."""
         buttons_frame = ttk.Frame(parent)
-        buttons_frame.pack(fill=tk.X, pady=(20, 0))
+        buttons_frame.pack(fill=tk.X, pady=(15, 0))
         
         # Centrar botones
         center_frame = ttk.Frame(buttons_frame)
@@ -389,14 +433,7 @@ class ClientEditWindow:
             center_frame,
             text="📁 Guardar en Historial",
             command=self.save_to_history,
-            width=18
-        ).pack(side=tk.LEFT, padx=(5, 10))
-        
-        ttk.Button(
-            center_frame,
-            text="🔄 Valores por Defecto",
-            command=self.load_default_values,
-            width=18
+            width=22
         ).pack(side=tk.LEFT, padx=(5, 10))
         
         ttk.Button(
@@ -456,7 +493,12 @@ class ClientEditWindow:
         date_window.geometry("300x200")
         date_window.resizable(False, False)
         
-        # Centrar ventana
+        # Centrar en pantalla
+        date_window.update_idletasks()
+        x = (date_window.winfo_screenwidth() // 2) - (300 // 2)
+        y = (date_window.winfo_screenheight() // 2) - (200 // 2)
+        date_window.geometry(f"300x200+{x}+{y}")
+        
         date_window.transient(self.window)
         date_window.grab_set()
         
@@ -566,28 +608,6 @@ class ClientEditWindow:
         if history_items:
             self.history_combo.set('')
     
-    def load_from_history(self):
-        """Carga datos desde el historial seleccionado."""
-        selection = self.selected_history_item.get()
-        if not selection:
-            messagebox.showwarning("Advertencia", "Debe seleccionar un cliente del historial")
-            return
-        
-        # Obtener índice seleccionado
-        try:
-            index = self.history_combo.current()
-            if index < 0:
-                return
-            
-            history = self.history_manager.load_history()
-            if index < len(history):
-                client_data = history[index].get('data', {})
-                self.load_data_to_fields(client_data)
-                messagebox.showinfo("Éxito", "Datos cargados desde el historial")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error cargando datos: {e}")
-    
     def delete_from_history(self):
         """Elimina el cliente seleccionado del historial."""
         selection = self.selected_history_item.get()
@@ -637,7 +657,8 @@ class ClientEditWindow:
         self.vehicle_brand.set(data.get('vehicle_brand', ''))
         self.vehicle_reference.set(data.get('vehicle_reference', ''))
         self.vehicle_full_reference.set(data.get('vehicle_full_reference', ''))
-        self.vehicle_insured_value_received.set(data.get('vehicle_insured_value_received', ''))
+        self.vehicle_state.set(data.get('vehicle_state', 'Nuevo'))
+        # Eliminamos vehicle_insured_value_received ya que no es necesario
         
         self.manual_cf_code.set(data.get('manual_cf_code', ''))
         self.manual_ch_code.set(data.get('manual_ch_code', ''))
@@ -663,7 +684,8 @@ class ClientEditWindow:
             'vehicle_brand': self.vehicle_brand.get(),
             'vehicle_reference': self.vehicle_reference.get(),
             'vehicle_full_reference': self.vehicle_full_reference.get(),
-            'vehicle_insured_value_received': self.vehicle_insured_value_received.get(),
+            'vehicle_state': self.vehicle_state.get(),
+            # Eliminamos vehicle_insured_value_received ya que no es necesario
             
             'manual_cf_code': self.manual_cf_code.get(),
             'manual_ch_code': self.manual_ch_code.get(),
@@ -749,25 +771,34 @@ class ClientEditWindow:
         
         # Guardar en el historial automáticamente
         try:
-            # Crear nombre descriptivo para el cliente
-            nombre_completo = f"{data.get('client_first_name', '')} {data.get('client_first_lastname', '')}"
-            from datetime import datetime
-            fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
-            nombre_cliente = f"{nombre_completo.strip()} - {fecha_actual}"
-            
-            # Guardar en historial
-            resultado = self.history_manager.save_client(data, nombre_cliente)
-            if resultado.get('success'):
-                print(f"Cliente guardado en historial: {nombre_cliente}")
-                # Refrescar el historial en la ventana
-                self.refresh_history()
+            if self.current_client_id:
+                # Actualizar cliente existente
+                nombre_completo = f"{data.get('client_first_name', '')} {data.get('client_first_lastname', '')}"
+                resultado = self.history_manager.update_client(self.current_client_id, data, nombre_completo.strip())
+                if resultado:
+                    print(f"Cliente actualizado en historial: {nombre_completo.strip()}")
+                    self.refresh_history()
+                else:
+                    print("Error: No se pudo actualizar el cliente en historial")
             else:
-                print(f"Información: {resultado.get('message', 'Cliente ya existe en historial')}")
+                # Crear nuevo cliente
+                nombre_completo = f"{data.get('client_first_name', '')} {data.get('client_first_lastname', '')}"
+                from datetime import datetime
+                fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
+                nombre_cliente = f"{nombre_completo.strip()} - {fecha_actual}"
+                
+                resultado = self.history_manager.save_client(data, nombre_cliente)
+                if resultado:
+                    print(f"Cliente guardado en historial: {nombre_cliente}")
+                    self.refresh_history()
+                else:
+                    print("Error: No se pudo guardar el cliente en historial")
         except Exception as e:
             print(f"Error al guardar en historial: {e}")
         
         # Aplicar los datos al ClientConfig
         ClientConfig.load_client_data(data)
+        ClientConfig.update_vehicle_state(data.get('vehicle_state', 'Nuevo'))
         
         # Llamar callback si existe (esto actualiza la ventana principal)
         if self.callback:
@@ -775,6 +806,75 @@ class ClientEditWindow:
         
         messagebox.showinfo("Éxito", "Datos guardados en historial y aplicados al sistema correctamente")
         self.window.destroy()
+    
+    def clear_all_fields(self):
+        """Limpia todos los campos de la interfaz."""
+        # Limpiar datos personales
+        self.client_document_number.set('')
+        self.client_first_name.set('')
+        self.client_second_name.set('')
+        self.client_first_lastname.set('')
+        self.client_second_lastname.set('')
+        self.client_birth_date.set('')
+        self.client_gender.set('')
+        self.client_city.set('')
+        self.client_department.set('')
+        
+        # Limpiar datos del vehículo
+        self.vehicle_plate.set('')
+        self.vehicle_model_year.set('')
+        self.vehicle_brand.set('')
+        self.vehicle_reference.set('')
+        self.vehicle_full_reference.set('')
+        self.vehicle_state.set('Nuevo')
+        
+        # Limpiar códigos Fasecolda
+        self.manual_cf_code.set('')
+        self.manual_ch_code.set('')
+        
+        # Limpiar pólizas
+        self.policy_number.set('')
+        self.policy_number_allianz.set('')
+        
+        # Limpiar selección del historial
+        self.selected_history_item.set('')
+        self.current_client_id = None
+        if hasattr(self, 'history_combo'):
+            self.history_combo.set('')
+    
+    def update_full_reference(self, event=None):
+        """Actualiza la referencia completa automáticamente."""
+        marca = self.vehicle_brand.get().strip()
+        referencia = self.vehicle_reference.get().strip()
+        
+        if marca and referencia:
+            full_ref = f"{marca.upper()} {referencia}"
+            self.vehicle_full_reference.set(full_ref)
+        elif marca:
+            self.vehicle_full_reference.set(marca.upper())
+        else:
+            self.vehicle_full_reference.set("")
+    
+    def on_history_selection_changed(self, event=None):
+        """Se ejecuta cuando se selecciona un elemento del historial."""
+        selection = self.selected_history_item.get()
+        if not selection:
+            return
+        
+        try:
+            index = self.history_combo.current()
+            if index < 0:
+                return
+            
+            history = self.history_manager.load_history()
+            if index < len(history):
+                client_data = history[index].get('data', {})
+                # Guardar el ID del cliente seleccionado
+                self.current_client_id = history[index].get('id')
+                self.load_data_to_fields(client_data)
+            
+        except Exception as e:
+            print(f"Error cargando datos automáticamente: {e}")
     
     def on_closing(self):
         """Maneja el cierre de la ventana."""

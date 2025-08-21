@@ -43,7 +43,7 @@ class ClientHistoryManager:
             'vehicle_brand': 'Mazda',
             'vehicle_reference': 'Cx50 - utilitario deportivo 4x4',
             'vehicle_full_reference': 'MAZDA CX-50 GRAND TOURING',
-            'vehicle_insured_value_received': '30000000',
+            'vehicle_state': 'Nuevo',
             
             # CÓDIGOS FASECOLDA
             'manual_cf_code': '20900024001',
@@ -114,6 +114,50 @@ class ClientHistoryManager:
             
         except Exception as e:
             print(f"Error guardando cliente: {e}")
+            return False
+    
+    def update_client(self, client_id: str, client_data: Dict[str, Any], client_name: str = None) -> bool:
+        """
+        Actualiza un cliente existente en el historial.
+        
+        Args:
+            client_id: ID del cliente a actualizar
+            client_data: Nuevos datos del cliente
+            client_name: Nuevo nombre para el cliente (opcional)
+            
+        Returns:
+            True si se actualizó correctamente, False si no
+        """
+        try:
+            history = self.load_history()
+            
+            # Buscar el cliente por ID
+            for i, client in enumerate(history):
+                if client.get('id') == client_id:
+                    # Actualizar datos manteniendo ID y fecha de creación original
+                    history[i]['data'] = client_data
+                    history[i]['updated_at'] = datetime.now().isoformat()
+                    
+                    # Actualizar nombre si se proporciona
+                    if client_name:
+                        history[i]['name'] = client_name
+                    
+                    # Guardar historial actualizado
+                    history_data = {
+                        'last_updated': datetime.now().isoformat(),
+                        'clients': history
+                    }
+                    
+                    with open(self.history_file, 'w', encoding='utf-8') as f:
+                        json.dump(history_data, f, indent=2, ensure_ascii=False)
+                    
+                    return True
+            
+            # Cliente no encontrado
+            return False
+            
+        except Exception as e:
+            print(f"Error actualizando cliente: {e}")
             return False
     
     def get_client_by_id(self, client_id: str) -> Optional[Dict[str, Any]]:

@@ -31,7 +31,7 @@ class ClientConfig:
         'vehicle_brand': 'Mazda',
         'vehicle_reference': 'Cx50 - utilitario deportivo 4x4',
         'vehicle_full_reference': 'MAZDA CX-50 GRAND TOURING',
-        'vehicle_insured_value_received': '30000000',
+        'vehicle_state': 'Nuevo',
         'manual_cf_code': '20900024001',
         'manual_ch_code': '20900024001',
         'policy_number': '040007325677',
@@ -79,7 +79,6 @@ class ClientConfig:
     VEHICLE_BRAND = 'Mazda'
     VEHICLE_REFERENCE = 'Cx50 - utilitario deportivo 4x4'
     VEHICLE_FULL_REFERENCE = 'MAZDA CX-50 GRAND TOURING'
-    VEHICLE_INSURED_VALUE_RECEIVED = '30000000'
     MANUAL_CF_CODE = '20900024001'
     MANUAL_CH_CODE = '20900024001'
     POLICY_NUMBER = '040007325677'
@@ -103,7 +102,7 @@ class ClientConfig:
         cls.VEHICLE_BRAND = data.get('vehicle_brand', cls._DEFAULT_CLIENT_DATA['vehicle_brand'])
         cls.VEHICLE_REFERENCE = data.get('vehicle_reference', cls._DEFAULT_CLIENT_DATA['vehicle_reference'])
         cls.VEHICLE_FULL_REFERENCE = data.get('vehicle_full_reference', cls._DEFAULT_CLIENT_DATA['vehicle_full_reference'])
-        cls.VEHICLE_INSURED_VALUE_RECEIVED = data.get('vehicle_insured_value_received', cls._DEFAULT_CLIENT_DATA['vehicle_insured_value_received'])
+        cls.VEHICLE_STATE = data.get('vehicle_state', cls._DEFAULT_CLIENT_DATA['vehicle_state'])
         cls.MANUAL_CF_CODE = data.get('manual_cf_code', cls._DEFAULT_CLIENT_DATA['manual_cf_code'])
         cls.MANUAL_CH_CODE = data.get('manual_ch_code', cls._DEFAULT_CLIENT_DATA['manual_ch_code'])
         cls.POLICY_NUMBER = data.get('policy_number', cls._DEFAULT_CLIENT_DATA['policy_number'])
