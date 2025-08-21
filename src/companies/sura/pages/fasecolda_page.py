@@ -14,8 +14,8 @@ from ....shared.utils import Utils
 
 class FasecoldaPage(BasePage):
     async def select_10_1_smlmv_in_dropdowns(self) -> bool:
-        """Selecciona '10% - 1 SMLMV' en el dropdown de 'Pérdida Parcial' en ambos contenedores (Daños y Hurto)."""
-        self.logger.info("🔽 Seleccionando '10% - 1 SMLMV' en los dropdowns de 'Pérdida Parcial' (Daños y Hurto)...")
+        """Selecciona '1 SMLMV' en el dropdown de 'Pérdida Parcial' en ambos contenedores (Daños y Hurto)."""
+        self.logger.info("🔽 Seleccionando '1 SMLMV' en los dropdowns de 'Pérdida Parcial' (Daños y Hurto)...")
         try:
             # Buscar todos los labels 'Pérdida Parcial'
             label_els = await self.page.query_selector_all("label.style-scope.paper-input:has-text('Pérdida Parcial')")
@@ -29,29 +29,35 @@ class FasecoldaPage(BasePage):
                     return False
                 await input_el.click()
                 self.logger.info(f"✅ Desplegable 'Pérdida Parcial' #{idx+1} abierto")
-                # Buscar todas las opciones '10% - 1 SMLMV'
-                options = await self.page.query_selector_all("paper-item:has-text('10% - 1 SMLMV')")
-                if not options:
-                    self.logger.error(f"❌ No se encontró opción '10% - 1 SMLMV' en 'Pérdida Parcial' #{idx+1}")
+                # Buscar todas las opciones '1 SMLMV' (más flexible con espacios)
+                options = await self.page.query_selector_all("paper-item")
+                matching_options = []
+                for option in options:
+                    text = await option.text_content()
+                    if text and "1 SMLMV" in text.strip():
+                        matching_options.append(option)
+                
+                if not matching_options:
+                    self.logger.error(f"❌ No se encontró opción '1 SMLMV' en 'Pérdida Parcial' #{idx+1}")
                     return False
                 # Para el segundo dropdown, elegir la opción que no esté aria-selected='true'
                 option_to_click = None
                 if idx == 0:
-                    option_to_click = options[0]
+                    option_to_click = matching_options[0]
                 else:
-                    for opt in options:
+                    for opt in matching_options:
                         aria_selected = await opt.get_attribute('aria-selected')
                         if aria_selected != 'true':
                             option_to_click = opt
                             break
                     if not option_to_click:
-                        option_to_click = options[0]  # fallback
+                        option_to_click = matching_options[0]  # fallback
                 await option_to_click.click()
-                self.logger.info(f"✅ Opción '10% - 1 SMLMV' seleccionada en 'Pérdida Parcial' #{idx+1}")
+                self.logger.info(f"✅ Opción '1 SMLMV' seleccionada en 'Pérdida Parcial' #{idx+1}")
                 await self.page.wait_for_timeout(500)
             return True
         except Exception as e:
-            self.logger.error(f"❌ Error seleccionando '10% - 1 SMLMV' en dropdowns de 'Pérdida Parcial': {e}")
+            self.logger.error(f"❌ Error seleccionando '1 SMLMV' en dropdowns de 'Pérdida Parcial': {e}")
             return False
     async def process_used_vehicle_plate(self) -> bool:
         """Flujo especial para vehículos usados: solo ingresar placa y dar clic en la lupa."""
@@ -762,7 +768,7 @@ class FasecoldaPage(BasePage):
             return False
 
     async def process_prima_and_plan_selection(self) -> dict:
-        """Proceso completo para extraer primas y seleccionar plan clásico. En usados, selecciona 10-1 SMLMV y extrae 3 valores."""
+        """Proceso completo para extraer primas y seleccionar plan clásico. En usados, selecciona 1 SMLMV y extrae 3 valores."""
         self.logger.info("🔄 Procesando extracción de primas y selección de plan...")
         results = {'prima_global': None, 'prima_10_1_1': None, 'prima_10_1_2': None, 'prima_clasico': None, 'success': False}
         try:
@@ -774,16 +780,16 @@ class FasecoldaPage(BasePage):
                 return results
             results['prima_global'] = prima_global
             self.logger.info(f"✅ Prima Plan Global: ${prima_global:,.0f}")
-            # SOLO PARA USADOS: seleccionar 10-1 SMLMV en dos desplegables y extraer valor tras cada uno
+            # SOLO PARA USADOS: seleccionar 1 SMLMV en dos desplegables y extraer valor tras cada uno
             if ClientConfig.VEHICLE_STATE == 'Usado':
                 if not await self.select_10_1_smlmv_in_dropdowns():
-                    self.logger.error("❌ No se pudo seleccionar '10% - 1 SMLMV' en los desplegables")
+                    self.logger.error("❌ No se pudo seleccionar '1 SMLMV' en los desplegables")
                     return results
                 # Esperar y extraer valor solo después de actualizar ambos dropdowns
-                self.logger.info("📊 Esperando y extrayendo prima tras ambos cambios de 10-1 SMLMV...")
+                self.logger.info("📊 Esperando y extrayendo prima tras ambos cambios de 1 SMLMV...")
                 prima_10_1 = await self.extract_prima_anual_value(max_wait_seconds=20)
                 results['prima_10_1'] = prima_10_1
-                self.logger.info(f"✅ Prima tras ambos 10-1 SMLMV: ${prima_10_1 if prima_10_1 is not None else 'N/A'}")
+                self.logger.info(f"✅ Prima tras ambos 1 SMLMV: ${prima_10_1 if prima_10_1 is not None else 'N/A'}")
             # 2. Cambiar a Plan Autos Clásico
             self.logger.info("🎯 Cambiando a Plan Autos Clásico...")
             if not await self.click_plan_autos_clasico():
@@ -802,7 +808,7 @@ class FasecoldaPage(BasePage):
             results['success'] = True
             # Mostrar/exportar los 3 valores en usados, 2 en nuevos
             if ClientConfig.VEHICLE_STATE == 'Usado':
-                self.logger.info(f"✅ Primas usadas - Global: ${prima_global:,.0f}, tras 10-1 SMLMV: ${results['prima_10_1'] if results['prima_10_1'] is not None else 'N/A'}, Clásico: ${prima_clasico:,.0f}")
+                self.logger.info(f"✅ Primas usadas - Global: ${prima_global:,.0f}, tras 1 SMLMV: ${results['prima_10_1'] if results['prima_10_1'] is not None else 'N/A'}, Clásico: ${prima_clasico:,.0f}")
             else:
                 self.logger.info(f"✅ Primas diferentes - Global: ${prima_global:,.0f}, Clásico: ${prima_clasico:,.0f}")
             self.logger.info("🎉 Proceso de extracción de primas completado exitosamente")

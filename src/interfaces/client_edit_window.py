@@ -958,7 +958,6 @@ class ClientEditWindow:
                 nombre_completo = f"{data.get('client_first_name', '')} {data.get('client_first_lastname', '')}"
                 resultado = self.history_manager.update_client(self.current_client_id, data, nombre_completo.strip())
                 if resultado:
-                    print(f"Cliente actualizado en historial: {nombre_completo.strip()}")
                     self.refresh_history()
                 else:
                     print("Error: No se pudo actualizar el cliente en historial")
@@ -971,7 +970,6 @@ class ClientEditWindow:
                 
                 resultado = self.history_manager.save_client(data, nombre_cliente)
                 if resultado:
-                    print(f"Cliente guardado en historial: {nombre_cliente}")
                     self.refresh_history()
                 else:
                     print("Error: No se pudo guardar el cliente en historial")
@@ -981,14 +979,6 @@ class ClientEditWindow:
         # Aplicar los datos al ClientConfig
         ClientConfig.load_client_data(data)
         ClientConfig.update_vehicle_state(data.get('vehicle_state', 'Nuevo'))
-        
-        # Debug: verificar que los datos se aplicaron correctamente
-        print(f"DEBUG - Datos aplicados al ClientConfig:")
-        print(f"  Nombre: {ClientConfig.CLIENT_FIRST_NAME} {ClientConfig.CLIENT_FIRST_LASTNAME}")
-        print(f"  Documento: {ClientConfig.CLIENT_DOCUMENT_NUMBER}")
-        print(f"  Placa: {ClientConfig.VEHICLE_PLATE}")
-        print(f"  Marca: {ClientConfig.VEHICLE_BRAND}")
-        print(f"  Estado: {ClientConfig.VEHICLE_STATE}")
         
         # Llamar callback si existe (esto actualiza la ventana principal)
         if self.callback:

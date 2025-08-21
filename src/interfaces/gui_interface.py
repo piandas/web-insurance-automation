@@ -325,9 +325,6 @@ class AutomationGUI:
                 # Actualizar la información mostrada
                 self.actualizar_informacion_cliente()
                 self.agregar_mensaje("✅ Datos del cliente actualizados desde el editor", "success")
-                
-                # Debug: mostrar datos actuales
-                print(f"DEBUG GUI - Cliente actualizado: {ClientConfig.CLIENT_FIRST_NAME} {ClientConfig.CLIENT_FIRST_LASTNAME}")
             
             # Abrir ventana de edición
             editor = ClientEditWindow(parent_window=self.root, callback=on_client_updated)
@@ -364,14 +361,6 @@ class AutomationGUI:
                 'policy_number': ClientConfig.POLICY_NUMBER,
                 'policy_number_allianz': ClientConfig.POLICY_NUMBER_ALLIANZ
             }
-            
-            # Debug: mostrar qué datos se están usando para la automatización
-            print(f"DEBUG AUTOMATIZACIÓN - Datos antes de ejecutar:")
-            print(f"  Nombre: {client_data['client_first_name']} {client_data['client_first_lastname']}")
-            print(f"  Documento: {client_data['client_document_number']}")
-            print(f"  Placa: {client_data['vehicle_plate']}")
-            print(f"  Marca: {client_data['vehicle_brand']}")
-            print(f"  Estado: {client_data['vehicle_state']}")
             
             # Verificar si ya existe un cliente similar reciente (evitar duplicados)
             history = history_manager.load_history()
