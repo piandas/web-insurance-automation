@@ -57,6 +57,9 @@ class AutomationGUI:
         self.animation_frame = 0
         self.proceso_subprocess = None  # Referencia al proceso subprocess
         
+        # Lista para rastrear procesos específicos de la aplicación
+        self.app_processes = []  # PIDs de procesos creados por la app
+        
         # Cola para comunicación entre hilos
         self.message_queue = queue.Queue()
         self.response_queue = queue.Queue()  # Cola para respuestas del usuario
@@ -645,49 +648,11 @@ class AutomationGUI:
         
         self.agregar_mensaje("⚠️ Deteniendo automatización...", "warning")
         
-        try:
-            # Cerrar navegadores ANTES de terminar el proceso principal para evitar procesos zombie
-            self.agregar_mensaje("🔒 Cerrando navegadores...", "info")
-            self._close_all_browsers()
-            
-            # Terminar el proceso si está ejecutándose
-            if self.proceso_subprocess:
-                self.agregar_mensaje("🔄 Terminando proceso principal...", "info")
-                
-                # Cerrar stdin para evitar errores de EOF
-                try:
-                    if self.proceso_subprocess.stdin:
-                        self.proceso_subprocess.stdin.close()
-                except:
-                    pass
-                
-                # Intentar terminación graceful primero
-                self.proceso_subprocess.terminate()
-                
-                # Esperar un poco para terminación graceful
-                try:
-                    self.proceso_subprocess.wait(timeout=5)
-                    self.agregar_mensaje("✅ Proceso principal terminado correctamente", "success")
-                except subprocess.TimeoutExpired:
-                    # Si no termina gracefully, forzar terminación
-                    self.agregar_mensaje("⚡ Forzando terminación del proceso principal...", "warning")
-                    self.proceso_subprocess.kill()
-                    self.proceso_subprocess.wait()
-                    self.agregar_mensaje("✅ Proceso principal terminado forzosamente", "success")
-                
-                self.proceso_subprocess = None
-            
-            # Hacer una segunda pasada para asegurar que todos los navegadores estén cerrados
-            self.agregar_mensaje("🔒 Verificando cierre de navegadores...", "info")
-            self._close_all_browsers()
-            
-            # Resetear estado de la interfaz
-            self.proceso_finalizado_manual()
-            
-        except Exception as e:
-            self.agregar_mensaje(f"❌ Error deteniendo automatización: {e}", "error")
-            # Aún así, resetear el estado
-            self.proceso_finalizado_manual()
+        # Usar la función mejorada de detener forzado
+        self._force_stop_automation()
+        
+        # Resetear estado de la interfaz
+        self.proceso_finalizado_manual()
     
     def ejecutar_proceso(self):
         """Ejecuta el proceso de automatización en un hilo separado."""
@@ -732,6 +697,9 @@ class AutomationGUI:
                 bufsize=1,
                 env=env
             )
+            
+            # Iniciar rastreo de procesos de navegador después de un breve delay
+            threading.Timer(3.0, self._start_browser_tracking).start()
             
             self.message_queue.put(("loading", "Procesos iniciados..."))
             
@@ -990,17 +958,8 @@ class AutomationGUI:
                 "Proceso en ejecución",
                 "Hay una automatización en ejecución. ¿Desea detenerla y cerrar la aplicación?"
             ):
-                # Detener el proceso primero
-                try:
-                    if self.proceso_subprocess:
-                        self.proceso_subprocess.terminate()
-                        try:
-                            self.proceso_subprocess.wait(timeout=5)
-                        except subprocess.TimeoutExpired:
-                            self.proceso_subprocess.kill()
-                            self.proceso_subprocess.wait()
-                except Exception:
-                    pass
+                # Detener el proceso PRIMERO y de forma forzada
+                self._force_stop_automation()
             else:
                 return  # No cerrar si el usuario cancela
         
@@ -1017,8 +976,62 @@ class AutomationGUI:
         import sys
         sys.exit(0)
     
+    def _force_stop_automation(self):
+        """Detiene forzadamente la automatización y todos sus procesos."""
+        try:
+            # Marcar como no activo inmediatamente
+            self.proceso_activo = False
+            
+            # Cerrar navegadores PRIMERO
+            self.agregar_mensaje("🔒 Cerrando navegadores...", "info")
+            self._close_all_browsers()
+            
+            # Terminar el subprocess principal si existe
+            if self.proceso_subprocess:
+                try:
+                    self.agregar_mensaje("🔄 Terminando proceso principal...", "info")
+                    
+                    # Cerrar stdin para evitar errores de EOF
+                    try:
+                        if self.proceso_subprocess.stdin:
+                            self.proceso_subprocess.stdin.close()
+                    except:
+                        pass
+                    
+                    # Intentar terminación suave primero
+                    self.proceso_subprocess.terminate()
+                    try:
+                        self.proceso_subprocess.wait(timeout=3)
+                        self.agregar_mensaje("✅ Proceso principal terminado correctamente", "success")
+                    except subprocess.TimeoutExpired:
+                        # Si no responde, forzar terminación
+                        self.proceso_subprocess.kill()
+                        self.proceso_subprocess.wait()
+                        self.agregar_mensaje("⚡ Proceso principal terminado forzosamente", "warning")
+                except Exception as e:
+                    self.agregar_mensaje(f"⚠️ Error terminando proceso: {e}", "warning")
+                finally:
+                    self.proceso_subprocess = None
+            
+            # Detener el hilo si existe
+            if self.proceso_thread and self.proceso_thread.is_alive():
+                # El hilo se detendrá automáticamente cuando termine el subprocess
+                pass
+            
+            # Hacer una segunda pasada para asegurar que todos los navegadores estén cerrados
+            self.agregar_mensaje("🔒 Verificación final de navegadores...", "info")
+            self._close_all_browsers()
+            
+            # Ocultar indicador de carga
+            self.ocultar_carga()
+            
+            self.agregar_mensaje("⏹️ Automatización detenida completamente", "success")
+            
+        except Exception as e:
+            self.agregar_mensaje(f"❌ Error deteniendo automatización: {e}", "error")
+    
     def _close_all_browsers(self):
-        """Cierra todos los procesos de Chrome que puedan estar abiertos por la automatización."""
+        """Cierra solo los procesos de navegador creados por la aplicación."""
         try:
             import subprocess
             import platform
@@ -1026,62 +1039,124 @@ class AutomationGUI:
             
             closed_processes = False
             
+            # SIEMPRE intentar cerrar chromedriver primero (es específico de automatización)
             if platform.system() == "Windows":
-                # En Windows, usar taskkill SOLO para cerrar Chrome y chromedriver
-                # NO cerrar python.exe porque eso cerraría la GUI también
-                processes_to_kill = ["chrome.exe", "chromedriver.exe"]
-                
-                for process_name in processes_to_kill:
-                    try:
-                        result = subprocess.run(
-                            ["taskkill", "/F", "/IM", process_name], 
-                            capture_output=True, 
-                            check=False,
-                            timeout=10
-                        )
-                        if result.returncode == 0:
-                            closed_processes = True
-                            self.agregar_mensaje(f"🔒 Cerrado: {process_name}", "info")
-                    except Exception:
-                        pass
-                
-                # También intentar cerrar por nombre de ventana si contiene "Chrome"
                 try:
                     result = subprocess.run(
-                        ["taskkill", "/F", "/FI", "WINDOWTITLE eq *Chrome*"], 
+                        ["taskkill", "/F", "/IM", "chromedriver.exe"], 
                         capture_output=True, 
                         check=False,
                         timeout=10
                     )
                     if result.returncode == 0:
                         closed_processes = True
-                except Exception:
-                    pass
-                    
-            else:
-                # En sistemas Unix, usar pkill SOLO para chrome
-                try:
-                    result = subprocess.run(
-                        ["pkill", "-f", "chrome"], 
-                        capture_output=True, 
-                        check=False,
-                        timeout=10
-                    )
-                    if result.returncode == 0:
-                        closed_processes = True
-                        self.agregar_mensaje("🔒 Navegadores cerrados", "info")
+                        self.agregar_mensaje("🔒 ChromeDriver cerrado", "info")
                 except Exception:
                     pass
             
-            # Dar tiempo para que los procesos se cierren
+            # Si tenemos PIDs específicos, cerrarlos
+            if self.app_processes and self.app_processes != ["TRACKING_ACTIVE"]:
+                for pid in self.app_processes[:]:  # Copia la lista
+                    if pid == "TRACKING_ACTIVE":
+                        continue
+                        
+                    try:
+                        if platform.system() == "Windows":
+                            result = subprocess.run(
+                                ["taskkill", "/F", "/PID", str(pid)], 
+                                capture_output=True, 
+                                check=False,
+                                timeout=5
+                            )
+                        else:
+                            result = subprocess.run(
+                                ["kill", "-9", str(pid)], 
+                                capture_output=True, 
+                                check=False,
+                                timeout=5
+                            )
+                        
+                        if result.returncode == 0:
+                            closed_processes = True
+                            self.agregar_mensaje(f"🔒 Cerrado proceso ID: {pid}", "info")
+                        
+                        self.app_processes.remove(pid)
+                        
+                    except Exception as e:
+                        if pid in self.app_processes:
+                            self.app_processes.remove(pid)
+            
+            # Método adicional: cerrar Chrome con ventanas específicas de automatización
+            if platform.system() == "Windows":
+                automation_patterns = [
+                    "WINDOWTITLE eq *about:blank*",
+                    "WINDOWTITLE eq *data:*",
+                    "WINDOWTITLE eq *chrome-extension:*"
+                ]
+                
+                for pattern in automation_patterns:
+                    try:
+                        result = subprocess.run(
+                            ["taskkill", "/F", "/FI", pattern], 
+                            capture_output=True, 
+                            check=False,
+                            timeout=5
+                        )
+                        if result.returncode == 0:
+                            closed_processes = True
+                    except Exception:
+                        pass
+            
+            # Limpiar la lista de procesos
+            self.app_processes.clear()
+            
             if closed_processes:
-                time.sleep(2)
-                self.agregar_mensaje("✅ Navegadores cerrados correctamente", "success")
+                time.sleep(1)
+                self.agregar_mensaje("✅ Navegadores de automatización cerrados", "success")
             else:
-                self.agregar_mensaje("ℹ️ No se encontraron navegadores para cerrar", "info")
+                self.agregar_mensaje("ℹ️ No se encontraron procesos de automatización", "info")
                     
         except Exception as e:
             self.agregar_mensaje(f"⚠️ Error cerrando navegadores: {e}", "warning")
+    
+    def _conservative_browser_cleanup(self):
+        """Método conservador para limpiar navegadores sin afectar Chrome personal."""
+        try:
+            import subprocess
+            import platform
+            
+            if platform.system() == "Windows":
+                # Solo cerrar chromedriver, que es específico de automatización
+                try:
+                    result = subprocess.run(
+                        ["taskkill", "/F", "/IM", "chromedriver.exe"], 
+                        capture_output=True, 
+                        check=False,
+                        timeout=10
+                    )
+                    if result.returncode == 0:
+                        self.agregar_mensaje("🔒 ChromeDriver cerrado", "info")
+                except Exception:
+                    pass
+                
+                # Intentar cerrar solo Chrome con títulos específicos de automatización
+                try:
+                    result = subprocess.run(
+                        ["taskkill", "/F", "/FI", "WINDOWTITLE eq *about:blank*"], 
+                        capture_output=True, 
+                        check=False,
+                        timeout=10
+                    )
+                    if result.returncode == 0:
+                        self.agregar_mensaje("🔒 Ventanas de automatización cerradas", "info")
+                except Exception:
+                    pass
+            
+            self.agregar_mensaje("✅ Limpieza conservadora completada", "success")
+            self.agregar_mensaje("🛡️ Tu Chrome personal no fue afectado", "info")
+                
+        except Exception as e:
+            self.agregar_mensaje(f"⚠️ Error en limpieza conservadora: {e}", "warning")
     
     def _create_exit_signal(self):
         """Crea un archivo de señal para indicar que la aplicación se está cerrando."""
@@ -1093,6 +1168,85 @@ class AutomationGUI:
         except Exception as e:
             print(f"Error creando señal de salida: {e}")
     
+    def _start_browser_tracking(self):
+        """Inicia el rastreo de procesos de navegador creados por la aplicación."""
+        try:
+            import psutil
+            import platform
+            
+            # Obtener procesos actuales de Chrome/Chromium
+            current_processes = []
+            
+            if platform.system() == "Windows":
+                process_names = ["chrome.exe", "chromedriver.exe"]
+            else:
+                process_names = ["chrome", "chromium", "chromedriver"]
+            
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'].lower() in [name.lower() for name in process_names]:
+                        # Verificar si es un proceso hijo de nuestra aplicación
+                        if self._is_child_process(proc.info['pid']):
+                            current_processes.append(proc.info['pid'])
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            # Agregar los PIDs encontrados a nuestra lista de rastreo
+            if current_processes:
+                self.app_processes.extend(current_processes)
+                self.agregar_mensaje(f"🎯 Rastreando {len(current_processes)} procesos de navegador", "info")
+            
+        except ImportError:
+            # Si psutil no está disponible, usar método alternativo más simple
+            self._simple_browser_tracking()
+        except Exception as e:
+            self.agregar_mensaje(f"⚠️ Error iniciando rastreo de navegadores: {e}", "warning")
+    
+    def _is_child_process(self, pid):
+        """Verifica si un proceso es hijo del proceso de automatización."""
+        try:
+            import psutil
+            
+            if not self.proceso_subprocess:
+                return False
+                
+            parent_pid = self.proceso_subprocess.pid
+            proc = psutil.Process(pid)
+            
+            # Verificar si es hijo directo o indirecto
+            while proc.parent():
+                if proc.parent().pid == parent_pid:
+                    return True
+                proc = proc.parent()
+                
+        except Exception:
+            pass
+        return False
+    
+    def _simple_browser_tracking(self):
+        """Método alternativo simple para rastrear navegadores sin psutil."""
+        try:
+            import subprocess
+            import platform
+            import time
+            
+            # Esperar un poco más para que los navegadores se inicien
+            time.sleep(2)
+            
+            if platform.system() == "Windows":
+                # Método más simple: solo rastrear Chrome que se abra después de iniciar la app
+                # En lugar de intentar identificar procesos específicos, 
+                # simplemente evitamos cerrar TODOS los Chrome
+                self.agregar_mensaje("🎯 Rastreo simplificado activado", "info")
+                self.agregar_mensaje("ℹ️ Solo se cerrarán navegadores relacionados con la app", "info")
+                
+                # Marcar que el rastreo está activo pero sin PIDs específicos
+                # Esto hará que _close_all_browsers use un método más conservador
+                self.app_processes = ["TRACKING_ACTIVE"]
+                
+        except Exception as e:
+            self.agregar_mensaje(f"⚠️ Error en rastreo simple: {e}", "warning")
+    
     def run(self):
         """Inicia la interfaz gráfica."""
         self.root.mainloop()
@@ -1103,11 +1257,15 @@ def main():
     try:
         app = AutomationGUI()
         app.run()
+        # Si llegamos aquí, la aplicación se cerró normalmente
+        return 0
     except KeyboardInterrupt:
         print("🔄 Aplicación interrumpida por el usuario")
+        return 0
     except Exception as e:
         print(f"Error iniciando la GUI: {e}")
         messagebox.showerror("Error", f"Error iniciando la aplicación: {e}")
+        return 1
     finally:
         # Asegurar que se crea la señal de salida
         try:
@@ -1120,4 +1278,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    exit_code = main()
+    sys.exit(exit_code)

@@ -46,7 +46,7 @@ call .venv\Scripts\activate.bat
 
 :: Verificar si las dependencias están instaladas
 echo [INFO] Verificando dependencias...
-python -c "import playwright, pandas, dotenv, openpyxl" >nul 2>&1
+python -c "import playwright, pandas, dotenv, openpyxl, psutil" >nul 2>&1
 if errorlevel 1 (
     echo [WARNING] Dependencias faltantes o dañadas, reinstalando...
     goto :install_deps
@@ -102,6 +102,9 @@ echo [OK] numpy y pandas instalados correctamente
 echo [INFO] Instalando playwright...
 pip install playwright==1.48.0
 
+echo [INFO] Instalando psutil para gestión de procesos...
+pip install psutil>=5.9.0
+
 echo [INFO] Instalando navegadores...
 playwright install chromium
 
@@ -115,10 +118,18 @@ echo.
 :: Limpiar archivos de señal previos
 if exist "temp_exit_signal.txt" del "temp_exit_signal.txt" >nul 2>&1
 
-:: Ejecutar la GUI principal
+:: Ejecutar la GUI principal y capturar su código de salida
 python scripts\ejecutar_gui.py
+set GUI_EXIT_CODE=%ERRORLEVEL%
 
-:: Verificar si la aplicación se cerró correctamente
+:: Verificar primero el código de salida de Python
+if %GUI_EXIT_CODE% equ 0 (
+    echo.
+    echo [INFO] Aplicacion cerrada correctamente
+    goto :clean_exit
+)
+
+:: Verificar si la aplicación se cerró correctamente mediante señal
 if exist "temp_exit_signal.txt" (
     echo.
     echo [INFO] Aplicacion cerrada correctamente por el usuario
@@ -131,6 +142,14 @@ if errorlevel 1 (
     echo.
     echo [WARNING] Problema detectado, intentando modo compatibilidad...
     python scripts\ejecutar_gui_ascii.py
+    set ASCII_EXIT_CODE=%ERRORLEVEL%
+    
+    :: Verificar código de salida de la versión ASCII
+    if %ASCII_EXIT_CODE% equ 0 (
+        echo.
+        echo [INFO] Aplicacion cerrada correctamente (modo compatibilidad)
+        goto :clean_exit
+    )
     
     :: Verificar señal de salida también para la versión ASCII
     if exist "temp_exit_signal.txt" (
@@ -142,10 +161,13 @@ if errorlevel 1 (
 )
 
 :clean_exit
-:: Limpieza final
+:: Limpieza final - forzar cierre de procesos huérfanos
 echo.
+echo [CLEANUP] Cerrando procesos de automatizacion...
+taskkill /F /IM chromedriver.exe >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq *about:blank*" >nul 2>&1
+
 echo [END] Aplicacion cerrada
-echo [INFO] La consola se cerrara automaticamente en 3 segundos...
-echo [INFO] (Puedes cerrar esta ventana manualmente si deseas)
-timeout /t 3 /nobreak >nul
+echo [INFO] La consola se cerrara automaticamente en 2 segundos...
+timeout /t 2 /nobreak >nul
 exit /b 0

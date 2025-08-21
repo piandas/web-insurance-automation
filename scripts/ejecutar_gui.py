@@ -33,13 +33,16 @@ try:
     if __name__ == "__main__":
         print("🚀 Iniciando interfaz gráfica...")
         try:
-            main()
+            exit_code = main()
+            sys.exit(exit_code)
         except UnicodeEncodeError as e:
             print(f"Error de codificación: {e}")
             print("Ejecutando en modo compatibilidad...")
-            main()
+            exit_code = main()
+            sys.exit(exit_code)
         except KeyboardInterrupt:
             print("🔄 Aplicación interrumpida por el usuario")
+            sys.exit(0)
         finally:
             # Crear señal de salida para indicar que Python terminó
             try:
