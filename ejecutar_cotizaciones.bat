@@ -112,19 +112,40 @@ echo.
 echo [START] Iniciando interfaz grafica...
 echo.
 
+:: Limpiar archivos de señal previos
+if exist "temp_exit_signal.txt" del "temp_exit_signal.txt" >nul 2>&1
+
 :: Ejecutar la GUI principal
 python scripts\ejecutar_gui.py
+
+:: Verificar si la aplicación se cerró correctamente
+if exist "temp_exit_signal.txt" (
+    echo.
+    echo [INFO] Aplicacion cerrada correctamente por el usuario
+    del "temp_exit_signal.txt" >nul 2>&1
+    goto :clean_exit
+)
 
 :: Si hay problemas de codificación, intentar con versión ASCII
 if errorlevel 1 (
     echo.
     echo [WARNING] Problema detectado, intentando modo compatibilidad...
     python scripts\ejecutar_gui_ascii.py
+    
+    :: Verificar señal de salida también para la versión ASCII
+    if exist "temp_exit_signal.txt" (
+        echo.
+        echo [INFO] Aplicacion cerrada correctamente por el usuario (modo compatibilidad)
+        del "temp_exit_signal.txt" >nul 2>&1
+        goto :clean_exit
+    )
 )
 
-:: Si la GUI se cierra, el bat también se cierra automáticamente
+:clean_exit
+:: Limpieza final
 echo.
 echo [END] Aplicacion cerrada
-echo.
-timeout /t 2 /nobreak >nul
-exit
+echo [INFO] La consola se cerrara automaticamente en 3 segundos...
+echo [INFO] (Puedes cerrar esta ventana manualmente si deseas)
+timeout /t 3 /nobreak >nul
+exit /b 0

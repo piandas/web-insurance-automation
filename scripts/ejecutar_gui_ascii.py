@@ -27,9 +27,21 @@ try:
         print("[START] Iniciando interfaz grafica...")
         try:
             main()
+        except KeyboardInterrupt:
+            print("[INFO] Aplicacion interrumpida por el usuario")
         except Exception as e:
             print(f"[ERROR] Error inesperado: {e}")
             sys.exit(1)
+        finally:
+            # Crear señal de salida para indicar que Python terminó
+            try:
+                from pathlib import Path
+                signal_file = Path("temp_exit_signal.txt")
+                with open(signal_file, 'w', encoding='utf-8') as f:
+                    f.write("EXIT_REQUESTED")
+            except Exception:
+                pass
+            print("[INFO] Finalizando aplicacion...")
         
 except ImportError as e:
     print(f"[ERROR] Error de importacion: {e}")
@@ -38,3 +50,12 @@ except ImportError as e:
 except Exception as e:
     print(f"[ERROR] Error inesperado: {e}")
     sys.exit(1)
+finally:
+    # Asegurar señal de salida
+    try:
+        from pathlib import Path
+        signal_file = Path("temp_exit_signal.txt")
+        with open(signal_file, 'w', encoding='utf-8') as f:
+            f.write("EXIT_REQUESTED")
+    except Exception:
+        pass

@@ -67,6 +67,9 @@ class AutomationGUI:
         # Configurar manejo de cierre
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
+        # Configurar manejo de señales del sistema
+        self._setup_signal_handlers()
+        
         # Iniciar el monitoreo de mensajes
         self.check_message_queue()
     
@@ -260,6 +263,32 @@ class AutomationGUI:
         ttk.Label(parent_frame, text="Placa:").grid(row=2, column=0, sticky=tk.W, pady=2)
         self.placa_label = ttk.Label(parent_frame, text=config['vehicle_plate'], font=("Arial", 9, "bold"))
         self.placa_label.grid(row=2, column=1, sticky=tk.W, pady=2, padx=(10, 0))
+    
+    def _setup_signal_handlers(self):
+        """Configura los manejadores de señales del sistema."""
+        try:
+            import signal
+            
+            def signal_handler(signum, frame):
+                """Maneja las señales del sistema para cerrar correctamente."""
+                print(f"Señal {signum} recibida, cerrando aplicación...")
+                self.on_closing()
+            
+            # Configurar manejadores para Windows
+            if sys.platform.startswith('win'):
+                try:
+                    signal.signal(signal.SIGINT, signal_handler)
+                    signal.signal(signal.SIGTERM, signal_handler)
+                except ValueError:
+                    # Algunas señales pueden no estar disponibles en Windows
+                    pass
+            else:
+                # Configurar manejadores para Unix/Linux
+                signal.signal(signal.SIGINT, signal_handler)
+                signal.signal(signal.SIGTERM, signal_handler)
+                
+        except Exception as e:
+            print(f"Error configurando manejadores de señales: {e}")
     
     def actualizar_informacion_cliente(self):
         """Actualiza la información del cliente desde la configuración."""
@@ -978,7 +1007,15 @@ class AutomationGUI:
         # Cerrar todos los navegadores Chrome que puedan estar abiertos
         self._close_all_browsers()
         
+        # Crear archivo de señal para indicar que la aplicación se está cerrando
+        self._create_exit_signal()
+        
+        # Destruir la ventana
         self.root.destroy()
+        
+        # Asegurar que el proceso Python termine completamente
+        import sys
+        sys.exit(0)
     
     def _close_all_browsers(self):
         """Cierra todos los procesos de Chrome que puedan estar abiertos por la automatización."""
@@ -1046,6 +1083,16 @@ class AutomationGUI:
         except Exception as e:
             self.agregar_mensaje(f"⚠️ Error cerrando navegadores: {e}", "warning")
     
+    def _create_exit_signal(self):
+        """Crea un archivo de señal para indicar que la aplicación se está cerrando."""
+        try:
+            signal_file = Path("temp_exit_signal.txt")
+            with open(signal_file, 'w', encoding='utf-8') as f:
+                f.write("EXIT_REQUESTED")
+            self.agregar_mensaje("🔄 Señal de cierre enviada", "info")
+        except Exception as e:
+            print(f"Error creando señal de salida: {e}")
+    
     def run(self):
         """Inicia la interfaz gráfica."""
         self.root.mainloop()
@@ -1056,9 +1103,20 @@ def main():
     try:
         app = AutomationGUI()
         app.run()
+    except KeyboardInterrupt:
+        print("🔄 Aplicación interrumpida por el usuario")
     except Exception as e:
         print(f"Error iniciando la GUI: {e}")
         messagebox.showerror("Error", f"Error iniciando la aplicación: {e}")
+    finally:
+        # Asegurar que se crea la señal de salida
+        try:
+            signal_file = Path("temp_exit_signal.txt")
+            with open(signal_file, 'w', encoding='utf-8') as f:
+                f.write("EXIT_REQUESTED")
+        except Exception:
+            pass
+        print("🔄 Aplicación finalizada")
 
 
 if __name__ == "__main__":

@@ -38,6 +38,18 @@ try:
             print(f"Error de codificación: {e}")
             print("Ejecutando en modo compatibilidad...")
             main()
+        except KeyboardInterrupt:
+            print("🔄 Aplicación interrumpida por el usuario")
+        finally:
+            # Crear señal de salida para indicar que Python terminó
+            try:
+                from pathlib import Path
+                signal_file = Path("temp_exit_signal.txt")
+                with open(signal_file, 'w', encoding='utf-8') as f:
+                    f.write("EXIT_REQUESTED")
+            except Exception:
+                pass
+            print("🔄 Finalizando aplicación...")
         
 except ImportError as e:
     print(f"❌ Error de importación: {e}")
@@ -46,3 +58,12 @@ except ImportError as e:
 except Exception as e:
     print(f"❌ Error inesperado: {e}")
     sys.exit(1)
+finally:
+    # Asegurar señal de salida
+    try:
+        from pathlib import Path
+        signal_file = Path("temp_exit_signal.txt")
+        with open(signal_file, 'w', encoding='utf-8') as f:
+            f.write("EXIT_REQUESTED")
+    except Exception:
+        pass
