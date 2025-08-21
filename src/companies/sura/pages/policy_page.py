@@ -77,6 +77,9 @@ class PolicyPage(BasePage):
         """Llena los datos de póliza y fecha con verificación individual usando funciones base."""
         self.logger.info("📋 Llenando datos de póliza...")
         
+        # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig en policy
+        ClientConfig._load_gui_overrides()
+        
         try:
             # Generar fecha actual y limpiarla
             today = datetime.datetime.now()

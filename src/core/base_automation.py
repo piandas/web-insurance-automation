@@ -127,6 +127,13 @@ class BaseAutomation(ABC):
                     ])
                     headless_mode = False  # No usar headless real para evitar problemas
                 else:
+                    # Ventanas visibles: centrar en pantalla con tamaño razonable
+                    browser_args.extend([
+                        '--window-position=100,50',  # Posición centrada (primera ventana)
+                        '--window-size=1200,800',  # Tamaño razonable
+                        '--disable-background-timer-throttling',
+                        '--disable-renderer-backgrounding'
+                    ])
                     headless_mode = False
                 
                 self.browser = await self.playwright.chromium.launch_persistent_context(
@@ -160,6 +167,13 @@ class BaseAutomation(ABC):
                     ])
                     headless_mode = False  # No usar headless real para evitar problemas
                 else:
+                    # Ventanas visibles: centrar en pantalla con tamaño razonable  
+                    browser_args.extend([
+                        '--window-position=350,100',  # Posición centrada (segunda ventana, más desplazada)
+                        '--window-size=1200,800',  # Tamaño razonable
+                        '--disable-background-timer-throttling',
+                        '--disable-renderer-backgrounding'
+                    ])
                     headless_mode = False
                 
                 self.browser = await self.playwright.chromium.launch(

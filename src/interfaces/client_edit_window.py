@@ -21,6 +21,16 @@ from config.client_config import ClientConfig
 class ClientEditWindow:
     """Ventana para editar datos del cliente con historial."""
     
+    # Lista completa de departamentos de Colombia
+    DEPARTAMENTOS = [
+        "AMAZONAS", "ANTIOQUIA", "ARAUCA", "ATLANTICO", "BOGOTA D.C.", 
+        "BOLIVAR", "BOYACA", "CALDAS", "CAQUETA", "CASANARE", "CAUCA", 
+        "CESAR", "CHOCO", "CORDOBA", "CUNDINAMARCA", "GUAINIA", "GUAVIARE", 
+        "HUILA", "LA GUAJIRA", "MAGDALENA", "META", "NARIÑO", "NORTE DE SANTANDER", 
+        "PUTUMAYO", "QUINDIO", "RISARALDA", "SAN ANDRES, PROVIDENCIA Y STA CATALINA", 
+        "SANTANDER", "SUCRE", "TOLIMA", "VALLE DEL CAUCA", "VAUPES", "VICHADA"
+    ]
+    
     def __init__(self, parent_window=None, callback=None):
         """
         Inicializa la ventana de edición.
@@ -33,10 +43,13 @@ class ClientEditWindow:
         self.callback = callback
         self.history_manager = ClientHistoryManager()
         
+        # Diccionarios para almacenar labels de error
+        self.error_labels = {}
+        
         # Crear ventana
         self.window = tk.Toplevel() if parent_window else tk.Tk()
         self.window.title("Editor de Datos del Cliente")
-        self.window.geometry("800x900")
+        self.window.geometry("850x1000")  # Aumentar tamaño para mejor visibilidad sin scroll
         self.window.resizable(True, True)
         
         # Centrar ventana
@@ -98,6 +111,115 @@ class ClientEditWindow:
         
         # Variable para rastrear el cliente actualmente cargado desde historial
         self.current_client_id = None
+    
+    def validate_field(self, event, field_type):
+        """
+        Valida un campo basado en el evento y muestra mensaje de error si es necesario.
+        
+        Args:
+            event: Evento del widget
+            field_type: Tipo de validación ("text", "placa", "documento", "year", "numeric", "referencia")
+        """
+        widget = event.widget
+        value = widget.get()
+        error_msg = ""
+        
+        # Mapear widget a field_name basado en las variables de texto asociadas
+        field_name = "unknown"
+        widget_var = None
+        
+        try:
+            widget_var = widget.cget('textvariable')
+        except:
+            pass
+        
+        # Mapeo de variables a nombres de campos para mensajes de error
+        var_mapping = {
+            str(self.client_first_name): 'first_name',
+            str(self.client_second_name): 'second_name', 
+            str(self.client_first_lastname): 'first_lastname',
+            str(self.client_second_lastname): 'second_lastname',
+            str(self.client_city): 'city',
+            str(self.client_document_number): 'document',
+            str(self.vehicle_plate): 'placa',
+            str(self.vehicle_model_year): 'year',
+            str(self.manual_cf_code): 'cf_code',
+            str(self.manual_ch_code): 'ch_code'
+        }
+        
+        if widget_var and widget_var in var_mapping:
+            field_name = var_mapping[widget_var]
+        
+        if field_type == "text":
+            # Validar que solo contenga letras y espacios
+            if value and not re.match(r'^[A-ZÁÉÍÓÚÑÜ\s]+$', value.upper()):
+                error_msg = "Solo se permiten letras y espacios"
+        
+        elif field_type == "placa":
+            # Validar formato de placa (3 letras + 3 números o similar)
+            if value and not re.match(r'^[A-Z]{3}[0-9]{3}$|^[A-Z]{3}[0-9]{2}[A-Z]$', value.upper()):
+                error_msg = "Formato inválido (ej: ABC123 o ABC12D)"
+        
+        elif field_type == "documento":
+            # Validar que solo contenga números
+            if value and not re.match(r'^[0-9]+$', value):
+                error_msg = "Solo se permiten números"
+                # Limpiar caracteres no numéricos
+                new_value = re.sub(r'[^0-9]', '', value)
+                widget.delete(0, tk.END)
+                widget.insert(0, new_value)
+        
+        elif field_type == "year":
+            # Validar año (4 dígitos, rango razonable)
+            if value and not value.isdigit():
+                # Limpiar caracteres no numéricos
+                new_value = re.sub(r'[^0-9]', '', value)
+                widget.delete(0, tk.END)
+                widget.insert(0, new_value)
+                value = new_value
+            
+            if value and len(value) >= 4:
+                try:
+                    year_val = int(value)
+                    if not (1900 <= year_val <= 2030):
+                        error_msg = "Año inválido (1900-2030)"
+                except ValueError:
+                    error_msg = "Año inválido"
+        
+        elif field_type == "numeric":
+            # Validar que solo contenga números
+            if value and not value.isdigit():
+                # Limpiar caracteres no numéricos
+                new_value = re.sub(r'[^0-9]', '', value)
+                widget.delete(0, tk.END)
+                widget.insert(0, new_value)
+        
+        elif field_type == "referencia":
+            # Validar referencia de vehículo (letras, números, espacios, guiones)
+            if value and not re.match(r'^[A-ZÁÉÍÓÚÑÜ0-9\s\-]+$', value.upper()):
+                error_msg = "Solo letras, números, espacios y guiones"
+        
+        # Mostrar o quitar mensaje de error
+        self.show_error_message(field_name, error_msg)
+        
+        return error_msg == ""
+
+    def show_error_message(self, field_name, message):
+        """Muestra u oculta mensaje de error debajo de un campo sin mover el layout."""
+        if field_name in self.error_labels:
+            label = self.error_labels[field_name]
+            if message:
+                label.config(text=f"⚠️ {message}")
+                # El label ya está posicionado, solo cambiar el texto
+            else:
+                label.config(text="")
+
+    def normalize_text(self, event):
+        """Normaliza texto a mayúsculas al perder el foco."""
+        widget = event.widget
+        value = widget.get().upper()
+        widget.delete(0, tk.END)
+        widget.insert(0, value)
     
     def setup_ui(self):
         """Configura la interfaz de usuario."""
@@ -246,8 +368,18 @@ class ClientEditWindow:
         
         # Número de documento
         ttk.Label(personal_frame, text="Número de documento:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
-        doc_entry = ttk.Entry(personal_frame, textvariable=self.client_document_number, width=20)
-        doc_entry.grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        doc_frame = ttk.Frame(personal_frame)
+        doc_frame.grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        doc_frame.columnconfigure(0, weight=1)
+        
+        doc_entry = ttk.Entry(doc_frame, textvariable=self.client_document_number, width=20)
+        doc_entry.grid(row=0, column=0, sticky=tk.W+tk.E)
+        doc_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'documento'))
+        doc_entry.bind('<FocusOut>', lambda event: self.normalize_text(event))
+        
+        # Error label para documento
+        self.error_labels['document'] = ttk.Label(doc_frame, text="", foreground="red", font=("TkDefaultFont", 8))
+        self.error_labels['document'].grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
         
         # Género
         ttk.Label(personal_frame, text="Género:").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
@@ -263,20 +395,64 @@ class ClientEditWindow:
         
         # Primer nombre
         ttk.Label(personal_frame, text="Primer nombre:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(personal_frame, textvariable=self.client_first_name, width=20).grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        fname_frame = ttk.Frame(personal_frame)
+        fname_frame.grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        fname_frame.columnconfigure(0, weight=1)
+        
+        fname_entry = ttk.Entry(fname_frame, textvariable=self.client_first_name, width=20)
+        fname_entry.grid(row=0, column=0, sticky=tk.W+tk.E)
+        fname_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'text'))
+        fname_entry.bind('<FocusOut>', lambda event: self.normalize_text(event))
+        
+        # Error label para primer nombre
+        self.error_labels['first_name'] = ttk.Label(fname_frame, text="", foreground="red", font=("TkDefaultFont", 8))
+        self.error_labels['first_name'].grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
         
         # Segundo nombre
         ttk.Label(personal_frame, text="Segundo nombre:").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(personal_frame, textvariable=self.client_second_name, width=20).grid(row=row, column=3, sticky=tk.W+tk.E, pady=5)
+        sname_frame = ttk.Frame(personal_frame)
+        sname_frame.grid(row=row, column=3, sticky=tk.W+tk.E, pady=5)
+        sname_frame.columnconfigure(0, weight=1)
+        
+        sname_entry = ttk.Entry(sname_frame, textvariable=self.client_second_name, width=20)
+        sname_entry.grid(row=0, column=0, sticky=tk.W+tk.E)
+        sname_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'text'))
+        sname_entry.bind('<FocusOut>', lambda event: self.normalize_text(event))
+        
+        # Error label para segundo nombre  
+        self.error_labels['second_name'] = ttk.Label(sname_frame, text="", foreground="red", font=("TkDefaultFont", 8))
+        self.error_labels['second_name'].grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
         row += 1
         
         # Primer apellido
         ttk.Label(personal_frame, text="Primer apellido:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(personal_frame, textvariable=self.client_first_lastname, width=20).grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        lname1_frame = ttk.Frame(personal_frame)
+        lname1_frame.grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        lname1_frame.columnconfigure(0, weight=1)
+        
+        lname1_entry = ttk.Entry(lname1_frame, textvariable=self.client_first_lastname, width=20)
+        lname1_entry.grid(row=0, column=0, sticky=tk.W+tk.E)
+        lname1_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'text'))
+        lname1_entry.bind('<FocusOut>', lambda event: self.normalize_text(event))
+        
+        # Error label para primer apellido
+        self.error_labels['first_lastname'] = ttk.Label(lname1_frame, text="", foreground="red", font=("TkDefaultFont", 8))
+        self.error_labels['first_lastname'].grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
         
         # Segundo apellido
         ttk.Label(personal_frame, text="Segundo apellido:").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(personal_frame, textvariable=self.client_second_lastname, width=20).grid(row=row, column=3, sticky=tk.W+tk.E, pady=5)
+        lname2_frame = ttk.Frame(personal_frame)
+        lname2_frame.grid(row=row, column=3, sticky=tk.W+tk.E, pady=5)
+        lname2_frame.columnconfigure(0, weight=1)
+        
+        lname2_entry = ttk.Entry(lname2_frame, textvariable=self.client_second_lastname, width=20)
+        lname2_entry.grid(row=0, column=0, sticky=tk.W+tk.E)
+        lname2_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'text'))
+        lname2_entry.bind('<FocusOut>', lambda event: self.normalize_text(event))
+        
+        # Error label para segundo apellido
+        self.error_labels['second_lastname'] = ttk.Label(lname2_frame, text="", foreground="red", font=("TkDefaultFont", 8))
+        self.error_labels['second_lastname'].grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
         row += 1
         
         # Fecha de nacimiento
@@ -293,19 +469,34 @@ class ClientEditWindow:
         ).pack(side=tk.LEFT, padx=(5, 0))
         row += 1
         
+        # Departamento (Combobox)
+        ttk.Label(personal_frame, text="Departamento:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
+        dept_combo = ttk.Combobox(
+            personal_frame,
+            textvariable=self.client_department,
+            values=self.DEPARTAMENTOS,
+            state="readonly",
+            width=25
+        )
+        dept_combo.grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        
         # Ciudad
-        ttk.Label(personal_frame, text="Ciudad:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(personal_frame, textvariable=self.client_city, width=20).grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        ttk.Label(personal_frame, text="Ciudad:").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
+        city_frame = ttk.Frame(personal_frame)
+        city_frame.grid(row=row, column=3, sticky=tk.W+tk.E, pady=5)
+        city_frame.columnconfigure(0, weight=1)
         
-        # Departamento
-        ttk.Label(personal_frame, text="Departamento:").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(personal_frame, textvariable=self.client_department, width=20).grid(row=row, column=3, sticky=tk.W+tk.E, pady=5)
+        city_entry = ttk.Entry(city_frame, textvariable=self.client_city, width=20)
+        city_entry.grid(row=0, column=0, sticky=tk.W+tk.E)
+        city_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'text'))
+        city_entry.bind('<FocusOut>', lambda event: self.normalize_text(event))
         
-        # Bind validaciones
-        doc_entry.bind('<KeyRelease>', self.validate_numeric_field)
+        # Error label para ciudad
+        self.error_labels['city'] = ttk.Label(city_frame, text="", foreground="red", font=("TkDefaultFont", 8))
+        self.error_labels['city'].grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
     
     def create_vehicle_data_section(self, parent):
-        """Crea la sección de datos del vehículo."""
+        """Crea la sección de datos del vehículo con validación."""
         vehicle_frame = ttk.LabelFrame(parent, text="🚗 Datos del Vehículo", padding="10")
         vehicle_frame.pack(fill=tk.X, pady=(0, 15))
         
@@ -317,14 +508,28 @@ class ClientEditWindow:
         
         # Placa
         ttk.Label(vehicle_frame, text="Placa:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(vehicle_frame, textvariable=self.vehicle_plate, width=15).grid(row=row, column=1, sticky=tk.W, pady=5, padx=(0, 15))
+        plate_entry = ttk.Entry(vehicle_frame, textvariable=self.vehicle_plate, width=15)
+        plate_entry.grid(row=row, column=1, sticky=tk.W, pady=5, padx=(0, 15))
+        plate_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'placa'))
+        plate_entry.bind('<FocusOut>', lambda event: self.normalize_text(event))
+        
+        # Error label para placa
+        plate_error = ttk.Label(vehicle_frame, text="", foreground="red", font=("Arial", 8))
+        plate_error.grid(row=row+1, column=1, sticky=tk.W, padx=(0, 15))
+        self.error_labels['placa'] = plate_error
         
         # Año del modelo
         ttk.Label(vehicle_frame, text="Año del modelo:").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
         year_entry = ttk.Entry(vehicle_frame, textvariable=self.vehicle_model_year, width=10)
         year_entry.grid(row=row, column=3, sticky=tk.W, pady=5)
-        year_entry.bind('<KeyRelease>', self.validate_year_field)
-        row += 1
+        year_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'year'))
+        
+        # Error label para año
+        year_error = ttk.Label(vehicle_frame, text="", foreground="red", font=("Arial", 8))
+        year_error.grid(row=row+1, column=3, sticky=tk.W)
+        self.error_labels['year'] = year_error
+        
+        row += 2
         
         # Estado del vehículo
         ttk.Label(vehicle_frame, text="Estado del vehículo:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
@@ -356,12 +561,11 @@ class ClientEditWindow:
             vehicle_frame, 
             textvariable=self.vehicle_brand, 
             values=marcas_fasecolda,
-            state="normal",
+            state="readonly",
             width=20
         )
         self.brand_combo.grid(row=row, column=1, columnspan=3, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
         self.brand_combo.bind('<<ComboboxSelected>>', self.update_full_reference)
-        self.brand_combo.bind('<KeyRelease>', self.update_full_reference)
         row += 1
         
         # Referencia
@@ -369,6 +573,7 @@ class ClientEditWindow:
         self.reference_entry = ttk.Entry(vehicle_frame, textvariable=self.vehicle_reference, width=40)
         self.reference_entry.grid(row=row, column=1, columnspan=3, sticky=tk.W+tk.E, pady=5)
         self.reference_entry.bind('<KeyRelease>', self.update_full_reference)
+        self.reference_entry.bind('<FocusOut>', lambda event: self.normalize_text(event))
         row += 1
         
         # Referencia completa Fasecolda
@@ -376,7 +581,7 @@ class ClientEditWindow:
         ttk.Entry(vehicle_frame, textvariable=self.vehicle_full_reference, width=40).grid(row=row, column=1, columnspan=3, sticky=tk.W+tk.E, pady=5)
     
     def create_fasecolda_section(self, parent):
-        """Crea la sección de códigos Fasecolda."""
+        """Crea la sección de códigos Fasecolda con validación."""
         fasecolda_frame = ttk.LabelFrame(parent, text="🔍 Códigos Fasecolda Manuales (Solo llenar si se necesita, sino dejar vacio)", padding="10")
         fasecolda_frame.pack(fill=tk.X, pady=(0, 15))
         
@@ -384,17 +589,29 @@ class ClientEditWindow:
         fasecolda_frame.columnconfigure(1, weight=1)
         fasecolda_frame.columnconfigure(3, weight=1)
         
+        row = 0
+        
         # Código CF
-        ttk.Label(fasecolda_frame, text="Código CF:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 5))
+        ttk.Label(fasecolda_frame, text="Código CF:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
         cf_entry = ttk.Entry(fasecolda_frame, textvariable=self.manual_cf_code, width=15)
-        cf_entry.grid(row=0, column=1, sticky=tk.W, pady=5, padx=(0, 15))
-        cf_entry.bind('<KeyRelease>', self.validate_numeric_field)
+        cf_entry.grid(row=row, column=1, sticky=tk.W, pady=5, padx=(0, 15))
+        cf_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'numeric'))
+        
+        # Error label para CF
+        cf_error = ttk.Label(fasecolda_frame, text="", foreground="red", font=("Arial", 8))
+        cf_error.grid(row=row+1, column=1, sticky=tk.W, padx=(0, 15))
+        self.error_labels['cf_code'] = cf_error
         
         # Código CH
-        ttk.Label(fasecolda_frame, text="Código CH:").grid(row=0, column=2, sticky=tk.W, pady=5, padx=(0, 5))
+        ttk.Label(fasecolda_frame, text="Código CH:").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
         ch_entry = ttk.Entry(fasecolda_frame, textvariable=self.manual_ch_code, width=15)
-        ch_entry.grid(row=0, column=3, sticky=tk.W, pady=5)
-        ch_entry.bind('<KeyRelease>', self.validate_numeric_field)
+        ch_entry.grid(row=row, column=3, sticky=tk.W, pady=5)
+        ch_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'numeric'))
+        
+        # Error label para CH
+        ch_error = ttk.Label(fasecolda_frame, text="", foreground="red", font=("Arial", 8))
+        ch_error.grid(row=row+1, column=3, sticky=tk.W)
+        self.error_labels['ch_code'] = ch_error
     
     def create_policy_section(self, parent):
         """Crea la sección de pólizas."""
@@ -442,49 +659,6 @@ class ClientEditWindow:
             command=self.on_closing,
             width=12
         ).pack(side=tk.LEFT, padx=(10, 0))
-    
-    def validate_numeric_field(self, event):
-        """Valida que el campo contenga solo números."""
-        widget = event.widget
-        value = widget.get()
-        
-        # Permitir campo vacío
-        if not value:
-            return
-        
-        # Verificar si contiene solo números
-        if not value.isdigit():
-            # Remover caracteres no numéricos
-            new_value = re.sub(r'[^0-9]', '', value)
-            widget.delete(0, tk.END)
-            widget.insert(0, new_value)
-    
-    def validate_year_field(self, event):
-        """Valida el campo de año."""
-        widget = event.widget
-        value = widget.get()
-        
-        # Permitir campo vacío
-        if not value:
-            return
-        
-        # Verificar si contiene solo números
-        if not value.isdigit():
-            new_value = re.sub(r'[^0-9]', '', value)
-            widget.delete(0, tk.END)
-            widget.insert(0, new_value)
-            return
-        
-        # Validar rango de años
-        try:
-            year = int(value)
-            current_year = datetime.now().year
-            if len(value) == 4 and (year < 1900 or year > current_year + 2):
-                widget.configure(style="Invalid.TEntry")
-            else:
-                widget.configure(style="TEntry")
-        except ValueError:
-            pass
     
     def show_date_picker(self):
         """Muestra un selector de fecha simple."""
@@ -640,8 +814,16 @@ class ClientEditWindow:
         defaults = self.history_manager.get_default_values()
         self.load_data_to_fields(defaults)
     
+    def clear_all_error_messages(self):
+        """Limpia todos los mensajes de error de la interfaz."""
+        for field_name in self.error_labels:
+            self.show_error_message(field_name, "")
+
     def load_data_to_fields(self, data: Dict[str, Any]):
         """Carga datos en los campos de la interfaz."""
+        # Limpiar todos los mensajes de error antes de cargar nuevos datos
+        self.clear_all_error_messages()
+        
         self.client_document_number.set(data.get('client_document_number', ''))
         self.client_first_name.set(data.get('client_first_name', ''))
         self.client_second_name.set(data.get('client_second_name', ''))
@@ -800,6 +982,14 @@ class ClientEditWindow:
         ClientConfig.load_client_data(data)
         ClientConfig.update_vehicle_state(data.get('vehicle_state', 'Nuevo'))
         
+        # Debug: verificar que los datos se aplicaron correctamente
+        print(f"DEBUG - Datos aplicados al ClientConfig:")
+        print(f"  Nombre: {ClientConfig.CLIENT_FIRST_NAME} {ClientConfig.CLIENT_FIRST_LASTNAME}")
+        print(f"  Documento: {ClientConfig.CLIENT_DOCUMENT_NUMBER}")
+        print(f"  Placa: {ClientConfig.VEHICLE_PLATE}")
+        print(f"  Marca: {ClientConfig.VEHICLE_BRAND}")
+        print(f"  Estado: {ClientConfig.VEHICLE_STATE}")
+        
         # Llamar callback si existe (esto actualiza la ventana principal)
         if self.callback:
             self.callback(data)
@@ -809,6 +999,9 @@ class ClientEditWindow:
     
     def clear_all_fields(self):
         """Limpia todos los campos de la interfaz."""
+        # Limpiar todos los mensajes de error
+        self.clear_all_error_messages()
+        
         # Limpiar datos personales
         self.client_document_number.set('')
         self.client_first_name.set('')

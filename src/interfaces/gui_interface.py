@@ -318,9 +318,16 @@ class AutomationGUI:
         try:
             # Callback para cuando se guarden los datos
             def on_client_updated(client_data):
+                # Forzar actualización de ClientConfig con los nuevos datos
+                ClientConfig.load_client_data(client_data)
+                ClientConfig.update_vehicle_state(client_data.get('vehicle_state', 'Nuevo'))
+                
                 # Actualizar la información mostrada
                 self.actualizar_informacion_cliente()
                 self.agregar_mensaje("✅ Datos del cliente actualizados desde el editor", "success")
+                
+                # Debug: mostrar datos actuales
+                print(f"DEBUG GUI - Cliente actualizado: {ClientConfig.CLIENT_FIRST_NAME} {ClientConfig.CLIENT_FIRST_LASTNAME}")
             
             # Abrir ventana de edición
             editor = ClientEditWindow(parent_window=self.root, callback=on_client_updated)
@@ -351,12 +358,20 @@ class AutomationGUI:
                 'vehicle_brand': ClientConfig.VEHICLE_BRAND,
                 'vehicle_reference': ClientConfig.VEHICLE_REFERENCE,
                 'vehicle_full_reference': ClientConfig.VEHICLE_FULL_REFERENCE,
-                'vehicle_insured_value_received': ClientConfig.VEHICLE_INSURED_VALUE_RECEIVED,
+                'vehicle_state': ClientConfig.VEHICLE_STATE,
                 'manual_cf_code': ClientConfig.MANUAL_CF_CODE,
                 'manual_ch_code': ClientConfig.MANUAL_CH_CODE,
                 'policy_number': ClientConfig.POLICY_NUMBER,
                 'policy_number_allianz': ClientConfig.POLICY_NUMBER_ALLIANZ
             }
+            
+            # Debug: mostrar qué datos se están usando para la automatización
+            print(f"DEBUG AUTOMATIZACIÓN - Datos antes de ejecutar:")
+            print(f"  Nombre: {client_data['client_first_name']} {client_data['client_first_lastname']}")
+            print(f"  Documento: {client_data['client_document_number']}")
+            print(f"  Placa: {client_data['vehicle_plate']}")
+            print(f"  Marca: {client_data['vehicle_brand']}")
+            print(f"  Estado: {client_data['vehicle_state']}")
             
             # Verificar si ya existe un cliente similar reciente (evitar duplicados)
             history = history_manager.load_history()
@@ -661,6 +676,31 @@ class AutomationGUI:
             # Pasar configuración de la GUI como variables de entorno (prioridad sobre archivo)
             env['GUI_FASECOLDA_ENABLED'] = str(self.fasecolda_automatico.get())
             env['GUI_SHOW_BROWSER'] = str(self.mostrar_ventanas.get())
+            
+            # CRÍTICO: Pasar TODOS los datos del cliente actual como variables de entorno
+            current_client_data = ClientConfig._get_current_data()
+            if current_client_data:
+                env['GUI_CLIENT_DOCUMENT_NUMBER'] = current_client_data.get('client_document_number', '')
+                env['GUI_CLIENT_FIRST_NAME'] = current_client_data.get('client_first_name', '')
+                env['GUI_CLIENT_SECOND_NAME'] = current_client_data.get('client_second_name', '')
+                env['GUI_CLIENT_FIRST_LASTNAME'] = current_client_data.get('client_first_lastname', '')
+                env['GUI_CLIENT_SECOND_LASTNAME'] = current_client_data.get('client_second_lastname', '')
+                env['GUI_CLIENT_BIRTH_DATE'] = current_client_data.get('client_birth_date', '')
+                env['GUI_CLIENT_GENDER'] = current_client_data.get('client_gender', '')
+                env['GUI_CLIENT_CITY'] = current_client_data.get('client_city', '')
+                env['GUI_CLIENT_DEPARTMENT'] = current_client_data.get('client_department', '')
+                env['GUI_VEHICLE_PLATE'] = current_client_data.get('vehicle_plate', '')
+                env['GUI_VEHICLE_MODEL_YEAR'] = current_client_data.get('vehicle_model_year', '')
+                env['GUI_VEHICLE_BRAND'] = current_client_data.get('vehicle_brand', '')
+                env['GUI_VEHICLE_REFERENCE'] = current_client_data.get('vehicle_reference', '')
+                env['GUI_VEHICLE_FULL_REFERENCE'] = current_client_data.get('vehicle_full_reference', '')
+                env['GUI_VEHICLE_STATE'] = current_client_data.get('vehicle_state', '')
+                env['GUI_MANUAL_CF_CODE'] = current_client_data.get('manual_cf_code', '')
+                env['GUI_MANUAL_CH_CODE'] = current_client_data.get('manual_ch_code', '')
+                env['GUI_POLICY_NUMBER'] = current_client_data.get('policy_number', '')
+                env['GUI_POLICY_NUMBER_ALLIANZ'] = current_client_data.get('policy_number_allianz', '')
+            else:
+                self.message_queue.put(("message", ("warning", "⚠️ WARNING: No hay datos de cliente actuales, usando valores por defecto")))
             
             # Mensaje de debug para confirmar valores
             self.message_queue.put(("message", ("info", f"🔧 Fasecolda (GUI): {self.fasecolda_automatico.get()}")))

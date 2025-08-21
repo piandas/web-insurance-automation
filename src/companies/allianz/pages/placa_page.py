@@ -109,6 +109,9 @@ class PlacaPage(BasePage):
         """
         Llena los datos del asegurado: fecha de nacimiento y género.
         """
+        # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig
+        ClientConfig._load_gui_overrides()
+        
         if fecha_nacimiento is None:
             fecha_nacimiento = ClientConfig.get_client_birth_date('allianz')
         if genero is None:
@@ -154,16 +157,64 @@ class PlacaPage(BasePage):
         if ciudad is None:
             ciudad = ClientConfig.get_client_city('allianz')
             
-        self.logger.info(f"🏙️ Buscando población - Departamento: {departamento}, Ciudad: {ciudad}")
+        # Mapeo de departamentos comunes para normalizar nombres
+        departamento_mapping = {
+            'ANTIOQUIA': ['ANTIOQUIA', 'Antioquia', 'antioquia'],
+            'CUNDINAMARCA': ['CUNDINAMARCA', 'Cundinamarca', 'cundinamarca'],
+            'VALLE DEL CAUCA': ['VALLE DEL CAUCA', 'Valle del Cauca', 'valle del cauca', 'VALLE'],
+            'ATLANTICO': ['ATLANTICO', 'Atlántico', 'atlantico', 'ATLÁNTICO'],
+            'SANTANDER': ['SANTANDER', 'Santander', 'santander'],
+            'BOLIVAR': ['BOLIVAR', 'Bolívar', 'bolivar', 'BOLÍVAR'],
+            'BOYACA': ['BOYACA', 'Boyacá', 'boyaca', 'BOYACÁ'],
+            'CALDAS': ['CALDAS', 'Caldas', 'caldas'],
+            'CAUCA': ['CAUCA', 'Cauca', 'cauca'],
+            'CESAR': ['CESAR', 'César', 'cesar', 'CÉSAR'],
+            'CORDOBA': ['CORDOBA', 'Córdoba', 'cordoba', 'CÓRDOBA'],
+            'HUILA': ['HUILA', 'Huila', 'huila'],
+            'LA GUAJIRA': ['LA GUAJIRA', 'La Guajira', 'la guajira', 'GUAJIRA'],
+            'MAGDALENA': ['MAGDALENA', 'Magdalena', 'magdalena'],
+            'META': ['META', 'Meta', 'meta'],
+            'NARIÑO': ['NARIÑO', 'Nariño', 'narino', 'NARINO'],
+            'NORTE DE SANTANDER': ['NORTE DE SANTANDER', 'Norte de Santander', 'norte de santander'],
+            'QUINDIO': ['QUINDIO', 'Quindío', 'quindio', 'QUINDÍO'],
+            'RISARALDA': ['RISARALDA', 'Risaralda', 'risaralda'],
+            'SUCRE': ['SUCRE', 'Sucre', 'sucre'],
+            'TOLIMA': ['TOLIMA', 'Tolima', 'tolima']
+        }
+        
+        # Encontrar el departamento normalizado
+        departamento_normalizado = departamento.upper()
+        for dept_oficial, variantes in departamento_mapping.items():
+            if departamento in variantes or departamento.upper() == dept_oficial:
+                departamento_normalizado = dept_oficial
+                break
+            
+        self.logger.info(f"🏙️ Buscando población - Departamento: {departamento} -> {departamento_normalizado}, Ciudad: {ciudad}")
         
         try:
-            # Paso 1: Seleccionar departamento por texto
-            if not await self.select_by_text_in_frame(
-                self.SELECTOR_DEPARTAMENTO,
-                departamento,
-                f"departamento ({departamento})"
-            ):
-                self.logger.error("❌ Error al seleccionar departamento")
+            # Paso 1: Seleccionar departamento con múltiples intentos
+            departamento_seleccionado = False
+            
+            # Lista de departamentos a intentar (el normalizado y el original)
+            departamentos_a_intentar = [departamento_normalizado, departamento]
+            if departamento != departamento.upper():
+                departamentos_a_intentar.append(departamento.upper())
+            
+            for dept_intento in departamentos_a_intentar:
+                self.logger.info(f"🔄 Intentando seleccionar departamento: {dept_intento}")
+                if await self.select_by_text_in_frame(
+                    self.SELECTOR_DEPARTAMENTO,
+                    dept_intento,
+                    f"departamento ({dept_intento})"
+                ):
+                    self.logger.info(f"✅ Departamento seleccionado exitosamente: {dept_intento}")
+                    departamento_seleccionado = True
+                    break
+                else:
+                    self.logger.warning(f"⚠️ No se pudo seleccionar con: {dept_intento}")
+            
+            if not departamento_seleccionado:
+                self.logger.error("❌ Error al seleccionar departamento con todas las variantes intentadas")
                 return False
             
             # Pausa breve para que se procese la selección
@@ -558,6 +609,10 @@ class PlacaPage(BasePage):
         
     async def execute_placa_flow(self, placa: str = None, fecha_nacimiento: str = None, genero: str = None, departamento: str = None, ciudad: str = None) -> bool:
         """Ejecuta el flujo completo desde placa hasta finalización en Allianz."""
+        
+        # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig
+        ClientConfig._load_gui_overrides()
+        
         # Decidir qué flujo usar según el estado del vehículo
         if ClientConfig.VEHICLE_STATE == 'Nuevo':
             self.logger.info("🆕 Vehículo NUEVO detectado - usando flujo con código FASECOLDA")

@@ -154,7 +154,6 @@ class FasecoldaPage(BasePage):
     OPTIONS = {
         'vehicle_category': "paper-item:has-text('AUTOMÓVILES')",
         'service_type': "paper-item:has-text('Particular')",
-        'city': "vaadin-combo-box-item:has-text('Medellin - (Antioquia)')",
         'model_year_template': "paper-item:has-text('{year}')"
     }
 
@@ -165,6 +164,9 @@ class FasecoldaPage(BasePage):
     async def get_fasecolda_code(self) -> Optional[dict]:
         """Obtiene los códigos Fasecolda desde el extractor global o usa el código por defecto."""
         self.logger.info("🔍 Obteniendo códigos Fasecolda...")
+        
+        # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig
+        ClientConfig._load_gui_overrides()
         
         try:
             # Verificar si Fasecolda está habilitado globalmente
@@ -380,24 +382,90 @@ class FasecoldaPage(BasePage):
             return False
 
     async def fill_city(self) -> bool:
-        """Llena el campo de ciudad y selecciona la opción de Medellín."""
-        self.logger.info(f"🏙️ Llenando ciudad: {ClientConfig.get_client_city('sura')}...")
+        """Llena el campo de ciudad y selecciona la mejor opción disponible."""
+        client_city = ClientConfig.get_client_city('sura')
+        self.logger.info(f"🏙️ Llenando ciudad: {client_city}...")
         
         try:
-            # Llenar y seleccionar ciudad usando método reutilizable
-            await self.page.fill(self.SELECTORS['form_fields']['city'], ClientConfig.get_client_city('sura'))
+            # Llenar el campo de ciudad
+            await self.page.fill(self.SELECTORS['form_fields']['city'], client_city)
             await self.page.wait_for_timeout(1500)
             
-            if not await self.safe_click(self.OPTIONS['city'], timeout=5000):
+            # Buscar y seleccionar la mejor coincidencia disponible
+            if await self._select_best_city_match(client_city):
+                self.logger.info("✅ Ciudad seleccionada exitosamente")
+                return True
+            else:
                 self.logger.error("❌ No se pudo seleccionar la opción de ciudad")
                 return False
-            
-            self.logger.info("✅ Ciudad seleccionada exitosamente")
-            return True
             
         except Exception as e:
             self.logger.error(f"❌ Error llenando ciudad: {e}")
             return False
+
+    async def _select_best_city_match(self, target_city: str) -> bool:
+        """Busca y selecciona la mejor coincidencia de ciudad disponible en el dropdown."""
+        try:
+            # Obtener todas las opciones disponibles del dropdown
+            await self.page.wait_for_timeout(1000)
+            options = await self.page.query_selector_all("vaadin-combo-box-item")
+            
+            if not options:
+                self.logger.warning("⚠️ No se encontraron opciones de ciudad disponibles")
+                return False
+            
+            # Extraer textos de las opciones
+            option_texts = []
+            for option in options:
+                text = await option.text_content()
+                if text and text.strip():
+                    option_texts.append(text.strip())
+            
+            self.logger.info(f"🔍 Opciones disponibles: {option_texts}")
+            
+            # Buscar coincidencias
+            best_match = self._find_best_city_match(target_city, option_texts)
+            
+            if best_match:
+                self.logger.info(f"🎯 Mejor coincidencia encontrada: {best_match}")
+                # Seleccionar la opción
+                selector = f"vaadin-combo-box-item:has-text('{best_match}')"
+                return await self.safe_click(selector, timeout=5000)
+            else:
+                self.logger.warning(f"⚠️ No se encontró coincidencia para la ciudad: {target_city}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error buscando coincidencia de ciudad: {e}")
+            return False
+
+    def _find_best_city_match(self, target_city: str, available_options: list) -> str:
+        """Encuentra la mejor coincidencia de ciudad entre las opciones disponibles."""
+        target_lower = target_city.lower().strip()
+        
+        # Primero buscar coincidencia exacta
+        for option in available_options:
+            if target_lower in option.lower():
+                return option
+        
+        # Si no hay coincidencia exacta, buscar coincidencia parcial
+        from difflib import SequenceMatcher
+        best_match = None
+        best_ratio = 0.0
+        
+        for option in available_options:
+            # Extraer solo el nombre de la ciudad (antes del guión)
+            city_name = option.split(' - ')[0].lower().strip()
+            ratio = SequenceMatcher(None, target_lower, city_name).ratio()
+            
+            if ratio > best_ratio and ratio > 0.6:  # Umbral mínimo de similitud
+                best_ratio = ratio
+                best_match = option
+        
+        if best_match:
+            self.logger.info(f"📊 Mejor coincidencia: {best_match} (similitud: {best_ratio:.2f})")
+        
+        return best_match
 
     async def fill_plate(self) -> bool:
         """Llena el campo de placa con una placa genérica."""

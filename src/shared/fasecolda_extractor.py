@@ -84,6 +84,9 @@ class FasecoldaExtractor:
     def _should_extract_codes(self) -> bool:
         """Determina si es necesario extraer códigos FASECOLDA."""
         try:
+            # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig
+            ClientConfig._load_gui_overrides()
+            
             # Verificar configuración global de Fasecolda
             if not ClientConfig.is_fasecolda_enabled():
                 self.logger.info("⏭️ Búsqueda de códigos FASECOLDA deshabilitada globalmente")
@@ -132,6 +135,9 @@ class FasecoldaExtractor:
     async def _extract_codes_async(self) -> Optional[Dict[str, str]]:
         """Ejecuta la extracción de códigos de forma asíncrona."""
         try:
+            # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig
+            ClientConfig._load_gui_overrides()
+            
             self.logger.info("🌐 Iniciando navegador para extracción FASECOLDA...")
             
             # Inicializar Playwright
@@ -160,6 +166,13 @@ class FasecoldaExtractor:
                 ])
                 headless_mode = False  # No usar headless real para evitar problemas
             else:
+                # Ventanas visibles: centrar en pantalla con tamaño razonable
+                browser_args.extend([
+                    '--window-position=200,100',  # Posición centrada en pantalla
+                    '--window-size=1200,800',  # Tamaño razonable
+                    '--disable-background-timer-throttling',
+                    '--disable-renderer-backgrounding'
+                ])
                 headless_mode = False
             
             self.browser = await self.playwright.chromium.launch(

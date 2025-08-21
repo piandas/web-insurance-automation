@@ -103,6 +103,10 @@ class AllianzAutomation(BaseAutomation):
         """Ejecuta el flujo completo de automatización de Allianz con soporte de pausas globales."""
         self.logger.info("🚀 Iniciando flujo completo de Allianz...")
         
+        # CRÍTICO: Cargar datos de GUI al inicio del flujo completo
+        from ...config.client_config import ClientConfig
+        ClientConfig._load_gui_overrides()
+        
         try:
             # Verificar pausa global antes de iniciar
             await wait_for_global_resume('allianz')

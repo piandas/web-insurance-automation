@@ -341,6 +341,47 @@ class ClientConfig:
         gui_fasecolda = os.environ.get('GUI_FASECOLDA_ENABLED')
         if gui_fasecolda is not None:
             cls.ENABLE_FASECOLDA_SEARCH = gui_fasecolda.lower() == 'true'
+        
+        # CRÍTICO: Cargar TODOS los datos del cliente desde variables de entorno de GUI
+        gui_client_data = {}
+        
+        # Mapeo de variables de entorno a keys del diccionario
+        env_mapping = {
+            'GUI_CLIENT_DOCUMENT_NUMBER': 'client_document_number',
+            'GUI_CLIENT_FIRST_NAME': 'client_first_name',
+            'GUI_CLIENT_SECOND_NAME': 'client_second_name',
+            'GUI_CLIENT_FIRST_LASTNAME': 'client_first_lastname',
+            'GUI_CLIENT_SECOND_LASTNAME': 'client_second_lastname',
+            'GUI_CLIENT_BIRTH_DATE': 'client_birth_date',
+            'GUI_CLIENT_GENDER': 'client_gender',
+            'GUI_CLIENT_CITY': 'client_city',
+            'GUI_CLIENT_DEPARTMENT': 'client_department',
+            'GUI_VEHICLE_PLATE': 'vehicle_plate',
+            'GUI_VEHICLE_MODEL_YEAR': 'vehicle_model_year',
+            'GUI_VEHICLE_BRAND': 'vehicle_brand',
+            'GUI_VEHICLE_REFERENCE': 'vehicle_reference',
+            'GUI_VEHICLE_FULL_REFERENCE': 'vehicle_full_reference',
+            'GUI_VEHICLE_STATE': 'vehicle_state',
+            'GUI_MANUAL_CF_CODE': 'manual_cf_code',
+            'GUI_MANUAL_CH_CODE': 'manual_ch_code',
+            'GUI_POLICY_NUMBER': 'policy_number',
+            'GUI_POLICY_NUMBER_ALLIANZ': 'policy_number_allianz'
+        }
+        
+        # Cargar datos desde variables de entorno
+        for env_var, data_key in env_mapping.items():
+            value = os.environ.get(env_var)
+            if value:  # Solo aplicar si la variable existe y no está vacía
+                # Normalizar ciertos campos a mayúsculas para consistencia
+                if data_key in ['client_first_name', 'client_second_name', 'client_first_lastname', 
+                               'client_second_lastname', 'client_city', 'client_department', 
+                               'vehicle_brand', 'vehicle_reference', 'vehicle_full_reference']:
+                    value = value.upper()
+                gui_client_data[data_key] = value
+        
+        # Si se encontraron datos de GUI, cargarlos en el ClientConfig
+        if gui_client_data:
+            cls.load_client_data(gui_client_data)
     
     @classmethod
     def update_vehicle_state(cls, state: str) -> None:

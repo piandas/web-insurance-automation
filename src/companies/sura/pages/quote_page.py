@@ -64,6 +64,10 @@ class QuotePage(BasePage):
     async def verify_data(self) -> bool:
         """Verificación con comparación detallada entre config y valores encontrados."""
         self.logger.info("🔍 Verificando datos...")
+        
+        # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig en verificación
+        ClientConfig._load_gui_overrides()
+        
         try:
             expected_data = {
                 "Nombre": ClientConfig.CLIENT_FIRST_NAME,
@@ -123,6 +127,10 @@ class QuotePage(BasePage):
     async def process_quote_page(self) -> bool:
         """Proceso completo de cotización."""
         self.logger.info("🚀 Procesando página de cotización...")
+        
+        # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig
+        ClientConfig._load_gui_overrides()
+        
         try:
             # 1. Verificar que la página esté lista
             if not await self.wait_for_page_ready():
@@ -235,6 +243,10 @@ class QuotePage(BasePage):
     async def fill_address(self) -> bool:
         """Llena los datos de dirección desde el config, eligiendo siempre el input habilitado."""
         self.logger.info("🏠 Llenando dirección...")
+        
+        # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig en dirección
+        ClientConfig._load_gui_overrides()
+        
         try:
             # Corregir los selectores para evitar errores de sintaxis
             field_map = {
