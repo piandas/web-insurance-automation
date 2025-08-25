@@ -149,7 +149,9 @@ class ClientEditWindow:
             str(self.vehicle_plate): 'placa',
             str(self.vehicle_model_year): 'year',
             str(self.manual_cf_code): 'cf_code',
-            str(self.manual_ch_code): 'ch_code'
+            str(self.manual_ch_code): 'ch_code',
+            str(self.policy_number): 'poliza_sura',
+            str(self.policy_number_allianz): 'poliza_allianz'
         }
         
         if widget_var and widget_var in var_mapping:
@@ -203,6 +205,34 @@ class ClientEditWindow:
             # Validar referencia de vehículo (letras, números, espacios, guiones)
             if value and not re.match(r'^[A-ZÁÉÍÓÚÑÜ0-9\s\-]+$', value.upper()):
                 error_msg = "Solo letras, números, espacios y guiones"
+        
+        elif field_type == "poliza_sura":
+            # Validar póliza Sura (debe tener exactamente 12 dígitos)
+            if value and not value.isdigit():
+                # Limpiar caracteres no numéricos
+                new_value = re.sub(r'[^0-9]', '', value)
+                widget.delete(0, tk.END)
+                widget.insert(0, new_value)
+                value = new_value
+            
+            if value and len(value) != 12:
+                error_msg = "Debe tener exactamente 12 dígitos"
+            elif value and not value.isdigit():
+                error_msg = "Solo se permiten números"
+        
+        elif field_type == "poliza_allianz":
+            # Validar póliza Allianz (debe tener exactamente 8 dígitos)
+            if value and not value.isdigit():
+                # Limpiar caracteres no numéricos
+                new_value = re.sub(r'[^0-9]', '', value)
+                widget.delete(0, tk.END)
+                widget.insert(0, new_value)
+                value = new_value
+            
+            if value and len(value) != 8:
+                error_msg = "Debe tener exactamente 8 dígitos"
+            elif value and not value.isdigit():
+                error_msg = "Solo se permiten números"
         
         # Mostrar o quitar mensaje de error
         self.show_error_message(field_name, error_msg)
@@ -664,13 +694,37 @@ class ClientEditWindow:
         policy_frame.columnconfigure(1, weight=1)
         policy_frame.columnconfigure(3, weight=1)
         
+        row = 0
+        
         # Póliza Sura
-        ttk.Label(policy_frame, text="Póliza Sura:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(policy_frame, textvariable=self.policy_number, width=20).grid(row=0, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        ttk.Label(policy_frame, text="Póliza Sura (12 dígitos):").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
+        sura_frame = ttk.Frame(policy_frame)
+        sura_frame.grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        sura_frame.columnconfigure(0, weight=1)
+        
+        sura_entry = ttk.Entry(sura_frame, textvariable=self.policy_number, width=20)
+        sura_entry.grid(row=0, column=0, sticky=tk.W+tk.E)
+        sura_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'poliza_sura'))
+        
+        # Error label para póliza Sura
+        sura_error = ttk.Label(sura_frame, text="", foreground="red", font=("Arial", 8))
+        sura_error.grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
+        self.error_labels['poliza_sura'] = sura_error
         
         # Póliza Allianz
-        ttk.Label(policy_frame, text="Póliza Allianz:").grid(row=0, column=2, sticky=tk.W, pady=5, padx=(0, 5))
-        ttk.Entry(policy_frame, textvariable=self.policy_number_allianz, width=20).grid(row=0, column=3, sticky=tk.W+tk.E, pady=5)
+        ttk.Label(policy_frame, text="Póliza Allianz (8 dígitos):").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
+        allianz_frame = ttk.Frame(policy_frame)
+        allianz_frame.grid(row=row, column=3, sticky=tk.W+tk.E, pady=5)
+        allianz_frame.columnconfigure(0, weight=1)
+        
+        allianz_entry = ttk.Entry(allianz_frame, textvariable=self.policy_number_allianz, width=20)
+        allianz_entry.grid(row=0, column=0, sticky=tk.W+tk.E)
+        allianz_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'poliza_allianz'))
+        
+        # Error label para póliza Allianz
+        allianz_error = ttk.Label(allianz_frame, text="", foreground="red", font=("Arial", 8))
+        allianz_error.grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
+        self.error_labels['poliza_allianz'] = allianz_error
     
     def create_buttons_section(self, parent):
         """Crea la sección de botones."""
