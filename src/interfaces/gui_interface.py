@@ -74,6 +74,9 @@ class AutomationGUI:
         
         # Iniciar el monitoreo de mensajes
         self.check_message_queue()
+        
+        # Cargar automáticamente el último cliente editado del historial
+        self.cargar_ultimo_cliente_editado()
     
     def setup_ui(self):
         """Configura todos los elementos de la interfaz."""
@@ -332,6 +335,40 @@ class AutomationGUI:
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el editor de cliente: {e}")
             self.agregar_mensaje(f"❌ Error abriendo editor: {e}", "error")
+    
+    def cargar_ultimo_cliente_editado(self):
+        """Carga automáticamente el último cliente editado del historial en la interfaz principal."""
+        try:
+            from config.client_history_manager import ClientHistoryManager
+            history_manager = ClientHistoryManager()
+            
+            # Obtener el historial
+            history = history_manager.load_history()
+            
+            if history and len(history) > 0:
+                # Obtener el último cliente editado (el primero en la lista ya que están ordenados por fecha descendente)
+                ultimo_cliente = history[0]
+                client_data = ultimo_cliente.get('data', {})
+                
+                if client_data:
+                    # Cargar los datos en ClientConfig
+                    ClientConfig.load_client_data(client_data)
+                    ClientConfig.update_vehicle_state(client_data.get('vehicle_state', 'Nuevo'))
+                    
+                    # Actualizar la información mostrada en la interfaz
+                    self.actualizar_informacion_cliente()
+                    
+                    # Mostrar mensaje informativo
+                    nombre_cliente = ultimo_cliente.get('name', 'Sin nombre')
+                    self.agregar_mensaje(f"📋 Cliente cargado automáticamente: {nombre_cliente}", "info")
+                else:
+                    self.agregar_mensaje("⚠️ No se encontraron datos válidos en el último cliente del historial", "warning")
+            else:
+                self.agregar_mensaje("📂 Historial de clientes vacío - usando configuración por defecto", "info")
+                
+        except Exception as e:
+            print(f"Error cargando último cliente: {e}")
+            self.agregar_mensaje("⚠️ No se pudo cargar el último cliente del historial", "warning")
     
     def guardar_cliente_automatico(self):
         """Guarda automáticamente el cliente actual en el historial antes de ejecutar."""

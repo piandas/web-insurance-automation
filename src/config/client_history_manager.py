@@ -229,8 +229,13 @@ class ClientHistoryManager:
         required_fields = [
             'client_document_number', 'client_first_name', 'client_first_lastname',
             'client_birth_date', 'client_gender', 'client_city', 'client_department',
-            'vehicle_plate', 'vehicle_model_year', 'vehicle_brand'
+            'vehicle_model_year', 'vehicle_brand'
         ]
+        
+        # Solo requerir placa si el vehículo es usado
+        vehicle_state = data.get('vehicle_state', 'Nuevo')
+        if vehicle_state == 'Usado':
+            required_fields.append('vehicle_plate')
         
         for field in required_fields:
             if not data.get(field, '').strip():

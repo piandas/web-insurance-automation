@@ -1,6 +1,33 @@
 {
-  "last_updated": "2025-08-21T12:19:43.776739",
+  "last_updated": "2025-08-24T19:52:58.305517",
   "clients": [
+    {
+      "id": "20250824_193417",
+      "name": "CLAUDIA MEDINA",
+      "created_at": "2025-08-24T19:34:17.595979",
+      "data": {
+        "client_document_number": "43525218",
+        "client_first_name": "CLAUDIA",
+        "client_second_name": "PATRICIA",
+        "client_first_lastname": "MEDINA",
+        "client_second_lastname": "AGUILAR",
+        "client_birth_date": "1968-07-26",
+        "client_gender": "F",
+        "client_city": "MEDELLIN",
+        "client_department": "ANTIOQUIA",
+        "vehicle_plate": "",
+        "vehicle_model_year": "2026",
+        "vehicle_brand": "TOYOTA",
+        "vehicle_reference": "FORTUNER",
+        "vehicle_full_reference": "TOYOTA FORTUNER",
+        "vehicle_state": "Nuevo",
+        "manual_cf_code": "09036238",
+        "manual_ch_code": "09008262",
+        "policy_number": "23486665",
+        "policy_number_allianz": "900001250624"
+      },
+      "updated_at": "2025-08-24T19:52:58.305513"
+    },
     {
       "id": "20250821_091739",
       "name": "GLADYS VILLA",

@@ -52,6 +52,11 @@ class ClientEditWindow:
         self.window.geometry("850x1000")  # Aumentar tamaño para mejor visibilidad sin scroll
         self.window.resizable(True, True)
         
+        # Configurar ventana para mantenerse al frente cuando sea necesario
+        if parent_window:
+            self.window.transient(parent_window)
+            self.window.grab_set()
+        
         # Centrar ventana
         self.center_window()
         
@@ -209,10 +214,18 @@ class ClientEditWindow:
         if field_name in self.error_labels:
             label = self.error_labels[field_name]
             if message:
+                # Solo cambiar a rojo si es realmente un error y no es el campo de placa con mensaje informativo
+                if field_name == 'placa' and self.vehicle_state.get() == "Nuevo":
+                    # Mantener el color azul para el mensaje informativo
+                    pass
+                else:
+                    label.config(foreground="red")
                 label.config(text=f"⚠️ {message}")
-                # El label ya está posicionado, solo cambiar el texto
             else:
-                label.config(text="")
+                # Solo limpiar si no es un vehículo nuevo (que tiene mensaje informativo)
+                if not (field_name == 'placa' and self.vehicle_state.get() == "Nuevo"):
+                    label.config(text="")
+                    label.config(foreground="red")
 
     def normalize_text(self, event):
         """Normaliza texto a mayúsculas al perder el foco."""
@@ -220,6 +233,27 @@ class ClientEditWindow:
         value = widget.get().upper()
         widget.delete(0, tk.END)
         widget.insert(0, value)
+    
+    def on_vehicle_state_change(self, event=None):
+        """Maneja el cambio del estado del vehículo para bloquear/desbloquear la placa."""
+        if hasattr(self, 'plate_entry') and hasattr(self, 'plate_info_label'):
+            if self.vehicle_state.get() == "Nuevo":
+                # Bloquear el campo de placa y mostrar mensaje
+                self.plate_entry.config(state="readonly")  # readonly en lugar de disabled para mantener el color
+                # Configurar color de fondo gris
+                self.plate_entry.config(background="#e8e8e8", foreground="#666666")
+                self.plate_info_label.config(
+                    text="ℹ️ Placa no es necesaria porque es nuevo",
+                    foreground="blue"
+                )
+                # Limpiar el campo de placa
+                self.vehicle_plate.set("")
+            else:
+                # Desbloquear el campo de placa y quitar mensaje
+                self.plate_entry.config(state="normal")
+                # Restaurar color de fondo normal
+                self.plate_entry.config(background="white", foreground="black")
+                self.plate_info_label.config(text="", foreground="red")
     
     def setup_ui(self):
         """Configura la interfaz de usuario."""
@@ -471,14 +505,21 @@ class ClientEditWindow:
         
         # Departamento (Combobox)
         ttk.Label(personal_frame, text="Departamento:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
+        dept_frame = ttk.Frame(personal_frame)
+        dept_frame.grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        dept_frame.columnconfigure(0, weight=1)
+        
         dept_combo = ttk.Combobox(
-            personal_frame,
+            dept_frame,
             textvariable=self.client_department,
             values=self.DEPARTAMENTOS,
             state="readonly",
             width=25
         )
-        dept_combo.grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        dept_combo.grid(row=0, column=0, sticky=tk.W+tk.E)
+        
+        # Espacio vacío para alinear con error label de ciudad
+        ttk.Label(dept_frame, text="").grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
         
         # Ciudad
         ttk.Label(personal_frame, text="Ciudad:").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
@@ -506,17 +547,30 @@ class ClientEditWindow:
         
         row = 0
         
+        # Estado del vehículo (MOVIDO AL INICIO)
+        ttk.Label(vehicle_frame, text="Estado del vehículo:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
+        self.state_combo = ttk.Combobox(
+            vehicle_frame,
+            textvariable=self.vehicle_state,
+            values=["Nuevo", "Usado"],
+            state="readonly",
+            width=15
+        )
+        self.state_combo.grid(row=row, column=1, sticky=tk.W, pady=5, padx=(0, 15))
+        self.state_combo.bind('<<ComboboxSelected>>', self.on_vehicle_state_change)
+        row += 1
+        
         # Placa
         ttk.Label(vehicle_frame, text="Placa:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
-        plate_entry = ttk.Entry(vehicle_frame, textvariable=self.vehicle_plate, width=15)
-        plate_entry.grid(row=row, column=1, sticky=tk.W, pady=5, padx=(0, 15))
-        plate_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'placa'))
-        plate_entry.bind('<FocusOut>', lambda event: self.normalize_text(event))
+        self.plate_entry = ttk.Entry(vehicle_frame, textvariable=self.vehicle_plate, width=15)
+        self.plate_entry.grid(row=row, column=1, sticky=tk.W, pady=5, padx=(0, 15))
+        self.plate_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'placa'))
+        self.plate_entry.bind('<FocusOut>', lambda event: self.normalize_text(event))
         
-        # Error label para placa
-        plate_error = ttk.Label(vehicle_frame, text="", foreground="red", font=("Arial", 8))
-        plate_error.grid(row=row+1, column=1, sticky=tk.W, padx=(0, 15))
-        self.error_labels['placa'] = plate_error
+        # Error/Info label para placa
+        self.plate_info_label = ttk.Label(vehicle_frame, text="", foreground="blue", font=("Arial", 8))
+        self.plate_info_label.grid(row=row+1, column=1, sticky=tk.W, padx=(0, 15))
+        self.error_labels['placa'] = self.plate_info_label
         
         # Año del modelo
         ttk.Label(vehicle_frame, text="Año del modelo:").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
@@ -530,18 +584,6 @@ class ClientEditWindow:
         self.error_labels['year'] = year_error
         
         row += 2
-        
-        # Estado del vehículo
-        ttk.Label(vehicle_frame, text="Estado del vehículo:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
-        state_combo = ttk.Combobox(
-            vehicle_frame,
-            textvariable=self.vehicle_state,
-            values=["Nuevo", "Usado"],
-            state="readonly",
-            width=15
-        )
-        state_combo.grid(row=row, column=1, sticky=tk.W, pady=5, padx=(0, 15))
-        row += 1
         
         # Marca
         ttk.Label(vehicle_frame, text="Marca:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
@@ -847,6 +889,9 @@ class ClientEditWindow:
         
         self.policy_number.set(data.get('policy_number', ''))
         self.policy_number_allianz.set(data.get('policy_number_allianz', ''))
+        
+        # Configurar estado del vehículo después de cargar datos
+        self.on_vehicle_state_change()
     
     def get_data_from_fields(self) -> Dict[str, str]:
         """Obtiene los datos de los campos de la interfaz."""
@@ -887,7 +932,12 @@ class ClientEditWindow:
                 field_name = field.replace('_', ' ').title()
                 error_message += f"• {field_name}: {error}\n"
             
-            messagebox.showerror("Errores de Validación", error_message)
+            # Asegurar que la ventana esté al frente antes de mostrar el error
+            self.window.lift()
+            self.window.focus_force()
+            messagebox.showerror("Errores de Validación", error_message, parent=self.window)
+            # Mantener la ventana al frente después del mensaje
+            self.window.lift()
             return False
         
         return True
@@ -1024,6 +1074,9 @@ class ClientEditWindow:
         self.current_client_id = None
         if hasattr(self, 'history_combo'):
             self.history_combo.set('')
+            
+        # Configurar estado inicial del vehículo (bloquear placa si es nuevo)
+        self.on_vehicle_state_change()
     
     def update_full_reference(self, event=None):
         """Actualiza la referencia completa automáticamente."""
