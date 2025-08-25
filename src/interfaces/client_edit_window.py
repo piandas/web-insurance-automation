@@ -106,6 +106,7 @@ class ClientEditWindow:
         # Variables de códigos Fasecolda
         self.manual_cf_code = tk.StringVar()
         self.manual_ch_code = tk.StringVar()
+        # Búsqueda comprehensiva siempre habilitada (sin interfaz visual)
         
         # Variables de pólizas
         self.policy_number = tk.StringVar()
@@ -1083,6 +1084,10 @@ class ClientEditWindow:
         # Aplicar los datos al ClientConfig
         ClientConfig.load_client_data(data)
         ClientConfig.update_vehicle_state(data.get('vehicle_state', 'Nuevo'))
+        
+        # Configurar búsqueda comprehensiva de Fasecolda (siempre habilitada)
+        import os
+        os.environ['FASECOLDA_COMPREHENSIVE_SEARCH'] = 'True'
         
         # Llamar callback si existe (esto actualiza la ventana principal)
         if self.callback:

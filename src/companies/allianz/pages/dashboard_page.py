@@ -18,40 +18,61 @@ class DashboardPage(BasePage):
         super().__init__(page, 'allianz')
 
     async def navigate_to_flotas(self) -> bool:
-        """Navega directamente a Flotas Autos y envía el formulario."""
+        """Navega directamente a Flotas Autos y envía el formulario con reintentos."""
         self.logger.info("🚗 Navegando a Flotas Autos en Allianz...")
         try:
-            # Hacer clic en Nueva Póliza
-            if not await self.safe_click(self.NEW_POLICY_LINK):
+            # Hacer clic en Nueva Póliza con reintentos
+            self.logger.info("🔘 Haciendo clic en 'Nueva Póliza'...")
+            if not await self.safe_click(self.NEW_POLICY_LINK, timeout=15000, retries=3):
                 self.logger.error("❌ Error haciendo clic en Nueva Póliza")
                 return False
             
-            # Esperar modal
-            if not await self.wait_for_selector_safe(self.MODAL_CONTENT):
+            self.logger.info("✅ Click en 'Nueva Póliza' exitoso")
+            
+            # Esperar modal con timeout más largo
+            self.logger.info("⏳ Esperando modal...")
+            if not await self.wait_for_selector_safe(self.MODAL_CONTENT, timeout=20000):
                 self.logger.error("❌ Error esperando modal")
                 return False
             
-            # Expandir sección Autos
-            if not await self.safe_click(self.AUTOS_EXPANSION_PANEL):
+            # Pequeña pausa para estabilidad
+            await asyncio.sleep(1)
+            
+            # Expandir sección Autos con reintentos
+            self.logger.info("🔘 Expandiendo sección 'Autos'...")
+            if not await self.safe_click(self.AUTOS_EXPANSION_PANEL, timeout=15000, retries=3):
                 self.logger.error("❌ Error expandiendo sección Autos")
                 return False
             
             # Esperar contenido expandido
-            if not await self.wait_for_selector_safe(self.EXPANSION_CONTENT):
+            self.logger.info("⏳ Esperando contenido expandido...")
+            if not await self.wait_for_selector_safe(self.EXPANSION_CONTENT, timeout=15000):
                 self.logger.error("❌ Error esperando contenido expandido")
                 return False
             
             # Esperar las cajas de opciones
-            if not await self.wait_for_selector_safe(self.BOX_SELECTOR):
+            self.logger.info("⏳ Esperando cajas de opciones...")
+            if not await self.wait_for_selector_safe(self.BOX_SELECTOR, timeout=15000):
                 self.logger.error("❌ Error esperando cajas de opciones")
                 return False
             
-            # Hacer clic en Flotas Autos
-            try:
-                await self.page.get_by_text("Flotas Autos").click()
-            except Exception as e:
-                self.logger.error(f"❌ Error haciendo clic en Flotas Autos: {e}")
-                return False
+            # Hacer clic en Flotas Autos con reintentos
+            self.logger.info("🔘 Haciendo clic en 'Flotas Autos'...")
+            for attempt in range(1, 4):
+                try:
+                    if attempt > 1:
+                        self.logger.info(f"🔄 Reintento {attempt}/3 - Clic en 'Flotas Autos'")
+                        await asyncio.sleep(1)
+                    
+                    await self.page.get_by_text("Flotas Autos").click(timeout=10000)
+                    self.logger.info("✅ Click en 'Flotas Autos' exitoso")
+                    break
+                except Exception as e:
+                    if attempt == 3:
+                        self.logger.error(f"❌ Error haciendo clic en Flotas Autos: {e}")
+                        return False
+                    else:
+                        self.logger.warning(f"⚠️ Intento {attempt} falló para 'Flotas Autos': {e}")
 
             self.logger.info("✅ Navegación a Flotas Autos exitosa")
             return True

@@ -56,8 +56,15 @@ class FasecoldaExtractor:
         Returns:
             Diccionario con códigos CF y CH, o None si falló
         """
+        # Si ya tenemos códigos guardados, devolverlos inmediatamente
+        if self.codes:
+            ch_info = f" - CH: {self.codes.get('ch_code')}" if self.codes.get('ch_code') else ""
+            self.logger.info(f"✅ Códigos FASECOLDA ya disponibles - CF: {self.codes['cf_code']}{ch_info}")
+            return self.codes
+        
+        # Si no hay task activa, no se puede obtener códigos
         if not self._extraction_task:
-            self.logger.warning("⚠️ No hay task de extracción activa")
+            self.logger.warning("⚠️ No hay task de extracción activa ni códigos previamente extraídos")
             return None
         
         try:
@@ -67,6 +74,8 @@ class FasecoldaExtractor:
             if codes and codes.get('cf_code'):
                 ch_info = f" - CH: {codes.get('ch_code')}" if codes.get('ch_code') else ""
                 self.logger.info(f"✅ Códigos FASECOLDA obtenidos - CF: {codes['cf_code']}{ch_info}")
+                # Guardar los códigos para acceso posterior
+                self.codes = codes
             else:
                 self.logger.warning("⚠️ No se pudieron obtener códigos FASECOLDA")
             
@@ -84,9 +93,6 @@ class FasecoldaExtractor:
     def _should_extract_codes(self) -> bool:
         """Determina si es necesario extraer códigos FASECOLDA."""
         try:
-            # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig
-            ClientConfig._load_gui_overrides()
-            
             # Verificar configuración global de Fasecolda
             if not ClientConfig.is_fasecolda_enabled():
                 self.logger.info("⏭️ Búsqueda de códigos FASECOLDA deshabilitada globalmente")
@@ -135,9 +141,6 @@ class FasecoldaExtractor:
     async def _extract_codes_async(self) -> Optional[Dict[str, str]]:
         """Ejecuta la extracción de códigos de forma asíncrona."""
         try:
-            # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig
-            ClientConfig._load_gui_overrides()
-            
             self.logger.info("🌐 Iniciando navegador para extracción FASECOLDA...")
             
             # Inicializar Playwright
@@ -166,13 +169,6 @@ class FasecoldaExtractor:
                 ])
                 headless_mode = False  # No usar headless real para evitar problemas
             else:
-                # Ventanas visibles: centrar en pantalla con tamaño razonable
-                browser_args.extend([
-                    '--window-position=200,100',  # Posición centrada en pantalla
-                    '--window-size=1200,800',  # Tamaño razonable
-                    '--disable-background-timer-throttling',
-                    '--disable-renderer-backgrounding'
-                ])
                 headless_mode = False
             
             self.browser = await self.playwright.chromium.launch(
@@ -183,14 +179,30 @@ class FasecoldaExtractor:
             
             # Crear servicio y extraer códigos
             fasecolda_service = FasecoldaService(self.page, self.logger)
-            codes = await fasecolda_service.get_cf_code(
-                category=ClientConfig.VEHICLE_CATEGORY,
-                state=ClientConfig.VEHICLE_STATE,
-                model_year=ClientConfig.VEHICLE_MODEL_YEAR,
-                brand=ClientConfig.VEHICLE_BRAND,
-                reference=ClientConfig.VEHICLE_REFERENCE,
-                full_reference=ClientConfig.VEHICLE_FULL_REFERENCE
-            )
+            
+            # Siempre usar búsqueda comprehensiva cuando está habilitado
+            use_comprehensive = os.getenv('FASECOLDA_COMPREHENSIVE_SEARCH', 'True').lower() == 'true'
+            
+            if use_comprehensive:
+                self.logger.info("🔍 Usando búsqueda comprehensiva de Fasecolda...")
+                codes = await fasecolda_service.get_cf_code_comprehensive(
+                    category=ClientConfig.VEHICLE_CATEGORY,
+                    state=ClientConfig.VEHICLE_STATE,
+                    model_year=ClientConfig.VEHICLE_MODEL_YEAR,
+                    brand=ClientConfig.VEHICLE_BRAND,
+                    reference=ClientConfig.VEHICLE_REFERENCE,
+                    full_reference=ClientConfig.VEHICLE_FULL_REFERENCE
+                )
+            else:
+                self.logger.info("🔍 Usando búsqueda estándar de Fasecolda...")
+                codes = await fasecolda_service.get_cf_code(
+                    category=ClientConfig.VEHICLE_CATEGORY,
+                    state=ClientConfig.VEHICLE_STATE,
+                    model_year=ClientConfig.VEHICLE_MODEL_YEAR,
+                    brand=ClientConfig.VEHICLE_BRAND,
+                    reference=ClientConfig.VEHICLE_REFERENCE,
+                    full_reference=ClientConfig.VEHICLE_FULL_REFERENCE
+                )
             
             self.codes = codes
             return codes
@@ -199,10 +211,11 @@ class FasecoldaExtractor:
             self.logger.error(f"❌ Error en extracción asíncrona FASECOLDA: {e}")
             return None
         finally:
-            await self._cleanup_extraction()
+            # Solo limpiar navegador, pero mantener códigos disponibles
+            await self._cleanup_browser_only()
     
-    async def _cleanup_extraction(self):
-        """Limpia recursos del navegador de extracción."""
+    async def _cleanup_browser_only(self):
+        """Limpia solo los recursos del navegador, manteniendo los códigos."""
         try:
             if self.page:
                 await self.page.close()
@@ -216,10 +229,18 @@ class FasecoldaExtractor:
                 await self.playwright.stop()
                 self.playwright = None
                 
-            self.logger.info("🧹 Recursos de extracción FASECOLDA liberados")
+            self.logger.info("🧹 Navegador de extracción FASECOLDA cerrado (códigos mantenidos)")
             
         except Exception as e:
-            self.logger.warning(f"⚠️ Error limpiando recursos de extracción: {e}")
+            self.logger.warning(f"⚠️ Error limpiando navegador de extracción: {e}")
+    
+    async def _cleanup_extraction(self):
+        """Limpia todos los recursos incluyendo códigos guardados."""
+        await self._cleanup_browser_only()
+        
+        # Limpiar códigos también si hay un error crítico
+        self.codes = None
+        self.logger.info("🧹 Recursos de extracción FASECOLDA liberados completamente")
     
     async def close(self):
         """Cierra el extractor y libera todos los recursos."""
@@ -230,7 +251,7 @@ class FasecoldaExtractor:
             except asyncio.CancelledError:
                 pass
         
-        await self._cleanup_extraction()
+        await self._cleanup_extraction()  # Limpiar todo incluyendo códigos
         self.logger.info("🔒 Extractor FASECOLDA cerrado")
 
 

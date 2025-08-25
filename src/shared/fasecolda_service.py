@@ -70,6 +70,65 @@ class FasecoldaService:
         self.page = page
         self.logger = logger or logging.getLogger(__name__)
         
+    async def get_cf_code_comprehensive(
+        self,
+        category: str,
+        state: str,
+        model_year: str,
+        brand: str,
+        reference: str,
+        full_reference: str = None
+    ) -> Optional[dict]:
+        """
+        Obtiene códigos CF y CH buscando exhaustivamente en TODAS las referencias disponibles.
+        
+        Args:
+            category: Categoría del vehículo ("Liviano pasajeros", "Motos")
+            state: Estado del vehículo ("Nuevo", "Usado")
+            model_year: Año del modelo (ej: "2026", "2025")
+            brand: Marca del vehículo (ej: "Toyota")
+            reference: Referencia base (ej: "Fortuner")
+            full_reference: Referencia completa para matching exacto
+            
+        Returns:
+            Diccionario con códigos CF y CH del vehículo seleccionado
+        """
+        try:
+            await self._navigate_to_fasecolda()
+            
+            # Llenar formulario hasta la marca
+            if not await self._fill_vehicle_form_to_brand(category, state, model_year, brand):
+                return None
+            
+            # Obtener todas las referencias disponibles para la marca
+            all_references = await self._get_all_references_for_brand(reference)
+            
+            if not all_references:
+                self.logger.error("❌ No se encontraron referencias para la marca especificada")
+                return None
+            
+            # Buscar exhaustivamente en cada referencia
+            all_options = await self._search_all_references(all_references, category, state, model_year, brand)
+            
+            if not all_options:
+                self.logger.error("❌ No se encontraron vehículos en ninguna referencia")
+                return None
+            
+            # Mostrar diálogo de selección y obtener la opción elegida
+            selected_option = await self._show_selection_dialog(all_options, brand, reference)
+            
+            if selected_option:
+                return {
+                    'cf_code': selected_option['cf_code'],
+                    'ch_code': selected_option['ch_code']
+                }
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error en búsqueda exhaustiva de código Fasecolda: {e}")
+            return None
+
     async def get_cf_code(
         self,
         category: str,
@@ -175,20 +234,11 @@ class FasecoldaService:
                     field_value = await self._get_select_value(selector, value, field_name)
                     
                     if field_value is None:
-                        if field_name == "referencia":
-                            self.logger.error(f"❌ Campo crítico '{field_name}' no encontrado: {value}")
-                            return False  # La referencia es crítica, fallar si no se encuentra
-                        else:
-                            self.logger.warning(f"⚠️ No se encontró {field_name}: {value} - continuando...")
-                            continue  # Continuar con el siguiente campo en lugar de fallar
+                        self.logger.warning(f"⚠️ No se encontró {field_name}: {value} - continuando...")
+                        continue  # Continuar con el siguiente campo en lugar de fallar
                     
                     # Seleccionar el valor
-                    selection_success = await self._select_by_value(selector, field_value)
-                    
-                    # Verificar especialmente para el campo de referencia
-                    if field_name == "referencia" and not selection_success:
-                        self.logger.error(f"❌ Falló la selección del campo crítico '{field_name}'")
-                        return False
+                    await self._select_by_value(selector, field_value)
                 
                 await asyncio.sleep(SLEEP_DURATION)
             
@@ -201,6 +251,37 @@ class FasecoldaService:
             traceback.print_exc()
             return False
     
+    async def _select_field_with_retry(self, selector: str, value: str, field_name: str) -> bool:
+        """Selecciona un campo con reintentos."""
+        self.logger.info(f"🔽 Seleccionando {field_name}: {value}")
+        
+        try:
+            # Esperar a que el campo esté habilitado
+            await self._wait_for_field_enabled(selector)
+            
+            # Obtener el valor para el select
+            field_value = await self._get_select_value(selector, value, field_name)
+            
+            if field_value is None:
+                self.logger.warning(f"⚠️ No se encontró {field_name}: {value}")
+                return False
+            
+            # Seleccionar el valor
+            await self._select_by_value(selector, field_value)
+            
+            # Verificar que la selección funcionó
+            selected_value = await self.page.evaluate(f"document.querySelector('{selector}').value")
+            if selected_value == field_value:
+                self.logger.info(f"✅ {field_name} seleccionado correctamente: {value}")
+                return True
+            else:
+                self.logger.warning(f"⚠️ La selección de {field_name} no se aplicó correctamente")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error seleccionando {field_name}: {e}")
+            return False
+
     async def _select_category_with_retries(self, selector: str, category: str, field_name: str) -> bool:
         """Selecciona la categoría con reintentos robustos."""
         for attempt in range(1, TIMEOUTS['max_retries'] + 1):
@@ -217,9 +298,7 @@ class FasecoldaService:
                     raise Exception(f"No se encontró la opción {category}")
                 
                 # Seleccionar el valor
-                selection_success = await self._select_by_value(selector, field_value)
-                if not selection_success:
-                    raise Exception(f"Falló la selección del valor")
+                await self._select_by_value(selector, field_value)
                 
                 # Verificar que la selección funcionó
                 selected_value = await self.page.evaluate(f"document.querySelector('{selector}').value")
@@ -253,10 +332,6 @@ class FasecoldaService:
         Returns:
             Valor del option encontrado o None si no se encuentra
         """
-        # Para el campo de referencia Select2, devolver el texto directamente
-        if field_type == "referencia" and 'fe-refe1' in selector:
-            return search_value  # Para Select2, usamos el texto directamente
-            
         # Mapeos estáticos para campos conocidos
         static_mappings = {
             "categoría": {
@@ -329,12 +404,8 @@ class FasecoldaService:
                     # Continuar sin fallar, ya que algunos campos pueden no necesitar habilitación
                     pass
     
-    async def _select_by_value(self, selector: str, value: str) -> bool:
+    async def _select_by_value(self, selector: str, value: str):
         """Selecciona una opción por su valor usando JavaScript."""
-        # Verificar si es un elemento select2
-        if 'fe-refe1' in selector:
-            return await self._select_select2_reference(value)
-        
         js_code = f"""
         () => {{
             const select = document.querySelector('{selector}');
@@ -354,116 +425,11 @@ class FasecoldaService:
         result = await self.page.evaluate(js_code)
         if not result:
             self.logger.error(f"❌ No se pudo seleccionar valor '{value}' en '{selector}'")
-        return result
-            
-    async def _select_select2_reference(self, reference_text: str) -> bool:
-        """Maneja la selección de referencia en el dropdown Select2."""
-        try:
-            self.logger.info(f"🔍 Seleccionando referencia en Select2: {reference_text}")
-            
-            # Paso 1: Verificar que el contenedor Select2 esté presente
-            select2_container = "#select2-fe-refe1-container"
-            await self.page.wait_for_selector(select2_container, timeout=5000)
-            
-            # Verificar el texto actual
-            current_text = await self.page.inner_text(select2_container)
-            self.logger.info(f"📄 Texto actual del Select2: '{current_text}'")
-            
-            # Paso 2: Hacer clic en el contenedor select2 para abrir el dropdown
-            await self.page.click(select2_container)
-            self.logger.info("✅ Dropdown Select2 abierto")
-            
-            # Esperar a que aparezcan las opciones
-            await self.page.wait_for_selector(".select2-results__option", timeout=10000)
-            
-            # Obtener todas las opciones
-            options = await self.page.query_selector_all(".select2-results__option")
-            self.logger.info(f"📋 Encontradas {len(options)} opciones en el dropdown")
-            
-            # Paso 3: Buscar y hacer clic en la opción que contenga la referencia
-            best_match = None
-            best_match_text = ""
-            
-            for i, option in enumerate(options):
-                try:
-                    option_text = await option.inner_text()
-                    option_text_clean = option_text.strip()
-                    
-                    self.logger.debug(f"  🔍 Opción {i+1}: {option_text_clean}")
-                    
-                    # Buscar coincidencia parcial (la referencia puede estar contenida en el texto)
-                    if reference_text.lower() in option_text_clean.lower():
-                        self.logger.info(f"🎯 Encontrada coincidencia: {option_text_clean}")
-                        best_match = option
-                        best_match_text = option_text_clean
-                        break
-                        
-                except Exception as e:
-                    self.logger.warning(f"⚠️ Error procesando opción {i+1}: {e}")
-                    continue
-            
-            if best_match:
-                self.logger.info(f"✅ Seleccionando opción: {best_match_text}")
-                await best_match.click()
-                
-                # Esperar a que se cierre el dropdown y se actualice el contenedor
-                await self.page.wait_for_timeout(2000)
-                
-                # Verificar que la selección fue exitosa
-                updated_text = await self.page.inner_text(select2_container)
-                self.logger.info(f"📄 Texto actualizado del Select2: '{updated_text}'")
-                
-                if "Elija una opción" not in updated_text:
-                    self.logger.info("✅ Referencia seleccionada exitosamente")
-                    return True
-                else:
-                    self.logger.warning("⚠️ La selección no se aplicó correctamente")
-                    return False
-            else:
-                self.logger.warning(f"⚠️ No se encontró la referencia '{reference_text}' en las opciones")
-                
-                # Mostrar las primeras opciones para debug
-                if len(options) > 0:
-                    self.logger.info("📋 Primeras opciones disponibles:")
-                    for i, option in enumerate(options[:5]):  # Mostrar solo las primeras 5
-                        try:
-                            option_text = await option.inner_text()
-                            self.logger.info(f"  {i+1}. {option_text.strip()}")
-                        except:
-                            pass
-                
-                # Cerrar el dropdown si no se encontró la opción
-                await self.page.keyboard.press("Escape")
-                return False
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error seleccionando referencia Select2: {e}")
-            # Intentar cerrar el dropdown en caso de error
-            try:
-                await self.page.keyboard.press("Escape")
-            except:
-                pass
-            return False
             
     async def _search_vehicle(self) -> bool:
         """Hace clic en el botón de búsqueda."""
         self.logger.info("🔍 Iniciando búsqueda...")
         try:
-            # Verificar que el botón esté habilitado antes de hacer clic
-            search_button = await self.page.query_selector(SELECTORS['search_button'])
-            if not search_button:
-                self.logger.error("❌ No se encontró el botón de búsqueda")
-                return False
-            
-            # Verificar si el botón está habilitado
-            is_disabled = await search_button.get_attribute('disabled')
-            if is_disabled is not None:
-                self.logger.error("❌ El botón de búsqueda está deshabilitado. Posiblemente no se seleccionó correctamente la referencia.")
-                
-                # Hacer un debug del estado del formulario
-                await self._debug_form_state()
-                return False
-            
             await self.page.click(SELECTORS['search_button'])
             await self.page.wait_for_load_state('networkidle')
             self.logger.info("✅ Búsqueda completada")
@@ -471,48 +437,6 @@ class FasecoldaService:
         except Exception as e:
             self.logger.error(f"❌ Error en búsqueda: {e}")
             return False
-    
-    async def _debug_form_state(self):
-        """Método de debug para verificar el estado del formulario."""
-        try:
-            self.logger.info("🔍 Estado del formulario de búsqueda:")
-            
-            # Verificar cada campo
-            fields = [
-                ("categoría", SELECTORS['category']),
-                ("estado", SELECTORS['state']),
-                ("modelo", SELECTORS['model']),
-                ("marca", SELECTORS['brand']),
-                ("referencia", SELECTORS['reference'])
-            ]
-            
-            for field_name, selector in fields:
-                try:
-                    element = await self.page.query_selector(selector)
-                    if element:
-                        value = await element.get_attribute('value') or await element.inner_text()
-                        self.logger.info(f"  - {field_name}: {value}")
-                    else:
-                        self.logger.warning(f"  - {field_name}: elemento no encontrado")
-                except Exception as e:
-                    self.logger.warning(f"  - {field_name}: error al obtener valor: {e}")
-            
-            # Verificar estado del dropdown Select2 de referencia
-            try:
-                select2_container = await self.page.query_selector("#select2-fe-refe1-container")
-                if select2_container:
-                    select2_text = await select2_container.inner_text()
-                    self.logger.info(f"  - Select2 referencia texto: '{select2_text}'")
-                    
-                    if "Elija una opción" in select2_text:
-                        self.logger.warning("  ⚠️ La referencia no fue seleccionada (muestra 'Elija una opción')")
-                else:
-                    self.logger.warning("  - Select2 referencia: contenedor no encontrado")
-            except Exception as e:
-                self.logger.warning(f"  - Select2 referencia: error: {e}")
-                
-        except Exception as e:
-            self.logger.error(f"❌ Error en debug del formulario: {e}")
     
     async def _extract_codes(self, full_reference: str = None) -> Optional[dict]:
         """Extrae los códigos CF y CH basado en la referencia completa usando scoring de similitud."""
@@ -810,3 +734,283 @@ class FasecoldaService:
             bonus += min(0.3, engine_matches * 0.05)  # Máximo 0.3, 0.05 por cada coincidencia
         
         return bonus
+
+    async def _fill_vehicle_form_to_brand(self, category: str, state: str, model_year: str, brand: str) -> bool:
+        """Llena el formulario hasta la marca (sin seleccionar referencia específica)."""
+        try:
+            # Seleccionar categoría
+            if not await self._select_field_with_retry(SELECTORS['category'], category, "categoría"):
+                return False
+            
+            await asyncio.sleep(SLEEP_DURATION)
+            
+            # Seleccionar estado
+            if not await self._select_field_with_retry(SELECTORS['state'], state, "estado"):
+                return False
+            
+            await asyncio.sleep(SLEEP_DURATION)
+            
+            # Seleccionar modelo (año)
+            if not await self._select_field_with_retry(SELECTORS['model'], model_year, "modelo"):
+                return False
+            
+            await asyncio.sleep(SLEEP_DURATION)
+            
+            # Seleccionar marca
+            if not await self._select_field_with_retry(SELECTORS['brand'], brand, "marca"):
+                return False
+            
+            await asyncio.sleep(SLEEP_DURATION)
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error llenando formulario hasta marca: {e}")
+            return False
+
+    async def _get_all_references_for_brand(self, reference_filter: str = None) -> list:
+        """Obtiene todas las referencias disponibles para la marca seleccionada."""
+        try:
+            await self._wait_for_field_enabled(SELECTORS['reference'])
+            
+            # Obtener todas las opciones del dropdown de referencias
+            options = await self.page.query_selector_all(f"{SELECTORS['reference']} option")
+            
+            all_references = []
+            for option in options:
+                text = await option.inner_text()
+                value = await option.get_attribute('value')
+                
+                # Filtrar opciones válidas (excluir "Elija una opción")
+                if value and value != "false" and text.strip():
+                    # Si hay filtro, solo incluir referencias que contengan el filtro
+                    if not reference_filter or reference_filter.lower() in text.lower():
+                        all_references.append({
+                            'text': text.strip(),
+                            'value': value
+                        })
+            
+            self.logger.info(f"🔍 Encontradas {len(all_references)} referencias disponibles")
+            for i, ref in enumerate(all_references[:5]):  # Mostrar solo las primeras 5 en el log
+                self.logger.info(f"  {i+1}. {ref['text']}")
+            
+            if len(all_references) > 5:
+                self.logger.info(f"  ... y {len(all_references) - 5} más")
+            
+            return all_references
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error obteniendo referencias: {e}")
+            return []
+
+    async def _search_all_references(self, references: list, category: str, state: str, model_year: str, brand: str) -> list:
+        """Busca exhaustivamente en todas las referencias y recopila todos los resultados (OPTIMIZADO Y CORREGIDO)."""
+        all_options = []
+        option_counter = 1
+        
+        self.logger.info(f"🔍 Iniciando búsqueda comprensiva en {len(references)} referencias")
+        
+        for ref_index, reference in enumerate(references):
+            self.logger.info(f"🎯 Procesando referencia {ref_index + 1}/{len(references)}: {reference['text']}")
+            
+            try:
+                # OPTIMIZACIÓN: Solo cambiar la referencia en lugar de recargar todo el formulario
+                await self._select_by_value(SELECTORS['reference'], reference['value'])
+                await asyncio.sleep(SLEEP_DURATION)
+                
+                # Hacer clic en buscar
+                self.logger.info(f"🔍 Ejecutando búsqueda para: {reference['text']}")
+                await self.page.click(SELECTORS['search_button'])
+                
+                # Esperar resultados con timeout más largo
+                try:
+                    await self.page.wait_for_selector(SELECTORS['result_container'], timeout=TIMEOUTS['cf_search'])
+                    await asyncio.sleep(1)  # Esperar adicional para que carguen completamente
+                except:
+                    self.logger.warning(f"⚠️ No se encontraron resultados para: {reference['text']}")
+                    # OPTIMIZACIÓN: Si no hay resultados, volver al formulario sin recargar página
+                    await self._return_to_search_form()
+                    await self._restore_form_state(category, state, model_year, brand)
+                    continue
+                
+                # Extraer todos los resultados de esta referencia
+                result_containers = await self.page.query_selector_all(SELECTORS['result_container'])
+                
+                if result_containers:
+                    self.logger.info(f"✅ Encontrados {len(result_containers)} resultado(s) en: {reference['text']}")
+                    
+                    # Verificar que los resultados son únicos y válidos
+                    reference_results = []
+                    for container_index, container in enumerate(result_containers):
+                        result_data = await self._extract_complete_result_data(container, option_counter, reference['text'])
+                        if result_data and self._is_valid_unique_result(result_data, all_options):
+                            reference_results.append(result_data)
+                            all_options.append(result_data)
+                            option_counter += 1
+                            self.logger.info(f"📊 Resultado {container_index + 1}: CF={result_data['cf_code']}, CH={result_data['ch_code']}")
+                    
+                    self.logger.info(f"🎯 Agregados {len(reference_results)} resultados únicos de la referencia: {reference['text']}")
+                else:
+                    self.logger.warning(f"⚠️ No se encontraron contenedores de resultados para: {reference['text']}")
+                
+                # OPTIMIZACIÓN: Volver al formulario sin recargar página (solo si no es la última búsqueda)
+                if ref_index < len(references) - 1:  # No volver en la última iteración
+                    await self._return_to_search_form()
+                    await self._restore_form_state(category, state, model_year, brand)
+                
+            except Exception as e:
+                self.logger.error(f"❌ Error buscando en referencia {reference['text']}: {e}")
+                # En caso de error, intentar volver al formulario
+                try:
+                    await self._return_to_search_form()
+                    await self._restore_form_state(category, state, model_year, brand)
+                except:
+                    # Si falla, recargar página como último recurso
+                    self.logger.warning("🔄 Recargando página debido a error crítico")
+                    await self.page.goto(FASECOLDA_URL)
+                    await self._fill_vehicle_form_to_brand(category, state, model_year, brand)
+                continue
+        
+        self.logger.info(f"🎉 Búsqueda comprensiva completada: {len(all_options)} opciones únicas encontradas")
+        return all_options
+
+    async def _extract_complete_result_data(self, container, option_number: int, reference_group: str) -> dict:
+        """Extrae datos completos de un resultado incluyendo agrupación por referencia."""
+        try:
+            # Extraer códigos CF y CH
+            codes = await self._extract_codes_from_container(container)
+            cf_code = codes['cf_code']
+            ch_code = codes['ch_code']
+            
+            # Extraer descripción completa
+            brand_element = await container.query_selector(SELECTORS['car_brand'])
+            ref2_element = await container.query_selector(SELECTORS['car_reference_2'])
+            ref3_element = await container.query_selector(SELECTORS['car_reference_3'])
+            
+            brand = await brand_element.inner_text() if brand_element else ""
+            ref2 = await ref2_element.inner_text() if ref2_element else ""
+            ref3 = await ref3_element.inner_text() if ref3_element else ""
+            
+            full_description = f"{brand} {ref2} {ref3}".strip()
+            
+            # Extraer valor asegurado
+            insured_value = "No disponible"
+            try:
+                value_element = await container.query_selector('.car-value h3')
+                if value_element:
+                    insured_value = await value_element.inner_text()
+                    insured_value = insured_value.strip()
+            except:
+                pass
+            
+            return {
+                'option_number': option_number,
+                'cf_code': cf_code,
+                'ch_code': ch_code,
+                'description': full_description,
+                'insured_value': insured_value,
+                'reference_group': reference_group
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error extrayendo datos del resultado: {e}")
+            return None
+
+    async def _return_to_search_form(self):
+        """Vuelve al formulario de búsqueda de manera optimizada (sin recargar página)."""
+        try:
+            self.logger.info("🔄 Volviendo al formulario de búsqueda...")
+            
+            # Buscar el botón "Nueva búsqueda" o similar
+            nueva_busqueda_selectors = [
+                'a[href="/fasecolda/consulta"]',  # Enlace directo a consulta
+                'a[onclick*="consulta"]',          # Botón con onclick que contiene consulta
+                'button:has-text("Nueva búsqueda")', # Botón con texto específico
+                'a:has-text("Buscar")',           # Enlace con texto Buscar
+                'a:has-text("Nueva")',            # Enlace con texto Nueva
+                '.btn:has-text("Buscar")',        # Botón con clase btn y texto Buscar
+            ]
+            
+            # Intentar encontrar y hacer clic en el botón de nueva búsqueda
+            for selector in nueva_busqueda_selectors:
+                try:
+                    element = await self.page.query_selector(selector)
+                    if element:
+                        await element.click()
+                        await self.page.wait_for_load_state('networkidle', timeout=5000)
+                        self.logger.info("✅ Vuelto al formulario usando botón de nueva búsqueda")
+                        return
+                except:
+                    continue
+            
+            # Si no encontramos botón específico, intentar navegación directa
+            current_url = self.page.url
+            if 'fasecolda' in current_url and '/consulta' not in current_url:
+                await self.page.goto(FASECOLDA_URL)
+                await self.page.wait_for_load_state('networkidle', timeout=5000)
+                self.logger.info("✅ Vuelto al formulario mediante navegación directa")
+                return
+            
+            # Si ya estamos en la página de consulta, no hacer nada
+            if '/consulta' in current_url:
+                self.logger.info("✅ Ya estamos en el formulario de búsqueda")
+                return
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error volviendo al formulario optimizado: {e}")
+            # Fallback: recargar página completa
+            await self.page.goto(FASECOLDA_URL)
+            await self.page.wait_for_load_state('networkidle')
+            self.logger.info("✅ Vuelto al formulario mediante recarga completa (fallback)")
+
+    async def _restore_form_state(self, category: str, state: str, model_year: str, brand: str):
+        """Restaura el estado del formulario después de volver desde resultados."""
+        try:
+            self.logger.info("🔄 Restaurando estado del formulario...")
+            
+            # Verificar si los campos ya están llenos
+            current_category = await self.page.evaluate(f"document.querySelector('{SELECTORS['category']}').value")
+            
+            if not current_category or current_category == "false":
+                # Si los campos están vacíos, llenar todo el formulario
+                self.logger.info("📝 Llenando formulario completo...")
+                await self._fill_vehicle_form_to_brand(category, state, model_year, brand)
+            else:
+                # Si ya están llenos, solo verificar que estén correctos
+                self.logger.info("✅ Formulario ya está en estado correcto")
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error restaurando formulario: {e}")
+            # Fallback: llenar formulario completo
+            await self._fill_vehicle_form_to_brand(category, state, model_year, brand)
+
+    def _is_valid_unique_result(self, result_data: dict, existing_results: list) -> bool:
+        """Verifica que el resultado sea válido y único."""
+        if not result_data or not result_data.get('cf_code'):
+            return False
+        
+        # Verificar que no sea duplicado
+        for existing in existing_results:
+            if (existing.get('cf_code') == result_data.get('cf_code') and 
+                existing.get('ch_code') == result_data.get('ch_code')):
+                return False
+        
+        return True
+
+    async def _show_selection_dialog(self, all_options: list, brand: str, reference: str) -> dict:
+        """Muestra un diálogo de selección en la interfaz GUI."""
+        try:
+            # Importar aquí para evitar dependencias circulares
+            from ..interfaces.fasecolda_selection_dialog import FasecoldaSelectionDialog
+            
+            # Crear y mostrar el diálogo
+            dialog = FasecoldaSelectionDialog(all_options, brand, reference)
+            selected_option = dialog.show()
+            
+            return selected_option
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error mostrando diálogo de selección: {e}")
+            import traceback
+            traceback.print_exc()
+            return None

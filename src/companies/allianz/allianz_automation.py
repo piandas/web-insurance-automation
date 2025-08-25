@@ -65,17 +65,39 @@ class AllianzAutomation(BaseAutomation):
         return await self.login_page.login(self.usuario, self.contrasena)
 
     async def execute_navigation_flow(self) -> bool:
-        """Ejecuta el flujo de navegación específico de Allianz."""
+        """Ejecuta el flujo de navegación específico de Allianz con reintentos."""
         self.logger.info("🧭 Ejecutando flujo de navegación Allianz...")
         
-        # Navegar a flotas
-        if not await self.dashboard_page.navigate_to_flotas():
-            self.logger.error("❌ Error navegando a flotas")
-            return False
+        # Intentar navegación con reintentos
+        for attempt in range(1, 4):
+            try:
+                if attempt > 1:
+                    self.logger.info(f"🔄 Reintento {attempt}/3 - Navegación a flotas")
+                    await asyncio.sleep(2)  # Pausa entre reintentos
+                
+                # Navegar a flotas
+                if not await self.dashboard_page.navigate_to_flotas():
+                    if attempt == 3:
+                        self.logger.error("❌ Error navegando a flotas")
+                        return False
+                    else:
+                        self.logger.warning(f"⚠️ Intento {attempt} falló navegando a flotas")
+                        continue
+                
+                # Enviar formulario si existe
+                await self.dashboard_page.submit_application_form()
+                self.logger.info("✅ Flujo de navegación completado exitosamente")
+                return True
+                
+            except Exception as e:
+                if attempt == 3:
+                    self.logger.error(f"❌ Error en el flujo de navegación: {e}")
+                    return False
+                else:
+                    self.logger.warning(f"⚠️ Intento {attempt} falló en navegación: {e}")
+                    continue
         
-        # Enviar formulario si existe
-        await self.dashboard_page.submit_application_form()
-        return True
+        return False
 
     async def execute_quote_flow(self) -> bool:
         """Ejecuta el flujo de cotización específico de Allianz."""

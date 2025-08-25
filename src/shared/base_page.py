@@ -748,14 +748,34 @@ class BasePage:
         except PlaywrightTimeout:
             self.logger.warning(f"⚠️ Timeout load_state='{state}', continuando...")
 
-    async def safe_click(self, selector: str, timeout: int = 10000) -> bool:
-        """Click normal con manejo de error."""
-        try:
-            await self.page.click(selector, timeout=timeout)
-            return True
-        except Exception as e:
-            self.logger.error(f"❌ safe_click('{selector}'): {e}")
-            return False
+    async def safe_click(self, selector: str, timeout: int = 10000, retries: int = 3) -> bool:
+        """Click con reintentos automáticos para mayor robustez."""
+        for attempt in range(1, retries + 1):
+            try:
+                if attempt > 1:
+                    self.logger.info(f"🔄 Reintento {attempt}/{retries} - Haciendo clic en '{selector}'")
+                    # Esperar un poco entre reintentos
+                    await asyncio.sleep(1)
+                
+                # Primero verificar que el elemento esté disponible
+                await self.page.wait_for_selector(selector, state="visible", timeout=5000)
+                
+                # Hacer el clic
+                await self.page.click(selector, timeout=timeout)
+                
+                if attempt > 1:
+                    self.logger.info(f"✅ Click exitoso en intento {attempt}")
+                return True
+                
+            except Exception as e:
+                if attempt == retries:
+                    self.logger.error(f"❌ safe_click('{selector}'): {e}")
+                    return False
+                else:
+                    self.logger.warning(f"⚠️ Intento {attempt} falló para '{selector}': {e}")
+                    continue
+        
+        return False
 
     async def safe_fill(self, selector: str, value: str, timeout: int = 10000) -> bool:
         """Fill normal con manejo de error."""

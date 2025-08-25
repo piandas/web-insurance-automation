@@ -20,9 +20,6 @@ class FasecoldaPage(BasePage):
         """Obtiene los códigos Fasecolda desde el extractor global o usa el código por defecto."""
         self.logger.info("🔍 Obteniendo códigos Fasecolda...")
         
-        # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig
-        ClientConfig._load_gui_overrides()
-        
         try:
             # Verificar si Fasecolda está habilitado globalmente
             if not ClientConfig.is_fasecolda_enabled():
