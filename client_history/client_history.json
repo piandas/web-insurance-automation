@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-08-24T23:55:28.420046",
+  "last_updated": "2025-08-25T00:12:58.768469",
   "clients": [
     {
       "id": "20250824_193417",
@@ -53,7 +53,7 @@
         "policy_number": "900001250624",
         "policy_number_allianz": "23486665"
       },
-      "updated_at": "2025-08-21T12:19:34.656498"
+      "updated_at": "2025-08-25T00:12:58.768464"
     },
     {
       "id": "20250818_103000",
@@ -69,7 +69,7 @@
         "client_gender": "M",
         "client_city": "MEDELLIN",
         "client_department": "ANTIOQUIA",
-        "vehicle_plate": "GEN294",
+        "vehicle_plate": "",
         "vehicle_model_year": "2026",
         "vehicle_brand": "Mazda",
         "vehicle_reference": "Cx50 - utilitario deportivo 4x4",
@@ -80,7 +80,7 @@
         "policy_number": "040007325677",
         "policy_number_allianz": "23541048"
       },
-      "updated_at": "2025-08-21T12:19:43.776732"
+      "updated_at": "2025-08-25T00:11:46.073722"
     }
   ]
 }
