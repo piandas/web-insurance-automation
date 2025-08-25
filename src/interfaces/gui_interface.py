@@ -553,6 +553,119 @@ class AutomationGUI:
             self.agregar_mensaje(f"❌ Error escribiendo código MFA: {e}", "error")
             return False
     
+    def mostrar_ventana_mfa(self):
+        """Muestra una ventana emergente para ingresar el código MFA."""
+        # Crear ventana emergente
+        mfa_window = tk.Toplevel(self.root)
+        mfa_window.title("Código MFA - Sura")
+        mfa_window.geometry("400x250")
+        mfa_window.resizable(False, False)
+        
+        # Centrar la ventana en la pantalla
+        mfa_window.transient(self.root)
+        mfa_window.grab_set()
+        
+        # Centrar ventana
+        mfa_window.update_idletasks()
+        x = (mfa_window.winfo_screenwidth() // 2) - (400 // 2)
+        y = (mfa_window.winfo_screenheight() // 2) - (250 // 2)
+        mfa_window.geometry(f"400x250+{x}+{y}")
+        
+        # Frame principal
+        main_frame = ttk.Frame(mfa_window, padding="20")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Configurar grid
+        mfa_window.columnconfigure(0, weight=1)
+        mfa_window.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(0, weight=1)
+        
+        # Icono y título
+        title_label = ttk.Label(main_frame, text="🔐 Autenticación de Dos Factores", 
+                               font=('Segoe UI', 12, 'bold'))
+        title_label.grid(row=0, column=0, pady=(0, 10))
+        
+        # Mensaje explicativo
+        msg_label = ttk.Label(main_frame, 
+                             text="Se requiere código MFA para continuar con Sura.\nIngresa el código que recibiste:",
+                             font=('Segoe UI', 9),
+                             justify=tk.CENTER)
+        msg_label.grid(row=1, column=0, pady=(0, 15))
+        
+        # Campo de entrada para el código
+        code_var = tk.StringVar()
+        code_entry = ttk.Entry(main_frame, textvariable=code_var, width=15, 
+                              font=('Segoe UI', 12), justify=tk.CENTER)
+        code_entry.grid(row=2, column=0, pady=(0, 10))
+        
+        # Checkbox para recordar dispositivo
+        remember_var = tk.BooleanVar(value=True)
+        remember_check = ttk.Checkbutton(main_frame, 
+                                        text="Recordar este dispositivo por 8 días",
+                                        variable=remember_var)
+        remember_check.grid(row=3, column=0, pady=(0, 15))
+        
+        # Frame para botones
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=4, column=0, sticky=(tk.W, tk.E))
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+        
+        def enviar_mfa():
+            """Envía el código MFA y cierra la ventana."""
+            mfa_code = code_var.get().strip()
+            
+            if not mfa_code:
+                # Mostrar error si no hay código
+                error_label = ttk.Label(main_frame, text="❌ Por favor ingresa el código MFA", 
+                                       foreground="red")
+                error_label.grid(row=5, column=0, pady=(5, 0))
+                code_entry.focus_set()
+                return
+            
+            if not (mfa_code.isdigit() and 4 <= len(mfa_code) <= 6):
+                # Mostrar error si el código no es válido
+                error_label = ttk.Label(main_frame, text="❌ El código debe tener entre 4 y 6 dígitos", 
+                                       foreground="red")
+                error_label.grid(row=5, column=0, pady=(5, 0))
+                code_entry.focus_set()
+                return
+            
+            # Agregar mensaje a la consola
+            self.agregar_mensaje(f"📱 Código MFA ingresado: {mfa_code}", "info")
+            if remember_var.get():
+                self.agregar_mensaje("☑️ Se marcará 'recordar dispositivo' automáticamente", "info")
+            
+            # Enviar código MFA
+            if self._send_mfa_code_to_sura(mfa_code):
+                self.agregar_mensaje("✅ Código MFA enviado correctamente", "success")
+                mfa_window.destroy()
+            else:
+                self.agregar_mensaje("❌ Error enviando código MFA", "error")
+                error_label = ttk.Label(main_frame, text="❌ Error enviando código. Inténtalo de nuevo.", 
+                                       foreground="red")
+                error_label.grid(row=5, column=0, pady=(5, 0))
+        
+        def cancelar_mfa():
+            """Cancela el proceso de MFA."""
+            self.agregar_mensaje("❌ Proceso MFA cancelado por el usuario", "warning")
+            mfa_window.destroy()
+        
+        # Botones
+        cancel_button = ttk.Button(button_frame, text="Cancelar", command=cancelar_mfa)
+        cancel_button.grid(row=0, column=0, padx=(0, 5), sticky=tk.W+tk.E)
+        
+        send_button = ttk.Button(button_frame, text="Enviar Código", command=enviar_mfa)
+        send_button.grid(row=0, column=1, padx=(5, 0), sticky=tk.W+tk.E)
+        
+        # Configurar eventos
+        code_entry.focus_set()
+        code_entry.bind('<Return>', lambda e: enviar_mfa())
+        mfa_window.bind('<Escape>', lambda e: cancelar_mfa())
+        
+        # Protocolo de cierre de ventana
+        mfa_window.protocol("WM_DELETE_WINDOW", cancelar_mfa)
+    
     def mostrar_carga(self, mensaje: str = "Procesando..."):
         """Muestra el indicador de carga animado."""
         self.loading_label.config(text=mensaje)
@@ -786,8 +899,19 @@ class AutomationGUI:
                             prompt = f"Selecciona una opción ({opciones}):"
                             self.message_queue.put(("input_request", prompt))
                         elif "MFA" in line or "autenticación" in line or "Tu respuesta:" in line:
-                            prompt = "Ingresa tu respuesta:"
-                            self.message_queue.put(("input_request", prompt))
+                            # Detectar específicamente MFA de Sura para mostrar ventana emergente
+                            if any(mfa_keyword in line for mfa_keyword in [
+                                "código MFA que recibiste", 
+                                "Tu respuesta: (ingresa el código de 4-6 dígitos)",
+                                "Iniciando proceso de MFA",
+                                "ACCIÓN REQUERIDA"
+                            ]):
+                                self.message_queue.put(("mfa_request", "Código MFA requerido para Sura"))
+                            elif "MFA" in line or "autenticación de dos factores" in line:
+                                self.message_queue.put(("mfa_request", "Código MFA requerido para Sura"))
+                            else:
+                                prompt = "Ingresa tu respuesta:"
+                                self.message_queue.put(("input_request", prompt))
                     
                     # Actualizar mensaje de carga basado en el contenido
                     if "Iniciando" in line:
@@ -933,6 +1057,9 @@ class AutomationGUI:
                 
                 elif msg_type == "input_request":
                     self.mostrar_input(data)
+                
+                elif msg_type == "mfa_request":
+                    self.mostrar_ventana_mfa()
                 
                 elif msg_type == "user_response":
                     # Aquí se manejaría el envío de la respuesta al proceso
