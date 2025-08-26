@@ -79,7 +79,7 @@ class ClientEditWindow:
         # Crear ventana
         self.window = tk.Toplevel() if parent_window else tk.Tk()
         self.window.title("Editor de Datos del Cliente")
-        self.window.geometry("850x1000")  # Aumentar tamaño para mejor visibilidad sin scroll
+        self.window.geometry("850x1050")  # Aumentar tamaño para mejor visibilidad sin scroll
         self.window.resizable(True, True)
         
         # Configurar ventana para mantenerse al frente cuando sea necesario

@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-08-25T19:04:45.161717",
+  "last_updated": "2025-08-25T21:18:47.973683",
   "clients": [
     {
       "id": "20250824_193417",
@@ -49,12 +49,13 @@
         "vehicle_reference": "Jetta",
         "vehicle_full_reference": "VOLKSWAGEN jetta",
         "vehicle_state": "Usado",
+        "vehicle_insured_value": "",
         "manual_cf_code": "",
         "manual_ch_code": "",
         "policy_number": "900001250624",
         "policy_number_allianz": "23486665"
       },
-      "updated_at": "2025-08-25T00:12:58.768464"
+      "updated_at": "2025-08-25T21:18:47.973678"
     },
     {
       "id": "20250818_103000",

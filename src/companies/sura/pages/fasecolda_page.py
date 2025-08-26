@@ -381,15 +381,28 @@ class FasecoldaPage(BasePage):
             return False
 
     async def fill_city(self) -> bool:
-        """Llena el campo de ciudad y selecciona la opción de Medellín."""
-        self.logger.info(f"🏙️ Llenando ciudad: {ClientConfig.get_client_city('sura')}...")
+        """Llena el campo de ciudad y selecciona la opción correspondiente."""
+        client_city = ClientConfig.get_client_city('sura')
+        self.logger.info(f"🏙️ Llenando ciudad: {client_city}...")
         
         try:
-            # Llenar y seleccionar ciudad usando método reutilizable
-            await self.page.fill(self.SELECTORS['form_fields']['city'], ClientConfig.get_client_city('sura'))
+            # Llenar el campo de ciudad
+            await self.page.fill(self.SELECTORS['form_fields']['city'], client_city)
             await self.page.wait_for_timeout(1500)
             
-            if not await self.safe_click(self.OPTIONS['city'], timeout=5000):
+            # Crear selector dinámico basado en la ciudad del cliente
+            # Para Envigado, la opción aparece como "Envigado - (Antioquia)"
+            if client_city.upper() == "ENVIGADO":
+                city_selector = "vaadin-combo-box-item:has-text('Envigado - (Antioquia)')"
+            elif client_city.upper() in ["MEDELLIN", "MEDELLÍN"]:
+                city_selector = "vaadin-combo-box-item:has-text('Medellin - (Antioquia)')"
+            else:
+                # Para otras ciudades, intentar con el formato general
+                city_selector = f"vaadin-combo-box-item:has-text('{client_city} - (Antioquia)')"
+            
+            self.logger.info(f"🎯 Intentando seleccionar opción: {city_selector}")
+            
+            if not await self.safe_click(city_selector, timeout=5000):
                 self.logger.error("❌ No se pudo seleccionar la opción de ciudad")
                 return False
             

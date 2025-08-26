@@ -28,18 +28,16 @@ class PlacaPage(BasePage):
         self.logger.info("💰 Extrayendo valor asegurado prellenado desde iframe...")
         
         try:
-            frame = await self.get_iframe_content()
-            if not frame:
-                self.logger.error("❌ No se pudo acceder al iframe")
-                return ""
+            # Usar el mismo enfoque simple que funcionó para el llenado
+            el = self._frame.locator(self.SELECTOR_INPUT_VALOR_ASEGURADO)
+            await el.wait_for(timeout=15000)
             
-            # Obtener el valor del campo valor asegurado
-            valor_element = frame.locator(self.SELECTOR_INPUT_VALOR_ASEGURADO)
-            if await valor_element.count() > 0:
-                valor_text = await valor_element.input_value()
-                self.logger.info(f"✅ Valor asegurado extraído: {valor_text}")
-                
-                # Limpiar el valor (remover comas, puntos decimales, etc.)
+            # Obtener el valor del campo
+            valor_text = await el.input_value()
+            self.logger.info(f"✅ Valor asegurado extraído del campo: '{valor_text}'")
+            
+            if valor_text:
+                # Limpiar el valor (remover comas, puntos decimales, símbolos, etc.)
                 valor_limpio = valor_text.replace(",", "").replace(".", "").replace("$", "").strip()
                 
                 # Validar que sea numérico
@@ -47,10 +45,10 @@ class PlacaPage(BasePage):
                     self.logger.info(f"💰 Valor asegurado procesado: {valor_limpio}")
                     return valor_limpio
                 else:
-                    self.logger.warning(f"⚠️ Valor asegurado no es numérico: {valor_text}")
+                    self.logger.warning(f"⚠️ Valor asegurado no es numérico: '{valor_text}' -> '{valor_limpio}'")
                     return ""
             else:
-                self.logger.warning("⚠️ Campo de valor asegurado no encontrado en iframe")
+                self.logger.warning("⚠️ Campo de valor asegurado está vacío")
                 return ""
                 
         except Exception as e:
