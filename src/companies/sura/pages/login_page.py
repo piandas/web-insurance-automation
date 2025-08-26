@@ -5,7 +5,6 @@ from ....shared.base_page import BasePage
 from ....config.sura_config import SuraConfig
 from ....config.client_config import ClientConfig
 from ....core.constants import Constants
-from ....shared.global_pause_coordinator import request_pause_for_mfa, resume_after_mfa
 
 class LoginPage(BasePage):
     """Página de login con sus selectores y métodos específicos para Sura."""
@@ -333,8 +332,9 @@ class LoginPage(BasePage):
             return False
 
     async def verify_login_success(self) -> bool:
-        """Verifica si el login fue exitoso, manejando MFA si es necesario."""
+        """Verifica si el login fue exitoso, detecta MFA y sugiere configuración previa."""
         self.logger.info("🔍 Verificando login exitoso...")
+        
         try:
             await self.page.wait_for_timeout(1000)
             current_url = self.page.url
@@ -347,8 +347,15 @@ class LoginPage(BasePage):
             
             # Verificar si requiere MFA (autenticación de dos factores)
             if "mfa/process" in current_url:
-                self.logger.info("🔐 Detectado MFA (autenticación de dos factores)")
-                return await self._handle_mfa()
+                self.logger.info("🔐 Se detectó que se requiere MFA para este usuario")
+                self.logger.info("=" * 70)
+                self.logger.info("📋 CONFIGURACIÓN MFA REQUERIDA:")
+                self.logger.info("   Para usar Sura en automatizaciones, debe configurar el perfil MFA primero.")
+                self.logger.info("   👉 Use el botón 'Login MFA Sura' en la interfaz para hacer esto una vez.")
+                self.logger.info("   ✅ Después de configurar MFA, las automatizaciones funcionarán sin interrupciones.")
+                self.logger.info("=" * 70)
+                # Retornar False para que el proceso principal termine y sugiera usar el botón MFA
+                return False
             
             # Si no redirigió, esperar 3 segundos más y volver a verificar
             self.logger.info("⏳ Aún cargando, esperando 3 segundos más...")
@@ -360,147 +367,19 @@ class LoginPage(BasePage):
                 self.logger.info("✅ Login verificado exitosamente tras espera adicional")
                 return True
             elif "mfa/process" in current_url:
-                self.logger.info("🔐 Detectado MFA tras espera adicional")
-                return await self._handle_mfa()
+                self.logger.info("🔐 Se detectó que se requiere MFA para este usuario")
+                self.logger.info("=" * 70)
+                self.logger.info("📋 CONFIGURACIÓN MFA REQUERIDA:")
+                self.logger.info("   Para usar Sura en automatizaciones, debe configurar el perfil MFA primero.")
+                self.logger.info("   👉 Use el botón 'Login MFA Sura' en la interfaz para hacer esto una vez.")
+                self.logger.info("   ✅ Después de configurar MFA, las automatizaciones funcionarán sin interrupciones.")
+                self.logger.info("=" * 70)
+                return False
                 
             self.logger.error("❌ Login no exitoso - no se redirigió correctamente")
             return False
         except Exception as e:
             self.logger.exception(f"❌ Error verificando login: {e}")
-            return False
-
-    async def _handle_mfa(self) -> bool:
-        """Maneja el proceso de autenticación de dos factores con pausa global."""
-        self.logger.info("📱 Iniciando proceso de MFA...")
-        
-        # Solicitar pausa global para todas las automatizaciones
-        await request_pause_for_mfa('sura')
-        
-        self.logger.info("⏸️ PAUSA GLOBAL ACTIVADA - TODAS LAS AUTOMATIZACIONES PAUSADAS")
-        self.logger.info("=" * 70)
-        self.logger.info("🔔 ACCIÓN REQUERIDA:")
-        self.logger.info("   Por favor, ingresa el código MFA que recibiste")
-        self.logger.info("   👉 Tu respuesta: (ingresa el código de 4-6 dígitos)")
-        self.logger.info("")
-        self.logger.info("💡 Se marcará automáticamente 'recordar dispositivo' por 8 días")
-        self.logger.info("=" * 70)
-        
-        try:
-            # Esperar a que el usuario ingrese el código MFA
-            mfa_code = await self._wait_for_mfa_input()
-            if not mfa_code:
-                self.logger.error("❌ No se recibió código MFA")
-                await resume_after_mfa('sura')
-                return False
-            
-            # Llenar automáticamente el MFA
-            if await self._fill_mfa_automatically(mfa_code):
-                self.logger.info("✅ MFA completado exitosamente")
-                await resume_after_mfa('sura')
-                self.logger.info("🎉 Si se marcó 'recordar dispositivo', no volverá a pedirse por 8 días")
-                return True
-            else:
-                self.logger.error("❌ Error llenando MFA automáticamente")
-                await resume_after_mfa('sura')
-                return False
-                
-        except Exception as e:
-            self.logger.exception(f"❌ Error durante el proceso de MFA: {e}")
-            # Reanudar automatizaciones incluso si hubo error
-            await resume_after_mfa('sura')
-            return False
-    
-    async def _wait_for_mfa_input(self) -> str:
-        """Espera a que el usuario ingrese el código MFA desde la consola/interfaz."""
-        import asyncio
-        
-        # Crear un archivo temporal para comunicación
-        import tempfile
-        import os
-        
-        temp_dir = tempfile.gettempdir()
-        mfa_file = os.path.join(temp_dir, "sura_mfa_input.txt")
-        
-        # Limpiar archivo previo si existe
-        if os.path.exists(mfa_file):
-            os.remove(mfa_file)
-        
-        max_wait_time = 300  # 5 minutos
-        check_interval = 1   # Revisar cada segundo
-        elapsed_time = 0
-        
-        while elapsed_time < max_wait_time:
-            await asyncio.sleep(check_interval)
-            elapsed_time += check_interval
-            
-            # Verificar si hay input del usuario
-            if os.path.exists(mfa_file):
-                try:
-                    with open(mfa_file, 'r') as f:
-                        mfa_code = f.read().strip()
-                    os.remove(mfa_file)  # Limpiar después de leer
-                    
-                    if mfa_code and len(mfa_code) >= 4 and mfa_code.isdigit():
-                        self.logger.info(f"📱 Código MFA recibido: {mfa_code}")
-                        return mfa_code
-                    else:
-                        self.logger.warning(f"⚠️ Código MFA inválido: {mfa_code}")
-                        continue
-                except Exception as e:
-                    self.logger.error(f"❌ Error leyendo código MFA: {e}")
-                    continue
-            
-            # Mostrar progreso cada 30 segundos
-            if elapsed_time % 30 == 0:
-                minutes_elapsed = elapsed_time // 60
-                self.logger.info(f"⏳ Esperando código MFA... ({minutes_elapsed} min transcurridos)")
-        
-        self.logger.error("❌ Tiempo de espera agotado para código MFA (5 minutos)")
-        return None
-    
-    async def _fill_mfa_automatically(self, mfa_code: str) -> bool:
-        """Llena automáticamente el formulario MFA."""
-        self.logger.info(f"🤖 Llenando MFA automáticamente con código: {mfa_code}")
-        
-        try:
-            # Selectores del formulario MFA
-            mfa_code_input = 'input[name="code"]'
-            remember_checkbox = 'span.checkmark.checkmark-checkBox'
-            validate_button = 'input.login-button[value="Validar"]'
-            
-            # 1. Llenar el campo del código
-            self.logger.info("📝 Llenando campo de código MFA...")
-            await self.page.wait_for_selector(mfa_code_input, timeout=10000)
-            await self.page.fill(mfa_code_input, mfa_code)
-            await self.page.wait_for_timeout(500)
-            
-            # 2. Marcar el checkbox de recordar dispositivo
-            self.logger.info("☑️ Marcando 'recordar dispositivo'...")
-            try:
-                await self.page.click(remember_checkbox, timeout=5000)
-                self.logger.info("✅ Checkbox marcado correctamente")
-            except Exception as checkbox_error:
-                self.logger.warning(f"⚠️ No se pudo marcar checkbox (puede no estar presente): {checkbox_error}")
-            
-            # 3. Hacer clic en validar
-            self.logger.info("🚀 Haciendo clic en 'Validar'...")
-            await self.page.click(validate_button)
-            await self.page.wait_for_timeout(2000)
-            
-            # 4. Verificar que el MFA fue exitoso
-            await self.page.wait_for_timeout(3000)
-            current_url = self.page.url
-            self.logger.info(f"📍 URL después de MFA: {current_url}")
-            
-            if "mfa/process" not in current_url and "asesores.segurossura.com.co" in current_url:
-                self.logger.info("✅ MFA completado automáticamente")
-                return True
-            else:
-                self.logger.error("❌ MFA falló - URL no cambió correctamente")
-                return False
-                
-        except Exception as e:
-            self.logger.exception(f"❌ Error llenando MFA automáticamente: {e}")
             return False
 
     async def login(self, usuario: str, contrasena: str) -> bool:
