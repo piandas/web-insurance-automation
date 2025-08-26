@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-08-25T00:12:58.768469",
+  "last_updated": "2025-08-25T19:04:45.161717",
   "clients": [
     {
       "id": "20250824_193417",
@@ -21,12 +21,13 @@
         "vehicle_reference": "FORTUNER",
         "vehicle_full_reference": "TOYOTA FORTUNER",
         "vehicle_state": "Nuevo",
+        "vehicle_insured_value": "259000000",
         "manual_cf_code": "09036238",
         "manual_ch_code": "09008262",
         "policy_number": "900001250624",
         "policy_number_allianz": "23486665"
       },
-      "updated_at": "2025-08-24T23:55:28.420042"
+      "updated_at": "2025-08-25T19:04:45.161710"
     },
     {
       "id": "20250821_091739",

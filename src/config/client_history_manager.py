@@ -271,9 +271,14 @@ class ClientHistoryManager:
                 errors['vehicle_model_year'] = 'Debe ser un número válido'
         
         # Validar valor asegurado (solo números)
-        insured_value = data.get('vehicle_insured_value_received', '')
+        insured_value = data.get('vehicle_insured_value', '')
         if insured_value and not insured_value.isdigit():
-            errors['vehicle_insured_value_received'] = 'Solo se permiten números'
+            errors['vehicle_insured_value'] = 'Solo se permiten números'
+        
+        # Validar que valor asegurado sea obligatorio para vehículos nuevos
+        vehicle_state = data.get('vehicle_state', '')
+        if vehicle_state == 'Nuevo' and not insured_value:
+            errors['vehicle_insured_value'] = 'Es obligatorio para vehículos nuevos'
         
         # Validar códigos Fasecolda (solo números)
         cf_code = data.get('manual_cf_code', '')

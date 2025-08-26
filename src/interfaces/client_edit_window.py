@@ -17,6 +17,36 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.client_history_manager import ClientHistoryManager
 from config.client_config import ClientConfig
 
+# Importar Utils de manera robusta
+try:
+    from shared.utils import Utils
+except ImportError:
+    # Si falla la importación absoluta, intentar relativa
+    try:
+        from ..shared.utils import Utils
+    except ImportError:
+        # Si ambas fallan, definir las funciones localmente
+        class Utils:
+            @staticmethod
+            def format_currency(value: str) -> str:
+                """Formatea un valor numérico como moneda colombiana."""
+                if not value or not value.isdigit():
+                    return ""
+                try:
+                    num = int(value)
+                    formatted = f"{num:,}".replace(",", ".")
+                    return f"${formatted}"
+                except ValueError:
+                    return ""
+            
+            @staticmethod
+            def parse_currency(formatted_value: str) -> str:
+                """Extrae el valor numérico de una cadena formateada como moneda."""
+                if not formatted_value:
+                    return ""
+                numeric_only = re.sub(r'[^0-9]', '', formatted_value)
+                return numeric_only if numeric_only else ""
+
 
 class ClientEditWindow:
     """Ventana para editar datos del cliente con historial."""
@@ -101,6 +131,7 @@ class ClientEditWindow:
         self.vehicle_reference = tk.StringVar()
         self.vehicle_full_reference = tk.StringVar()
         self.vehicle_state = tk.StringVar(value="Nuevo")
+        self.vehicle_insured_value = tk.StringVar()  # Nuevo campo para valor asegurado
         # Eliminamos vehicle_insured_value_received ya que no es necesario
         
         # Variables de códigos Fasecolda
@@ -149,6 +180,7 @@ class ClientEditWindow:
             str(self.client_document_number): 'document',
             str(self.vehicle_plate): 'placa',
             str(self.vehicle_model_year): 'year',
+            str(self.vehicle_insured_value): 'valor_asegurado',
             str(self.manual_cf_code): 'cf_code',
             str(self.manual_ch_code): 'ch_code',
             str(self.policy_number): 'poliza_sura',
@@ -235,6 +267,24 @@ class ClientEditWindow:
             elif value and not value.isdigit():
                 error_msg = "Solo se permiten números"
         
+        elif field_type == "valor_asegurado":
+            # Validar valor asegurado (solo números, formato currency)
+            if value and not value.isdigit():
+                # Limpiar caracteres no numéricos
+                new_value = re.sub(r'[^0-9]', '', value)
+                widget.delete(0, tk.END)
+                if new_value:
+                    # Formatear como moneda
+                    formatted_value = Utils.format_currency(new_value)
+                    widget.insert(0, formatted_value)
+                    # Actualizar la variable con el valor numérico
+                    self.vehicle_insured_value.set(new_value)
+                value = new_value
+            
+            # Validar que no sea requerido para vehículos nuevos
+            if not value and self.vehicle_state.get() == "Nuevo":
+                error_msg = "Valor asegurado es obligatorio para vehículos nuevos"
+        
         # Mostrar o quitar mensaje de error
         self.show_error_message(field_name, error_msg)
         
@@ -266,7 +316,7 @@ class ClientEditWindow:
         widget.insert(0, value)
     
     def on_vehicle_state_change(self, event=None):
-        """Maneja el cambio del estado del vehículo para bloquear/desbloquear la placa."""
+        """Maneja el cambio del estado del vehículo para bloquear/desbloquear la placa y valor asegurado."""
         if hasattr(self, 'plate_entry') and hasattr(self, 'plate_info_label'):
             if self.vehicle_state.get() == "Nuevo":
                 # Bloquear el campo de placa y mostrar mensaje
@@ -285,6 +335,47 @@ class ClientEditWindow:
                 # Restaurar color de fondo normal
                 self.plate_entry.config(background="white", foreground="black")
                 self.plate_info_label.config(text="", foreground="red")
+        
+        # Manejar habilitación/deshabilitación del valor asegurado
+        if hasattr(self, 'insured_value_entry') and hasattr(self, 'insured_value_info_label'):
+            if self.vehicle_state.get() == "Nuevo":
+                # Habilitar el campo de valor asegurado para vehículos nuevos (OBLIGATORIO)
+                self.insured_value_entry.config(state="normal")
+                self.insured_value_entry.config(background="white", foreground="black")
+                self.insured_value_info_label.config(
+                    text="⚠️ Obligatorio para vehículos nuevos",
+                    foreground="orange"
+                )
+            else:
+                # Deshabilitar el campo de valor asegurado para vehículos usados (se extrae automáticamente)
+                self.insured_value_entry.config(state="readonly")
+                self.insured_value_entry.config(background="#e8e8e8", foreground="#666666")
+                self.insured_value_info_label.config(
+                    text="ℹ️ Se extrae automáticamente para vehículos usados",
+                    foreground="blue"
+                )
+                # Limpiar el campo
+                self.vehicle_insured_value.set("")
+                self.insured_value_entry.delete(0, tk.END)
+    
+    def format_currency_field(self, event):
+        """Formatea el campo de valor asegurado como moneda al perder el foco."""
+        widget = event.widget
+        value = widget.get()
+        
+        # Extraer solo números
+        numeric_value = Utils.parse_currency(value)
+        
+        if numeric_value:
+            # Formatear como moneda y actualizar el campo
+            formatted_value = Utils.format_currency(numeric_value)
+            widget.delete(0, tk.END)
+            widget.insert(0, formatted_value)
+            # Actualizar la variable con el valor numérico
+            self.vehicle_insured_value.set(numeric_value)
+        else:
+            # Si no hay valor válido, limpiar
+            self.vehicle_insured_value.set("")
     
     def setup_ui(self):
         """Configura la interfaz de usuario."""
@@ -652,6 +743,21 @@ class ClientEditWindow:
         # Referencia completa Fasecolda
         ttk.Label(vehicle_frame, text="Referencia completa Fasecolda:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
         ttk.Entry(vehicle_frame, textvariable=self.vehicle_full_reference, width=40).grid(row=row, column=1, columnspan=3, sticky=tk.W+tk.E, pady=5)
+        row += 1
+        
+        # Valor asegurado (solo para vehículos nuevos)
+        ttk.Label(vehicle_frame, text="Valor asegurado:").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
+        self.insured_value_entry = ttk.Entry(vehicle_frame, width=20)
+        self.insured_value_entry.grid(row=row, column=1, sticky=tk.W, pady=5, padx=(0, 15))
+        self.insured_value_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'valor_asegurado'))
+        self.insured_value_entry.bind('<FocusOut>', self.format_currency_field)
+        
+        # Error/Info label para valor asegurado
+        self.insured_value_info_label = ttk.Label(vehicle_frame, text="⚠️ Obligatorio para vehículos nuevos", foreground="orange", font=("Arial", 8))
+        self.insured_value_info_label.grid(row=row, column=2, columnspan=2, sticky=tk.W, padx=(0, 15))
+        self.error_labels['valor_asegurado'] = self.insured_value_info_label
+        
+        # Habilitado por defecto (vehículo nuevo)
     
     def create_fasecolda_section(self, parent):
         """Crea la sección de códigos Fasecolda con validación."""
@@ -937,7 +1043,14 @@ class ClientEditWindow:
         self.vehicle_reference.set(data.get('vehicle_reference', ''))
         self.vehicle_full_reference.set(data.get('vehicle_full_reference', ''))
         self.vehicle_state.set(data.get('vehicle_state', 'Nuevo'))
-        # Eliminamos vehicle_insured_value_received ya que no es necesario
+        
+        # Cargar valor asegurado y formatearlo si existe
+        insured_value = data.get('vehicle_insured_value', '')
+        self.vehicle_insured_value.set(insured_value)
+        if insured_value and hasattr(self, 'insured_value_entry'):
+            formatted_value = Utils.format_currency(insured_value)
+            self.insured_value_entry.delete(0, tk.END)
+            self.insured_value_entry.insert(0, formatted_value)
         
         self.manual_cf_code.set(data.get('manual_cf_code', ''))
         self.manual_ch_code.set(data.get('manual_ch_code', ''))
@@ -967,7 +1080,7 @@ class ClientEditWindow:
             'vehicle_reference': self.vehicle_reference.get(),
             'vehicle_full_reference': self.vehicle_full_reference.get(),
             'vehicle_state': self.vehicle_state.get(),
-            # Eliminamos vehicle_insured_value_received ya que no es necesario
+            'vehicle_insured_value': self.vehicle_insured_value.get(),  # Nuevo campo
             
             'manual_cf_code': self.manual_cf_code.get(),
             'manual_ch_code': self.manual_ch_code.get(),
@@ -1119,6 +1232,11 @@ class ClientEditWindow:
         self.vehicle_reference.set('')
         self.vehicle_full_reference.set('')
         self.vehicle_state.set('Nuevo')
+        self.vehicle_insured_value.set('')  # Nuevo campo
+        
+        # Limpiar campo de valor asegurado visualmente
+        if hasattr(self, 'insured_value_entry'):
+            self.insured_value_entry.delete(0, tk.END)
         
         # Limpiar códigos Fasecolda
         self.manual_cf_code.set('')
@@ -1130,6 +1248,9 @@ class ClientEditWindow:
         
         # Limpiar selección del historial
         self.selected_history_item.set('')
+        
+        # Configurar estado inicial del vehículo (Nuevo por defecto)
+        self.on_vehicle_state_change()
         self.current_client_id = None
         if hasattr(self, 'history_combo'):
             self.history_combo.set('')

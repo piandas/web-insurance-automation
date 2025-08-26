@@ -32,6 +32,7 @@ class ClientConfig:
         'vehicle_reference': 'Cx50 - utilitario deportivo 4x4',
         'vehicle_full_reference': 'MAZDA CX-50 GRAND TOURING',
         'vehicle_state': 'Nuevo',
+        'vehicle_insured_value': '',  # Nuevo campo para valor asegurado
         'manual_cf_code': '20900024001',
         'manual_ch_code': '20900024001',
         'policy_number': '040007325677',
@@ -79,6 +80,7 @@ class ClientConfig:
     VEHICLE_BRAND = 'Mazda'
     VEHICLE_REFERENCE = 'Cx50 - utilitario deportivo 4x4'
     VEHICLE_FULL_REFERENCE = 'MAZDA CX-50 GRAND TOURING'
+    VEHICLE_INSURED_VALUE = ''  # Nuevo campo para valor asegurado
     MANUAL_CF_CODE = '20900024001'
     MANUAL_CH_CODE = '20900024001'
     POLICY_NUMBER = '040007325677'
@@ -103,6 +105,7 @@ class ClientConfig:
         cls.VEHICLE_REFERENCE = data.get('vehicle_reference', cls._DEFAULT_CLIENT_DATA['vehicle_reference'])
         cls.VEHICLE_FULL_REFERENCE = data.get('vehicle_full_reference', cls._DEFAULT_CLIENT_DATA['vehicle_full_reference'])
         cls.VEHICLE_STATE = data.get('vehicle_state', cls._DEFAULT_CLIENT_DATA['vehicle_state'])
+        cls.VEHICLE_INSURED_VALUE = data.get('vehicle_insured_value', cls._DEFAULT_CLIENT_DATA['vehicle_insured_value'])
         cls.MANUAL_CF_CODE = data.get('manual_cf_code', cls._DEFAULT_CLIENT_DATA['manual_cf_code'])
         cls.MANUAL_CH_CODE = data.get('manual_ch_code', cls._DEFAULT_CLIENT_DATA['manual_ch_code'])
         cls.POLICY_NUMBER = data.get('policy_number', cls._DEFAULT_CLIENT_DATA['policy_number'])
@@ -362,6 +365,7 @@ class ClientConfig:
             'GUI_VEHICLE_REFERENCE': 'vehicle_reference',
             'GUI_VEHICLE_FULL_REFERENCE': 'vehicle_full_reference',
             'GUI_VEHICLE_STATE': 'vehicle_state',
+            'GUI_VEHICLE_INSURED_VALUE': 'vehicle_insured_value',
             'GUI_MANUAL_CF_CODE': 'manual_cf_code',
             'GUI_MANUAL_CH_CODE': 'manual_ch_code',
             'GUI_POLICY_NUMBER': 'policy_number',
@@ -372,6 +376,7 @@ class ClientConfig:
         for env_var, data_key in env_mapping.items():
             value = os.environ.get(env_var)
             if value:  # Solo aplicar si la variable existe y no está vacía
+                print(f"🔍 DEBUG ClientConfig - Cargando {env_var}={value} -> {data_key}")
                 # Normalizar ciertos campos a mayúsculas para consistencia
                 if data_key in ['client_first_name', 'client_second_name', 'client_first_lastname', 
                                'client_second_lastname', 'client_city', 'client_department', 
@@ -409,7 +414,20 @@ class ClientConfig:
             'vehicle_reference': cls.VEHICLE_REFERENCE,
             'vehicle_year': cls.VEHICLE_MODEL_YEAR,
             'client_name': f"{cls.CLIENT_FIRST_NAME} {cls.CLIENT_FIRST_LASTNAME}",
-            'vehicle_plate': cls.VEHICLE_PLATE
+            'vehicle_plate': cls.VEHICLE_PLATE,
+            'vehicle_insured_value': cls.VEHICLE_INSURED_VALUE
         }
+    
+    @classmethod
+    def get_vehicle_insured_value(cls) -> str:
+        """
+        Obtiene el valor asegurado del vehículo.
+        
+        Returns:
+            str: Valor asegurado (solo números, ej: "95000000")
+        """
+        cls._load_gui_overrides()
+        print(f"🔍 DEBUG ClientConfig - Valor asegurado actual: '{cls.VEHICLE_INSURED_VALUE}'")
+        return cls.VEHICLE_INSURED_VALUE
     
     

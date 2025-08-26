@@ -834,6 +834,7 @@ class AutomationGUI:
                 env['GUI_VEHICLE_REFERENCE'] = current_client_data.get('vehicle_reference', '')
                 env['GUI_VEHICLE_FULL_REFERENCE'] = current_client_data.get('vehicle_full_reference', '')
                 env['GUI_VEHICLE_STATE'] = current_client_data.get('vehicle_state', '')
+                env['GUI_VEHICLE_INSURED_VALUE'] = current_client_data.get('vehicle_insured_value', '')
                 env['GUI_MANUAL_CF_CODE'] = current_client_data.get('manual_cf_code', '')
                 env['GUI_MANUAL_CH_CODE'] = current_client_data.get('manual_ch_code', '')
                 env['GUI_POLICY_NUMBER'] = current_client_data.get('policy_number', '')

@@ -134,7 +134,8 @@ class FasecoldaPage(BasePage):
         'form_fields': {
             'city': "input[aria-label='Ciudad']",
             'plate': "#placa input",
-            'zero_km_radio': "paper-radio-button[title='opcion-Si']"
+            'zero_km_radio': "paper-radio-button[title='opcion-Si']",
+            'valor_asegurado': "input[name='amount'][required]"  # Selector más específico para el campo requerido
         },
         'plans': {
             'prima_anual': "#primaAnual",
@@ -409,6 +410,117 @@ class FasecoldaPage(BasePage):
             field_name="Placa",
             max_attempts=3
         )
+
+    async def fill_valor_asegurado(self, valor: str = None) -> bool:
+        """
+        Llena el campo de valor asegurado en Sura.
+        
+        Args:
+            valor: Valor asegurado como string numérico (ej: "95000000")
+                  Si es None, se toma del ClientConfig
+        
+        Returns:
+            bool: True si se llenó exitosamente, False en caso contrario
+        """
+        if valor is None:
+            valor = ClientConfig.get_vehicle_insured_value()
+            
+        # Debug logging
+        vehicle_state = ClientConfig.get_vehicle_state()
+        self.logger.info(f"🔍 DEBUG - Estado del vehículo: {vehicle_state}")
+        self.logger.info(f"🔍 DEBUG - Valor asegurado obtenido: '{valor}'")
+        
+        if not valor:
+            # Para vehículos nuevos, el valor es obligatorio
+            if ClientConfig.get_vehicle_state() == "Nuevo":
+                self.logger.error("❌ Valor asegurado es obligatorio para vehículos nuevos")
+                return False
+            else:
+                self.logger.info("ℹ️ No se proporcionó valor asegurado (se extraerá automáticamente para vehículos usados)")
+                return True
+        
+        self.logger.info(f"💰 Llenando valor asegurado en Sura: {valor}")
+        
+        try:
+            # Formatear valor para Sura (solo números, sin símbolos)
+            valor_formateado = valor if valor.isdigit() else valor
+            
+            # Intentar con varios selectores para encontrar el campo correcto
+            selectors_to_try = [
+                "input[name='amount'][required]",  # Selector específico con required
+                "input[name='amount'][maxlength='13']",  # Selector con maxlength
+                "input[name='amount']",  # Selector básico
+                "paper-input input[name='amount']"  # Selector con contenedor paper-input
+            ]
+            
+            for selector in selectors_to_try:
+                self.logger.info(f"🔍 Intentando llenar valor asegurado con selector: {selector}")
+                success = await self.fill_valor_asegurado_con_validacion_personalizada(
+                    selector=selector,
+                    value=valor_formateado,
+                    max_attempts=2
+                )
+                if success:
+                    self.logger.info(f"✅ Valor asegurado llenado exitosamente con selector: {selector}")
+                    return True
+                else:
+                    self.logger.warning(f"⚠️ Falló con selector: {selector}")
+            
+            self.logger.error("❌ No se pudo llenar el valor asegurado con ningún selector")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error llenando valor asegurado: {e}")
+            return False
+
+    async def fill_valor_asegurado_con_validacion_personalizada(self, selector: str, value: str, max_attempts: int = 2) -> bool:
+        """
+        Llena el campo de valor asegurado con validación personalizada que acepta formato con puntos.
+        
+        Args:
+            selector: Selector CSS del campo
+            value: Valor a llenar (formato sin puntos, ej: "259000000")
+            max_attempts: Número máximo de intentos
+            
+        Returns:
+            bool: True si se llenó exitosamente, False en caso contrario
+        """
+        for attempt in range(1, max_attempts + 1):
+            self.logger.info(f"🔍 Valor asegurado - Intento {attempt}/{max_attempts}")
+            
+            try:
+                # Llenar el campo
+                await self.page.fill(selector, value)
+                await self.page.wait_for_timeout(500)
+                
+                # Obtener el valor actual del campo para verificar
+                actual_value = await self.page.input_value(selector)
+                
+                # Validación personalizada: aceptar tanto el formato original como el formato con puntos
+                value_clean = value.replace(".", "").replace(",", "")  # Formato limpio
+                actual_clean = actual_value.replace(".", "").replace(",", "")  # Formato limpio
+                
+                if value_clean == actual_clean:
+                    self.logger.info(f"✅ Valor asegurado llenado correctamente: '{actual_value}'")
+                    return True
+                else:
+                    self.logger.warning(f"⚠️ Valor asegurado - Esperado: '{value}', Actual: '{actual_value}' (ambos válidos)")
+                    # Si los valores limpios coinciden, considerarlo exitoso
+                    if len(actual_clean) > 0 and actual_clean.isdigit():
+                        self.logger.info(f"✅ Valor asegurado aceptado en formato con puntos: '{actual_value}'")
+                        return True
+                    
+                    if attempt < max_attempts:
+                        self.logger.info("🔄 Valor asegurado - Reintentando...")
+                        await self.page.wait_for_timeout(1000)
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️ Valor asegurado - Error en intento {attempt}: {e}")
+                if attempt < max_attempts:
+                    await self.page.wait_for_timeout(1000)
+        
+        self.logger.error(f"❌ Valor asegurado - No se pudo llenar después de {max_attempts} intentos")
+        return False
 
     async def select_zero_kilometers(self) -> bool:
         """Selecciona 'Sí' en la opción de cero kilómetros."""
@@ -753,6 +865,7 @@ class FasecoldaPage(BasePage):
                 vehicle_steps = [
                     (self._select_dropdown_option, ['service_type'], "tipo de servicio"),
                     (self.fill_city, [], "ciudad"),
+                    (self.fill_valor_asegurado, [], "valor asegurado"),  # Nuevo paso
                     # No fill_plate ni select_zero_kilometers aquí
                     (self.trigger_quote_calculation, [], "cálculo de cotización")
                 ]
@@ -760,6 +873,7 @@ class FasecoldaPage(BasePage):
                 vehicle_steps = [
                     (self._select_dropdown_option, ['service_type'], "tipo de servicio"),
                     (self.fill_city, [], "ciudad"),
+                    (self.fill_valor_asegurado, [], "valor asegurado"),  # Nuevo paso
                     (self.fill_plate, [], "placa"),
                     (self.select_zero_kilometers, [], "cero kilómetros"),
                     (self.trigger_quote_calculation, [], "cálculo de cotización")

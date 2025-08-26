@@ -12,6 +12,7 @@ from .fasecolda_page import FasecoldaPage
 class PlacaPage(BasePage):
     # Selector para el input de valor asegurado en el iframe
     SELECTOR_INPUT_VALOR_ASEGURADO = 'input[name="DatosVehiculoIndividualBean$valorAsegurado"]'
+    
     async def _get_input_value_by_id(self, frame, input_id):
         """Obtiene el valor de un input por su id dentro del frame dado."""
         try:
@@ -19,8 +20,95 @@ class PlacaPage(BasePage):
             if input_elem:
                 return await input_elem.get_attribute('value')
         except Exception as e:
-            self.logger.warning(f"No se pudo extraer el valor de {input_id}: {e}")
+            self.logger.warning(f"⚠️ No se pudo obtener valor del input '{input_id}': {e}")
         return ''
+    
+    async def get_valor_asegurado_from_iframe(self) -> str:
+        """Extrae el valor asegurado prellenado desde el iframe para vehículos usados."""
+        self.logger.info("💰 Extrayendo valor asegurado prellenado desde iframe...")
+        
+        try:
+            frame = await self.get_iframe_content()
+            if not frame:
+                self.logger.error("❌ No se pudo acceder al iframe")
+                return ""
+            
+            # Obtener el valor del campo valor asegurado
+            valor_element = frame.locator(self.SELECTOR_INPUT_VALOR_ASEGURADO)
+            if await valor_element.count() > 0:
+                valor_text = await valor_element.input_value()
+                self.logger.info(f"✅ Valor asegurado extraído: {valor_text}")
+                
+                # Limpiar el valor (remover comas, puntos decimales, etc.)
+                valor_limpio = valor_text.replace(",", "").replace(".", "").replace("$", "").strip()
+                
+                # Validar que sea numérico
+                if valor_limpio.isdigit():
+                    self.logger.info(f"💰 Valor asegurado procesado: {valor_limpio}")
+                    return valor_limpio
+                else:
+                    self.logger.warning(f"⚠️ Valor asegurado no es numérico: {valor_text}")
+                    return ""
+            else:
+                self.logger.warning("⚠️ Campo de valor asegurado no encontrado en iframe")
+                return ""
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error extrayendo valor asegurado: {e}")
+            return ""
+    
+    async def fill_valor_asegurado_in_iframe(self, valor: str) -> bool:
+        """Llena el campo de valor asegurado en el iframe con el valor especificado."""
+        if not valor:
+            self.logger.warning("⚠️ No se proporcionó valor asegurado para llenar")
+            return True  # No es error si no hay valor
+            
+        self.logger.info(f"💰 Llenando valor asegurado en iframe: {valor}")
+        
+        try:
+            # Para Allianz: usar valor sin formato, solo números
+            valor_formateado = valor if valor.isdigit() else valor
+            self.logger.info(f"💰 Valor a llenar (sin formato): {valor_formateado}")
+            
+            # Método personalizado: limpiar y llenar en una sola operación
+            self.logger.info("🧹 Limpiando y llenando campo de valor asegurado con método personalizado...")
+            
+            # Usar método directo con locator del iframe
+            try:
+                el = self._frame.locator(self.SELECTOR_INPUT_VALOR_ASEGURADO)
+                await el.wait_for(timeout=15000)
+                
+                # Método 1: Seleccionar todo y reemplazar
+                await el.click()  # Enfocar
+                await el.press('Control+a')  # Seleccionar todo
+                await el.type(valor_formateado)  # Escribir el nuevo valor (reemplaza automáticamente)
+                
+                # Verificar que se llenó correctamente
+                valor_actual = await el.input_value()
+                self.logger.info(f"✅ Valor en campo después de llenar: '{valor_actual}'")
+                
+                # Si el valor no es correcto, intentar método alternativo
+                if valor_actual != valor_formateado:
+                    self.logger.warning(f"⚠️ Valor incorrecto, reintentando con método alternativo...")
+                    await el.clear()  # Método alternativo para limpiar
+                    await el.fill(valor_formateado)
+                    valor_actual = await el.input_value()
+                    self.logger.info(f"🔄 Valor después del segundo intento: '{valor_actual}'")
+                
+                # Consolidar con Tab
+                await el.press('Tab')
+                await self.page.wait_for_timeout(1000)
+                
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"❌ Error con método personalizado: {e}")
+                return False
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error llenando valor asegurado: {e}")
+            return False
+    
     """Página para manejo de placa y comprobación en Allianz."""
     
     # Selectores
@@ -108,6 +196,7 @@ class PlacaPage(BasePage):
     async def llenar_datos_asegurado(self, fecha_nacimiento: str = None, genero: str = None) -> bool:
         """
         Llena los datos del asegurado: fecha de nacimiento y género.
+        NOTA: El valor asegurado se maneja en llenar_valor_asegurado_paso_final()
         """
         # CRÍTICO: Cargar datos de GUI antes de usar ClientConfig
         ClientConfig._load_gui_overrides()
@@ -135,9 +224,48 @@ class PlacaPage(BasePage):
             ):
                 self.logger.error("❌ Error al seleccionar género")
                 return False
+            
             return True
         except Exception as e:
             self.logger.error(f"❌ Error al llenar datos del asegurado: {e}")
+            return False
+
+    async def llenar_valor_asegurado_paso_final(self) -> bool:
+        """
+        Maneja el valor asegurado DESPUÉS de seleccionar población.
+        Para vehículos nuevos: llena el valor. Para usados: extrae el valor.
+        """
+        try:
+            # Manejar valor asegurado según el estado del vehículo
+            vehicle_state = ClientConfig.get_vehicle_state()
+            self.logger.info(f"🔍 DEBUG - Estado del vehículo: {vehicle_state}")
+            
+            if vehicle_state == "Nuevo":
+                # Para vehículos nuevos: usar valor del ClientConfig y llenarlo
+                valor_asegurado = ClientConfig.get_vehicle_insured_value()
+                self.logger.info(f"🔍 DEBUG - Valor asegurado obtenido: '{valor_asegurado}'")
+                
+                if valor_asegurado:
+                    self.logger.info(f"💰 Llenando valor asegurado para vehículo nuevo: {valor_asegurado}")
+                    if not await self.fill_valor_asegurado_in_iframe(valor_asegurado):
+                        self.logger.error("❌ Error al llenar valor asegurado")
+                        return False
+                else:
+                    self.logger.error("❌ Valor asegurado es obligatorio para vehículos nuevos")
+                    return False
+            else:
+                # Para vehículos usados: extraer el valor prellenado automáticamente
+                valor_prellenado = await self.get_valor_asegurado_from_iframe()
+                if valor_prellenado:
+                    self.logger.info(f"💰 Valor asegurado extraído para vehículo usado: {valor_prellenado}")
+                    # Actualizar el config con el valor extraído para usarlo en Sura
+                    ClientConfig.VEHICLE_INSURED_VALUE = valor_prellenado
+                else:
+                    self.logger.warning("⚠️ No se pudo extraer valor asegurado para vehículo usado")
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ Error al manejar valor asegurado: {e}")
             return False
 
     async def buscador_poblaciones(self, departamento: str = None, ciudad: str = None) -> bool:
@@ -676,6 +804,7 @@ class PlacaPage(BasePage):
             self.llenar_ano_modelo,
             self.llenar_datos_asegurado,
             self.buscador_poblaciones,
+            self.llenar_valor_asegurado_paso_final,  # NUEVO: Después de población
             self.consultar_y_finalizar
         ]
         try:

@@ -102,3 +102,44 @@ class Utils:
             return today.strftime("%d%m%Y")
         else:  # dd/mm/yyyy por defecto
             return today.strftime("%d/%m/%Y")
+
+    @staticmethod
+    def format_currency(value: str) -> str:
+        """
+        Formatea un valor numérico como moneda colombiana.
+        
+        Args:
+            value: Valor numérico como string (ej: "95000000")
+            
+        Returns:
+            Valor formateado como moneda (ej: "$95.000.000")
+        """
+        if not value or not value.isdigit():
+            return ""
+        
+        # Convertir a entero y formatear con separadores de miles
+        try:
+            num = int(value)
+            formatted = f"{num:,}".replace(",", ".")
+            return f"${formatted}"
+        except ValueError:
+            return ""
+    
+    @staticmethod
+    def parse_currency(formatted_value: str) -> str:
+        """
+        Extrae el valor numérico de una cadena formateada como moneda.
+        
+        Args:
+            formatted_value: Valor formateado (ej: "$95.000.000")
+            
+        Returns:
+            Valor numérico como string (ej: "95000000")
+        """
+        if not formatted_value:
+            return ""
+        
+        # Remover todos los caracteres no numéricos
+        import re
+        numeric_only = re.sub(r'[^0-9]', '', formatted_value)
+        return numeric_only if numeric_only else ""
