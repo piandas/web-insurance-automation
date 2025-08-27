@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-08-25T21:18:47.973683",
+  "last_updated": "2025-08-27T18:06:52.525265",
   "clients": [
     {
       "id": "20250824_193417",
@@ -55,7 +55,7 @@
         "policy_number": "900001250624",
         "policy_number_allianz": "23486665"
       },
-      "updated_at": "2025-08-25T21:18:47.973678"
+      "updated_at": "2025-08-27T18:06:52.525259"
     },
     {
       "id": "20250818_103000",
@@ -77,12 +77,13 @@
         "vehicle_reference": "Cx50 - utilitario deportivo 4x4",
         "vehicle_full_reference": "MAZDA CX-50 GRAND TOURING",
         "vehicle_state": "Nuevo",
+        "vehicle_insured_value": "60000000",
         "manual_cf_code": "20900024001",
         "manual_ch_code": "20900024001",
         "policy_number": "040007325677",
         "policy_number_allianz": "23541048"
       },
-      "updated_at": "2025-08-25T00:11:46.073722"
+      "updated_at": "2025-08-27T18:02:11.999870"
     }
   ]
 }
