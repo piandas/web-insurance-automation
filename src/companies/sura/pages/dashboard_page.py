@@ -54,6 +54,16 @@ class DashboardPage(BasePage):
         '.dropdown-menu:not(.d-none)',
         '.dropdown.show',
     ]
+    
+    # Selectores para delegación
+    DELEGATION_SELECTORS = [
+        'select#inputGroupSelect01',
+        'select.custom-select',
+        'select[ng-reflect-model]',
+    ]
+    
+    # Mensaje de error cuando no hay delegación seleccionada
+    ERROR_MESSAGE_SELECTOR = 'div.content-snack-bar'
 
     def __init__(self, page: Page):
         super().__init__(page, 'sura')
@@ -165,8 +175,20 @@ class DashboardPage(BasePage):
                         self.logger.info("⏳ Esperando 3 segundos para verificar que el menú siga abierto...")
                         await asyncio.sleep(3)
                         
+                        # Verificar si hay mensaje de error de delegación
+                        if await self.check_error_message():
+                            self.logger.warning("⚠️ Detectado mensaje de error de delegación")
+                            if not await self.select_infondo_delegation():
+                                self.logger.error("❌ No se pudo resolver el problema de delegación")
+                                success = False
+                            else:
+                                # Intentar abrir el menú nuevamente después de seleccionar delegación
+                                success = await self.safe_click('button#dropdownMenuButton')
+                                if success:
+                                    await asyncio.sleep(1)
+                        
                         # Verificar si el menú sigue abierto
-                        if not await self.is_menu_open():
+                        if success and not await self.is_menu_open():
                             self.logger.warning("⚠️ El menú se cerró, intentando abrirlo nuevamente...")
                             # Intentar abrirlo una vez más
                             if await self.safe_click('button#dropdownMenuButton'):
@@ -178,7 +200,7 @@ class DashboardPage(BasePage):
                                     self.logger.info("✅ Menú reabierto exitosamente")
                             else:
                                 success = False
-                        else:
+                        elif success:
                             self.logger.info("✅ Menú sigue abierto después de 3 segundos")
                 else:
                     # Para los demás pasos, asegurar que el menú esté abierto primero
@@ -215,6 +237,12 @@ class DashboardPage(BasePage):
     async def click_main_dropdown(self) -> bool:
         """Hace clic en el botón principal y recorre el menú completo."""
         self.logger.info("🔽 Iniciando secuencia de menús...")
+        
+        # Primero verificar y seleccionar delegación INFONDO si es necesario
+        if not await self.select_infondo_delegation():
+            self.logger.error("❌ No se pudo seleccionar la delegación INFONDO")
+            return False
+        
         return await self._navigate_sequence()
 
     async def select_document_type(self, document_type: str = "C") -> bool:
@@ -249,6 +277,14 @@ class DashboardPage(BasePage):
             
             self.logger.warning(f"⚠️ Menú cerrado, intentando abrirlo (intento {attempt}/{max_attempts})")
             
+            # Verificar si hay mensaje de error de delegación
+            if await self.check_error_message():
+                self.logger.warning("⚠️ Detectado mensaje de error de delegación, verificando selección...")
+                if not await self.select_infondo_delegation():
+                    self.logger.error("❌ No se pudo resolver el problema de delegación")
+                    return False
+                # Después de seleccionar la delegación, continuar con el intento de abrir menú
+            
             # Intentar abrir el menú
             if await self.safe_click('button#dropdownMenuButton'):
                 await asyncio.sleep(0.5)  # Espera corta para que se abra
@@ -261,6 +297,75 @@ class DashboardPage(BasePage):
                 await asyncio.sleep(1)
         
         self.logger.error(f"❌ No se pudo abrir el menú después de {max_attempts} intentos")
+        return False
+        
+    async def check_delegation_selected(self) -> bool:
+        """Verifica si la delegación INFONDO ya está seleccionada."""
+        try:
+            for selector in self.DELEGATION_SELECTORS:
+                if await self.is_visible_safe(selector, timeout=2000):
+                    # Verificar si el valor ya es 84654 (INFONDO)
+                    value = await self.page.get_attribute(selector, 'ng-reflect-model')
+                    if value == "84654":
+                        self.logger.info("✅ Delegación INFONDO ya está seleccionada")
+                        return True
+                    else:
+                        self.logger.info(f"⚠️ Delegación actual: {value}, necesita cambiar a INFONDO")
+                        return False
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error verificando delegación: {e}")
+            return False
+        return False
+
+    async def select_infondo_delegation(self) -> bool:
+        """Selecciona la delegación INFONDO si no está seleccionada."""
+        self.logger.info("🏢 Verificando y seleccionando delegación INFONDO...")
+        
+        # Primero verificar si ya está seleccionada
+        if await self.check_delegation_selected():
+            return True
+        
+        try:
+            # Buscar el selector de delegación
+            selector_found = None
+            for selector in self.DELEGATION_SELECTORS:
+                if await self.is_visible_safe(selector, timeout=5000):
+                    selector_found = selector
+                    break
+            
+            if not selector_found:
+                self.logger.error("❌ No se encontró el selector de delegación")
+                return False
+            
+            self.logger.info(f"🔍 Selector de delegación encontrado: {selector_found}")
+            
+            # Seleccionar INFONDO por valor
+            await self.page.select_option(selector_found, value="84654")
+            self.logger.info("✅ Delegación INFONDO seleccionada")
+            
+            # Esperar 3 segundos para que cargue
+            self.logger.info("⏳ Esperando 3 segundos para que cargue la delegación...")
+            await asyncio.sleep(3)
+            
+            # Verificar que se seleccionó correctamente
+            if await self.check_delegation_selected():
+                self.logger.info("✅ Delegación INFONDO confirmada")
+                return True
+            else:
+                self.logger.error("❌ La delegación no se seleccionó correctamente")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error seleccionando delegación INFONDO: {e}")
+            return False
+
+    async def check_error_message(self) -> bool:
+        """Verifica si aparece el mensaje de error de delegación."""
+        if await self.is_visible_safe(self.ERROR_MESSAGE_SELECTOR, timeout=2000):
+            error_text = await self.page.text_content(self.ERROR_MESSAGE_SELECTOR)
+            if "debe seleccionar una delegación" in error_text:
+                self.logger.warning(f"⚠️ Mensaje de error detectado: {error_text}")
+                return True
         return False
     async def input_document_number(self, document_number: str = "1020422674") -> bool:
         """Ingresa el número de documento en el campo correspondiente."""

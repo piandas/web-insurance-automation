@@ -798,24 +798,24 @@ class AutomationGUI:
                         if self.es_mensaje_importante(line):
                             self.message_queue.put(("message", ("info", line)))
                     
-                    # Detectar solicitudes de input - Solo para Fasecolda ahora
+                    # Detectar solicitudes de input - Solo para Fasecolda específicamente
+                    # Excluir MFA que ya se maneja por separado
                     input_patterns = [
                         "Selecciona el código a usar",
-                        "👉 Tu respuesta:",
-                        "👆 Seleccione una opción",
-                        "para cancelar:",
-                        "Ingrese el código",
-                        "selecciona"
+                        "� Seleccione una opción"
                     ]
                     
-                    if any(pattern in line for pattern in input_patterns):
-                        # Extraer opciones si están disponibles
-                        if "Selecciona el código a usar" in line or "Seleccione una opción" in line:
+                    # Verificar que no sea un contexto de MFA/login que se maneja por separado
+                    is_mfa_context = any(mfa_pattern in line for mfa_pattern in [
+                        "código MFA", "autenticación de dos factores", "Ingresa el código MFA",
+                        "Por favor, ingresa el código MFA", "login", "contraseña"
+                    ])
+                    
+                    if any(pattern in line for pattern in input_patterns) and not is_mfa_context:
+                        # Solo procesar inputs específicos de Fasecolda
+                        if "Selecciona el código a usar" in line or "👆 Seleccione una opción" in line:
                             opciones = self.extraer_opciones_fasecolda(line)
                             prompt = f"Selecciona una opción ({opciones}):"
-                            self.message_queue.put(("input_request", prompt))
-                        else:
-                            prompt = "Ingresa tu respuesta:"
                             self.message_queue.put(("input_request", prompt))
                     
                     # Actualizar mensaje de carga basado en el contenido
@@ -899,8 +899,8 @@ class AutomationGUI:
         if any(error in linea for error in errores_esperados_al_detener):
             return False
         
-        # En modo normal, SOLO mostrar opciones de Fasecolda, MFA y errores críticos
-        palabras_fasecolda_mfa_y_criticas = [
+        # En modo normal, SOLO mostrar opciones de Fasecolda y errores críticos
+        palabras_fasecolda_y_criticas = [
             # Nuevos mensajes de Fasecolda limpios
             "🔍 SELECCIÓN DE CÓDIGO FASECOLDA",
             "Opción ", "Vehículo:", "Score:", 
@@ -911,15 +911,11 @@ class AutomationGUI:
             "👆 Seleccione una opción", 
             "CF:", "CH:",
             
-            # Mensajes MFA que requieren input del usuario
-            "código MFA", "Por favor, ingresa el código MFA que recibiste",
-            "👉 Tu respuesta:", "Ingresa el código MFA", "autenticación de dos factores",
-            
             # Solo errores críticos que requieren atención inmediata (no los de cierre)
             "Error crítico", "Fallo crítico", "FATAL", "Error de configuración"
         ]
         
-        return any(palabra in linea for palabra in palabras_fasecolda_mfa_y_criticas)
+        return any(palabra in linea for palabra in palabras_fasecolda_y_criticas)
     
     def extraer_opciones_fasecolda(self, linea: str) -> str:
         """Extrae el rango de opciones de una línea de Fasecolda."""
