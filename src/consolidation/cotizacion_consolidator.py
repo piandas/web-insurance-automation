@@ -154,7 +154,9 @@ class CotizacionConsolidator:
         
         plans = {
             'Bolívar': 'No calculado',
-            'Solidaria': 'No calculado'
+            'Bolívar Prorrateado': 'No calculado',
+            'Solidaria': 'No calculado',
+            'Solidaria Prorrateado': 'No calculado'
         }
         
         # Obtener valor asegurado
@@ -171,6 +173,25 @@ class CotizacionConsolidator:
             if bolivar_result is not None:
                 plans['Bolívar'] = f"{bolivar_result:,.0f}".replace(",", ".")
                 self.logger.info(f"✅ Bolívar calculado: ${plans['Bolívar']}")
+                
+                # Calcular valor prorrateado de Bolívar
+                bolivar_prorrateado = self.formulas_config.calculate_valor_prorrateado('bolivar', bolivar_result)
+                if bolivar_prorrateado is not None:
+                    plans['Bolívar Prorrateado'] = f"{bolivar_prorrateado:,.0f}".replace(",", ".")
+                    self.logger.info(f"📅 Bolívar prorrateado: ${plans['Bolívar Prorrateado']}")
+                    
+                    # Log del cálculo detallado
+                    config_bolivar = self.formulas_config.get_formula_config('bolivar')
+                    fecha_vigencia = config_bolivar.get('fecha_fin_vigencia', '')
+                    from datetime import datetime, date
+                    try:
+                        fecha_vig = datetime.strptime(fecha_vigencia, '%Y-%m-%d').date()
+                        dias = (fecha_vig - date.today()).days
+                        self.logger.info(f"📊 Cálculo Bolívar: ({bolivar_result:,.0f}/365)*{dias} = {bolivar_prorrateado:,.0f}")
+                    except:
+                        pass
+                else:
+                    self.logger.warning("⚠️ Error calculando Bolívar prorrateado")
             else:
                 self.logger.warning("⚠️ Error calculando cotización de Bolívar")
         except Exception as e:
@@ -182,6 +203,25 @@ class CotizacionConsolidator:
             if solidaria_result is not None:
                 plans['Solidaria'] = f"{solidaria_result:,.0f}".replace(",", ".")
                 self.logger.info(f"✅ Solidaria calculado: ${plans['Solidaria']}")
+                
+                # Calcular valor prorrateado de Solidaria
+                solidaria_prorrateado = self.formulas_config.calculate_valor_prorrateado('solidaria', solidaria_result)
+                if solidaria_prorrateado is not None:
+                    plans['Solidaria Prorrateado'] = f"{solidaria_prorrateado:,.0f}".replace(",", ".")
+                    self.logger.info(f"📅 Solidaria prorrateado: ${plans['Solidaria Prorrateado']}")
+                    
+                    # Log del cálculo detallado
+                    config_solidaria = self.formulas_config.get_formula_config('solidaria')
+                    fecha_vigencia = config_solidaria.get('fecha_fin_vigencia', '')
+                    from datetime import datetime, date
+                    try:
+                        fecha_vig = datetime.strptime(fecha_vigencia, '%Y-%m-%d').date()
+                        dias = (fecha_vig - date.today()).days
+                        self.logger.info(f"📊 Cálculo Solidaria: ({solidaria_result:,.0f}/365)*{dias} = {solidaria_prorrateado:,.0f}")
+                    except:
+                        pass
+                else:
+                    self.logger.warning("⚠️ Error calculando Solidaria prorrateado")
             else:
                 self.logger.warning("⚠️ Error calculando cotización de Solidaria")
         except Exception as e:
@@ -522,15 +562,29 @@ class CotizacionConsolidator:
         # BOLÍVAR Y SOLIDARIA
         rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
         rows.append({'Categoría': 'BOLÍVAR', 'Campo': '', 'Valor': ''})
+        
+        # Bolívar - Cotización normal
         bolivar_value = bolivar_solidaria_plans.get('Bolívar', 'No calculado')
         formatted_bolivar = f"${bolivar_value}" if bolivar_value != 'No calculado' else bolivar_value
         rows.append({'Categoría': '', 'Campo': 'Cotización Calculada', 'Valor': formatted_bolivar})
         
+        # Bolívar - Valor prorrateado
+        bolivar_prorrateado_value = bolivar_solidaria_plans.get('Bolívar Prorrateado', 'No calculado')
+        formatted_bolivar_prorrateado = f"${bolivar_prorrateado_value}" if bolivar_prorrateado_value != 'No calculado' else bolivar_prorrateado_value
+        rows.append({'Categoría': '', 'Campo': 'Valor Prorrateado', 'Valor': formatted_bolivar_prorrateado})
+        
         rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
         rows.append({'Categoría': 'SOLIDARIA', 'Campo': '', 'Valor': ''})
+        
+        # Solidaria - Cotización normal
         solidaria_value = bolivar_solidaria_plans.get('Solidaria', 'No calculado')
         formatted_solidaria = f"${solidaria_value}" if solidaria_value != 'No calculado' else solidaria_value
         rows.append({'Categoría': '', 'Campo': 'Cotización Calculada', 'Valor': formatted_solidaria})
+        
+        # Solidaria - Valor prorrateado
+        solidaria_prorrateado_value = bolivar_solidaria_plans.get('Solidaria Prorrateado', 'No calculado')
+        formatted_solidaria_prorrateado = f"${solidaria_prorrateado_value}" if solidaria_prorrateado_value != 'No calculado' else solidaria_prorrateado_value
+        rows.append({'Categoría': '', 'Campo': 'Valor Prorrateado', 'Valor': formatted_solidaria_prorrateado})
         
         # Crear DataFrame
         df = pd.DataFrame(rows)

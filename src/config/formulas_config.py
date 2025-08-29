@@ -19,13 +19,13 @@ class FormulasConfig:
         self._default_config = {
             "bolivar": {
                 "compania": "EPM",
-                "fecha_fin_vigencia": "2025-12-31",
+                "fecha_fin_vigencia": "2025-10-01",  # Fecha de vigencia para cálculo prorrateado
                 "tasa": "3.3",
                 "formula": "((VALORASEGURADO*TASA/100)+(279890)+(104910))*1.19"
             },
             "solidaria": {
                 "compania": "EPM",
-                "fecha_fin_vigencia": "2025-12-31", 
+                "fecha_fin_vigencia": "2025-10-01",  # Fecha de vigencia para cálculo prorrateado
                 "tasa": "4.89",
                 "formula": "((VALORASEGURADO*TASA/100)+(246000)+(93600)+(13200))*1.19"
             }
@@ -125,6 +125,56 @@ class FormulasConfig:
             return result
             
         except (ValueError, TypeError):
+            return None
+    
+    def calculate_valor_prorrateado(self, company: str, valor_cotizacion: float) -> Optional[float]:
+        """
+        Calcula el valor prorrateado basado en los días hasta la fecha de vigencia.
+        
+        Fórmula: (VALOR_COTIZACION / 365) * (DIAS_VIGENCIA - DIAS_HOY)
+        
+        Args:
+            company: 'bolivar' o 'solidaria'
+            valor_cotizacion: Valor de la cotización calculada
+            
+        Returns:
+            Valor prorrateado o None si hay error
+        """
+        try:
+            from datetime import datetime, date
+            
+            config = self.get_formula_config(company)
+            fecha_vigencia_str = config.get('fecha_fin_vigencia', '')
+            
+            if not fecha_vigencia_str:
+                return None
+            
+            # Parsear fecha de vigencia (formato: YYYY-MM-DD)
+            try:
+                fecha_vigencia = datetime.strptime(fecha_vigencia_str, '%Y-%m-%d').date()
+            except ValueError:
+                # Intentar formato DD/MM/YYYY
+                try:
+                    fecha_vigencia = datetime.strptime(fecha_vigencia_str, '%d/%m/%Y').date()
+                except ValueError:
+                    return None
+            
+            # Fecha actual
+            fecha_hoy = date.today()
+            
+            # Calcular días de diferencia
+            dias_diferencia = (fecha_vigencia - fecha_hoy).days
+            
+            # Si la fecha ya pasó, devolver 0
+            if dias_diferencia <= 0:
+                return 0.0
+            
+            # Calcular valor prorrateado: (VALOR_COTIZACION / 365) * DIAS_DIFERENCIA
+            valor_prorrateado = (valor_cotizacion / 365) * dias_diferencia
+            
+            return valor_prorrateado
+            
+        except Exception:
             return None
     
     def get_all_configs(self) -> Dict[str, Dict[str, str]]:
