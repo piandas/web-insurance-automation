@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 from ..config.client_config import ClientConfig
+from ..config.formulas_config import FormulasConfig
 from ..core.logger_factory import LoggerFactory
 
 
@@ -70,6 +71,9 @@ class CotizacionConsolidator:
         self.consolidados_path = self.base_path / "Consolidados"
         self.downloads_path = self.base_path / "downloads"
         
+        # Inicializar configuración de fórmulas
+        self.formulas_config = FormulasConfig()
+        
         # Crear directorio si no existe
         self.consolidados_path.mkdir(exist_ok=True)
         
@@ -121,6 +125,69 @@ class CotizacionConsolidator:
         }
         
         return sura_data
+    
+    def get_valor_asegurado(self) -> Optional[str]:
+        """
+        Obtiene el valor asegurado según el tipo de cliente.
+        Para clientes nuevos: desde ClientConfig
+        Para clientes usados: desde ClientConfig (ya extraído por Allianz)
+        """
+        try:
+            # Obtener valor desde ClientConfig (ya sea ingresado manualmente o extraído)
+            valor = ClientConfig.get_vehicle_insured_value()
+            
+            if valor and valor.strip():
+                # Limpiar el valor (quitar caracteres no numéricos excepto comas y puntos)
+                valor_limpio = ''.join(c for c in valor if c.isdigit() or c in '.,')
+                return valor_limpio
+            else:
+                self.logger.warning("⚠️ No se encontró valor asegurado en la configuración")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error obteniendo valor asegurado: {e}")
+            return None
+    
+    def calculate_bolivar_solidaria_plans(self) -> Dict[str, str]:
+        """Calcula las cotizaciones de Bolívar y Solidaria usando las fórmulas configuradas."""
+        self.logger.info("💰 Calculando cotizaciones de Bolívar y Solidaria...")
+        
+        plans = {
+            'Bolívar': 'No calculado',
+            'Solidaria': 'No calculado'
+        }
+        
+        # Obtener valor asegurado
+        valor_asegurado = self.get_valor_asegurado()
+        if not valor_asegurado:
+            self.logger.warning("⚠️ No se puede calcular Bolívar y Solidaria: valor asegurado no disponible")
+            return plans
+        
+        self.logger.info(f"💰 Calculando con valor asegurado: {valor_asegurado}")
+        
+        # Calcular Bolívar
+        try:
+            bolivar_result = self.formulas_config.calculate_cotizacion('bolivar', valor_asegurado)
+            if bolivar_result is not None:
+                plans['Bolívar'] = f"{bolivar_result:,.0f}".replace(",", ".")
+                self.logger.info(f"✅ Bolívar calculado: ${plans['Bolívar']}")
+            else:
+                self.logger.warning("⚠️ Error calculando cotización de Bolívar")
+        except Exception as e:
+            self.logger.error(f"❌ Error calculando Bolívar: {e}")
+        
+        # Calcular Solidaria
+        try:
+            solidaria_result = self.formulas_config.calculate_cotizacion('solidaria', valor_asegurado)
+            if solidaria_result is not None:
+                plans['Solidaria'] = f"{solidaria_result:,.0f}".replace(",", ".")
+                self.logger.info(f"✅ Solidaria calculado: ${plans['Solidaria']}")
+            else:
+                self.logger.warning("⚠️ Error calculando cotización de Solidaria")
+        except Exception as e:
+            self.logger.error(f"❌ Error calculando Solidaria: {e}")
+        
+        return plans
     
     def get_latest_sura_pdf(self) -> Optional[Path]:
         """Obtiene el PDF más reciente de Sura."""
@@ -344,18 +411,22 @@ class CotizacionConsolidator:
         return plans
     
     def create_excel_report(self, sura_data: Dict[str, Any], sura_plans: Dict[str, str], 
-                          allianz_plans: Dict[str, str]) -> str:
-        """Crea el reporte Excel consolidado con estructura mejorada."""
+                          allianz_plans: Dict[str, str], bolivar_solidaria_plans: Dict[str, str]) -> str:
+        """Crea el reporte Excel consolidado con estructura mejorada en una sola hoja."""
         filename = self.generate_filename()
         file_path = self.consolidados_path / filename
         
-        self.logger.info(f"📊 Creando reporte Excel: {filename}")
+        self.logger.info(f"📊 Creando reporte Excel consolidado: {filename}")
         
-        # Crear el DataFrame para Sura con estructura clara
-        sura_rows = []
+        # Obtener valor asegurado
+        valor_asegurado = self.get_valor_asegurado()
+        valor_asegurado_formatted = f"${valor_asegurado}" if valor_asegurado else "No disponible"
         
-        # Sección 1: Datos del Cliente
-        sura_rows.append({'Categoría': 'DATOS DEL CLIENTE', 'Campo': '', 'Valor': ''})
+        # Crear lista de filas para el Excel consolidado
+        rows = []
+        
+        # === SECCIÓN 1: DATOS DEL CLIENTE ===
+        rows.append({'Categoría': 'DATOS DEL CLIENTE', 'Campo': '', 'Valor': ''})
         client_fields = [
             ('Número de Documento', 'CLIENT_DOCUMENT_NUMBER'),
             ('Tipo de Documento', 'CLIENT_DOCUMENT_TYPE'),
@@ -372,11 +443,11 @@ class CotizacionConsolidator:
         
         for display_name, config_key in client_fields:
             value = sura_data.get(config_key, 'No disponible')
-            sura_rows.append({'Categoría': '', 'Campo': display_name, 'Valor': value})
+            rows.append({'Categoría': '', 'Campo': display_name, 'Valor': value})
         
-        # Sección 2: Datos de Dirección
-        sura_rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
-        sura_rows.append({'Categoría': 'DATOS DE DIRECCIÓN', 'Campo': '', 'Valor': ''})
+        # === SECCIÓN 2: DATOS DE DIRECCIÓN ===
+        rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
+        rows.append({'Categoría': 'DATOS DE DIRECCIÓN', 'Campo': '', 'Valor': ''})
         address_fields = [
             ('Dirección', 'CLIENT_ADDRESS'),
             ('Teléfono de Trabajo', 'CLIENT_PHONE_WORK'),
@@ -385,11 +456,11 @@ class CotizacionConsolidator:
         
         for display_name, config_key in address_fields:
             value = sura_data.get(config_key, 'No disponible')
-            sura_rows.append({'Categoría': '', 'Campo': display_name, 'Valor': value})
+            rows.append({'Categoría': '', 'Campo': display_name, 'Valor': value})
         
-        # Sección 3: Datos del Vehículo
-        sura_rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
-        sura_rows.append({'Categoría': 'DATOS DEL VEHÍCULO', 'Campo': '', 'Valor': ''})
+        # === SECCIÓN 3: DATOS DEL VEHÍCULO ===
+        rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
+        rows.append({'Categoría': 'DATOS DEL VEHÍCULO', 'Campo': '', 'Valor': ''})
         vehicle_fields = [
             ('Categoría', 'VEHICLE_CATEGORY'),
             ('Estado', 'VEHICLE_STATE'),
@@ -401,80 +472,74 @@ class CotizacionConsolidator:
         
         for display_name, config_key in vehicle_fields:
             value = sura_data.get(config_key, 'No disponible')
-            sura_rows.append({'Categoría': '', 'Campo': display_name, 'Valor': value})
+            rows.append({'Categoría': '', 'Campo': display_name, 'Valor': value})
         
-        # Sección 4: Valores de Planes Sura
-        sura_rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
-        sura_rows.append({'Categoría': 'COTIZACIONES SURA', 'Campo': '', 'Valor': ''})
+        # Añadir valor asegurado
+        rows.append({'Categoría': '', 'Campo': 'Valor Asegurado', 'Valor': valor_asegurado_formatted})
+        
+        # === SECCIÓN 4: COTIZACIONES ===
+        rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
+        rows.append({'Categoría': 'COTIZACIONES POR ASEGURADORA', 'Campo': '', 'Valor': ''})
+        
+        # SURA
+        rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
+        rows.append({'Categoría': 'SURA', 'Campo': '', 'Valor': ''})
+        
         # Exportar según tipo de vehículo
         if sura_data.get('VEHICLE_STATE', '').lower() == 'usado':
             # Usado: mostrar los 3 valores
-            plan_map = [
+            sura_plan_map = [
                 ("Plan Autos Global", sura_plans.get("Plan Autos Global")),
                 ("Pérdida Parcial 10-1 SMLMV", sura_plans.get("Pérdida Parcial 10-1 SMLMV")),
                 ("Plan Autos Clásico", sura_plans.get("Plan Autos Clasico")),
             ]
         else:
             # Nuevo: solo global y clásico
-            plan_map = [
+            sura_plan_map = [
                 ("Plan Autos Global", sura_plans.get("Plan Autos Global")),
                 ("Plan Autos Clásico", sura_plans.get("Plan Autos Clasico")),
             ]
-        for plan_name, plan_value in plan_map:
-            formatted_value = f"${plan_value}" if plan_value not in [None, 'No encontrado'] else (plan_value if plan_value is not None else 'No encontrado')
-            sura_rows.append({'Categoría': '', 'Campo': plan_name, 'Valor': formatted_value})
-        sura_df = pd.DataFrame(sura_rows)
         
-        # Crear el DataFrame para Allianz con estructura clara
-        allianz_rows = []
-        allianz_rows.append({'Categoría': 'COTIZACIONES ALLIANZ', 'Plan': '', 'Valor': ''})
+        for plan_name, plan_value in sura_plan_map:
+            formatted_value = f"${plan_value}" if plan_value not in [None, 'No encontrado'] else (plan_value if plan_value is not None else 'No encontrado')
+            rows.append({'Categoría': '', 'Campo': plan_name, 'Valor': formatted_value})
+        
+        # ALLIANZ
+        rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
+        rows.append({'Categoría': 'ALLIANZ', 'Campo': '', 'Valor': ''})
         allianz_plan_names = [
             'Autos Esencial',
             'Autos Esencial + Totales',
             'Autos Plus',
             'Autos Llave en Mano'
         ]
+        
         for plan_name in allianz_plan_names:
             plan_value = allianz_plans.get(plan_name, 'No encontrado')
             formatted_value = f"${plan_value}" if plan_value != 'No encontrado' else plan_value
-            allianz_rows.append({'Categoría': '', 'Plan': plan_name, 'Valor': formatted_value})
-        allianz_df = pd.DataFrame(allianz_rows)
+            rows.append({'Categoría': '', 'Campo': plan_name, 'Valor': formatted_value})
         
-        # Escribir a Excel con múltiples hojas
+        # BOLÍVAR Y SOLIDARIA
+        rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
+        rows.append({'Categoría': 'BOLÍVAR', 'Campo': '', 'Valor': ''})
+        bolivar_value = bolivar_solidaria_plans.get('Bolívar', 'No calculado')
+        formatted_bolivar = f"${bolivar_value}" if bolivar_value != 'No calculado' else bolivar_value
+        rows.append({'Categoría': '', 'Campo': 'Cotización Calculada', 'Valor': formatted_bolivar})
+        
+        rows.append({'Categoría': '', 'Campo': '', 'Valor': ''})
+        rows.append({'Categoría': 'SOLIDARIA', 'Campo': '', 'Valor': ''})
+        solidaria_value = bolivar_solidaria_plans.get('Solidaria', 'No calculado')
+        formatted_solidaria = f"${solidaria_value}" if solidaria_value != 'No calculado' else solidaria_value
+        rows.append({'Categoría': '', 'Campo': 'Cotización Calculada', 'Valor': formatted_solidaria})
+        
+        # Crear DataFrame
+        df = pd.DataFrame(rows)
+        
+        # Escribir a Excel con una sola hoja
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-            # Hoja de Sura (más completa)
-            sura_df.to_excel(writer, sheet_name='SURA_COMPLETO', index=False)
-            
-            # Hoja de Allianz
-            allianz_df.to_excel(writer, sheet_name='ALLIANZ', index=False)
-            
-            # Hoja resumen solo con cotizaciones
-            summary_rows = []
-            summary_rows.append({'Aseguradora': 'SURA', 'Plan': '', 'Valor': ''})
-            # Para el resumen, mostrar los mismos valores que en SURA_COMPLETO según tipo de vehículo
-            if sura_data.get('VEHICLE_STATE', '').lower() == 'usado':
-                summary_plan_map = [
-                    ("Plan Autos Global", sura_plans.get("Plan Autos Global")),
-                    ("Pérdida Parcial 10-1 SMLMV", sura_plans.get("Pérdida Parcial 10-1 SMLMV")),
-                    ("Plan Autos Clásico", sura_plans.get("Plan Autos Clasico")),
-                ]
-            else:
-                summary_plan_map = [
-                    ("Plan Autos Global", sura_plans.get("Plan Autos Global")),
-                    ("Plan Autos Clásico", sura_plans.get("Plan Autos Clasico")),
-                ]
-            for plan_name, plan_value in summary_plan_map:
-                formatted_value = f"${plan_value}" if plan_value not in [None, 'No encontrado'] else (plan_value if plan_value is not None else 'No encontrado')
-                summary_rows.append({'Aseguradora': '', 'Plan': plan_name, 'Valor': formatted_value})
-            summary_rows.append({'Aseguradora': '', 'Plan': '', 'Valor': ''})
-            summary_rows.append({'Aseguradora': 'ALLIANZ', 'Plan': '', 'Valor': ''})
-            for plan_name, plan_value in allianz_plans.items():
-                formatted_value = f"${plan_value}" if plan_value != 'No encontrado' else plan_value
-                summary_rows.append({'Aseguradora': '', 'Plan': plan_name, 'Valor': formatted_value})
-            summary_df = pd.DataFrame(summary_rows)
-            summary_df.to_excel(writer, sheet_name='RESUMEN_COTIZACIONES', index=False)
+            df.to_excel(writer, sheet_name='COTIZACION_CONSOLIDADA', index=False)
         
-        self.logger.info(f"📊 Reporte Excel creado exitosamente: {filename}")
+        self.logger.info(f"📊 Reporte Excel consolidado creado exitosamente: {filename}")
         return str(file_path)
     
     def consolidate(self) -> bool:
@@ -504,8 +569,11 @@ class CotizacionConsolidator:
             # 4. Extraer planes de Allianz desde logs (no PDF)
             allianz_plans = self.extract_allianz_plans_from_logs()
             
-            # 5. Crear reporte Excel
-            excel_path = self.create_excel_report(sura_data, sura_plans, allianz_plans)
+            # 5. Calcular cotizaciones de Bolívar y Solidaria
+            bolivar_solidaria_plans = self.calculate_bolivar_solidaria_plans()
+            
+            # 6. Crear reporte Excel consolidado
+            excel_path = self.create_excel_report(sura_data, sura_plans, allianz_plans, bolivar_solidaria_plans)
             
             self.logger.info(f"Consolidación completada exitosamente. Archivo: {excel_path}")
             return True

@@ -19,9 +19,26 @@ import re
 
 # Importar configuración del cliente
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config.client_config import ClientConfig
-from config.client_history_manager import ClientHistoryManager
-from interfaces.client_edit_window import ClientEditWindow
+try:
+    from config.client_config import ClientConfig
+    from config.client_history_manager import ClientHistoryManager
+    from interfaces.client_edit_window import ClientEditWindow
+    from interfaces.formula_config_window import FormulaConfigWindow
+except ImportError:
+    # Intentar imports relativos si los absolutos fallan
+    try:
+        from ..config.client_config import ClientConfig
+        from ..config.client_history_manager import ClientHistoryManager
+        from ..interfaces.client_edit_window import ClientEditWindow
+        from ..interfaces.formula_config_window import FormulaConfigWindow
+    except ImportError:
+        # Como último recurso, imports desde la raíz del proyecto
+        project_root = Path(__file__).parent.parent.parent
+        sys.path.insert(0, str(project_root))
+        from src.config.client_config import ClientConfig
+        from src.config.client_history_manager import ClientHistoryManager
+        from src.interfaces.client_edit_window import ClientEditWindow
+        from src.interfaces.formula_config_window import FormulaConfigWindow
 
 
 class AutomationGUI:
@@ -168,6 +185,31 @@ class AutomationGUI:
             command=self.toggle_debug_mode
         )
         debug_check.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=5)
+        
+        # Botones de configuración de fórmulas
+        formulas_frame = ttk.Frame(config_frame)
+        formulas_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 5))
+        
+        ttk.Label(formulas_frame, text="Configuración de Fórmulas:", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(0, 5))
+        
+        formulas_buttons_frame = ttk.Frame(formulas_frame)
+        formulas_buttons_frame.pack(anchor=tk.W)
+        
+        self.bolivar_btn = ttk.Button(
+            formulas_buttons_frame,
+            text="💰 Fórmulas Bolívar",
+            command=self.abrir_formulas_bolivar,
+            width=18
+        )
+        self.bolivar_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.solidaria_btn = ttk.Button(
+            formulas_buttons_frame,
+            text="💰 Fórmulas Solidaria",
+            command=self.abrir_formulas_solidaria,
+            width=18
+        )
+        self.solidaria_btn.pack(side=tk.LEFT)
         
         # Frame de controles
         control_frame = ttk.Frame(main_frame)
@@ -394,6 +436,26 @@ class AutomationGUI:
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el login MFA de Sura: {e}")
             self.agregar_mensaje(f"❌ Error abriendo login MFA: {e}", "error")
+    
+    def abrir_formulas_bolivar(self):
+        """Abre la ventana de configuración de fórmulas para Bolívar."""
+        try:
+            FormulaConfigWindow(self.root, 'bolivar', self.on_formula_config_saved)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir la configuración de Bolívar: {e}")
+            self.agregar_mensaje(f"❌ Error abriendo configuración de Bolívar: {e}", "error")
+    
+    def abrir_formulas_solidaria(self):
+        """Abre la ventana de configuración de fórmulas para Solidaria."""
+        try:
+            FormulaConfigWindow(self.root, 'solidaria', self.on_formula_config_saved)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir la configuración de Solidaria: {e}")
+            self.agregar_mensaje(f"❌ Error abriendo configuración de Solidaria: {e}", "error")
+    
+    def on_formula_config_saved(self):
+        """Callback llamado cuando se guarda una configuración de fórmula."""
+        self.agregar_mensaje("✅ Configuración de fórmulas actualizada", "success")
     
     def cargar_ultimo_cliente_editado(self):
         """Carga automáticamente el último cliente editado del historial en la interfaz principal."""
