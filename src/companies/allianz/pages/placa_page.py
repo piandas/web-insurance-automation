@@ -63,6 +63,9 @@ class PlacaPage(BasePage):
             
         self.logger.info(f"💰 Llenando valor asegurado en iframe: {valor}")
         
+        # Pausa antes de llenar el campo
+        await self.page.wait_for_timeout(500)
+        
         try:
             # Para Allianz: usar valor sin formato, solo números
             valor_formateado = valor if valor.isdigit() else valor
@@ -81,6 +84,9 @@ class PlacaPage(BasePage):
                 await el.press('Control+a')  # Seleccionar todo
                 await el.type(valor_formateado)  # Escribir el nuevo valor (reemplaza automáticamente)
                 
+                # Pausa después de llenar el campo
+                await self.page.wait_for_timeout(500)
+                
                 # Verificar que se llenó correctamente
                 valor_actual = await el.input_value()
                 self.logger.info(f"✅ Valor en campo después de llenar: '{valor_actual}'")
@@ -90,6 +96,8 @@ class PlacaPage(BasePage):
                     self.logger.warning(f"⚠️ Valor incorrecto, reintentando con método alternativo...")
                     await el.clear()  # Método alternativo para limpiar
                     await el.fill(valor_formateado)
+                    # Pausa después del segundo intento
+                    await self.page.wait_for_timeout(500)
                     valor_actual = await el.input_value()
                     self.logger.info(f"🔄 Valor después del segundo intento: '{valor_actual}'")
                 
@@ -152,11 +160,18 @@ class PlacaPage(BasePage):
             placa = ClientConfig.VEHICLE_PLATE
             
         self.logger.info(f"📝 Esperando y llenando input de placa con '{placa}'...")
-        return await self.fill_in_frame(
+        # Pausa antes de llenar el campo
+        await self.page.wait_for_timeout(500)
+        
+        result = await self.fill_in_frame(
             self.SELECTOR_INPUT_PLACA,
             placa,
             "input de placa"
         )
+        
+        # Pausa después de llenar el campo
+        await self.page.wait_for_timeout(500)
+        return result
 
     async def verificar_input_ready(self) -> bool:
         """Verifica que el input de placa esté listo y tenga el método getValue."""
@@ -608,6 +623,9 @@ class PlacaPage(BasePage):
             cf_code = codes['cf_code']
             self.logger.info(f"📝 Llenando código FASECOLDA: {cf_code}")
 
+            # Pausa antes de llenar el campo
+            await self.page.wait_for_timeout(500)
+
             # Seleccionar el iframe 'appArea' y llenar el campo
             for intento in range(1, 6):
                 try:
@@ -617,6 +635,10 @@ class PlacaPage(BasePage):
                         await self.page.wait_for_timeout(1000)
                         continue
                     await frame.fill(self.SELECTOR_CODIGO_FASECOLDA, cf_code)
+                    
+                    # Pausa después de llenar el campo
+                    await self.page.wait_for_timeout(500)
+                    
                     # Verificar que el campo se llenó correctamente
                     valor = await frame.input_value(self.SELECTOR_CODIGO_FASECOLDA)
                     if valor == cf_code:
@@ -652,6 +674,10 @@ class PlacaPage(BasePage):
                 is_visible = await boton_lupa.is_visible()
                 is_enabled = await boton_lupa.is_enabled()
                 self.logger.info(f"[Depuración] Estado del botón lupa: visible={is_visible}, enabled={is_enabled}")
+                
+                # Pausa antes de hacer clic en la lupa
+                await self.page.wait_for_timeout(500)
+                
                 try:
                     await boton_lupa.click()
                     self.logger.info(f"[Depuración] Click en la lupa ejecutado (intento {intento})")
@@ -659,24 +685,43 @@ class PlacaPage(BasePage):
                     self.logger.error(f"[Depuración] Error al hacer click en la lupa: {click_error}")
                     await self.page.wait_for_timeout(1000)
                     continue
+                
+                # Pausa después del clic para que se procese
                 await self.page.wait_for_timeout(800)
+                
                 # Verificar si el select de marca tiene opciones válidas
                 select_marca = await frame.query_selector('select#_M_VehicuCol\\$marca')
                 if select_marca:
                     options = await select_marca.query_selector_all('option')
-                    opciones_validas = [await o.get_attribute('value') for o in options if (await o.get_attribute('value')) and (await o.get_attribute('value')).strip()]
+                    opciones_validas = []
+                    for o in options:
+                        value = await o.get_attribute('value')
+                        if value and value.strip():
+                            opciones_validas.append(value)
+                    
+                    self.logger.info(f"[Depuración] Encontradas {len(opciones_validas)} opciones válidas en select de marca")
+                    
                     if len(opciones_validas) > 0:
                         self.logger.info(f"✅ ¡Marca disponible tras {intento} clic(s)! Opciones: {opciones_validas[:5]}...")
+                        
                         # Si el vehículo es nuevo, llenar la placa con 'XXX123' en el mismo iframe
                         from ....config.client_config import ClientConfig
                         if ClientConfig.VEHICLE_STATE.lower() == 'nuevo':
                             try:
+                                # Pausa antes de llenar la placa
+                                await self.page.wait_for_timeout(500)
                                 await frame.fill(self.SELECTOR_INPUT_PLACA, 'XXX123')
+                                # Pausa después de llenar la placa
+                                await self.page.wait_for_timeout(500)
                                 self.logger.info("✅ Placa genérica 'XXX123' llenada correctamente en el iframe tras la lupa")
                             except Exception as e:
                                 self.logger.warning(f"⚠️ No se pudo llenar la placa genérica en el iframe: {e}")
                         return True
-                self.logger.info(f"[Depuración] Marca aún no disponible tras {intento} clic(s)")
+                else:
+                    self.logger.warning(f"[Depuración] No se encontró el select de marca (intento {intento})")
+                
+                self.logger.info(f"[Depuración] Marca aún no disponible tras {intento} clic(s), reintentando...")
+                
             self.logger.error("❌ No se pudo obtener la marca tras 10 clics en la lupa. El campo marca sigue vacío o sin opciones válidas.")
             return False
         except Exception as e:
@@ -711,6 +756,10 @@ class PlacaPage(BasePage):
         """Llena el año del modelo del vehículo dentro del iframe 'appArea'."""
         ano_modelo = ClientConfig.VEHICLE_MODEL_YEAR
         self.logger.info(f"📅 Llenando año del modelo: {ano_modelo}")
+        
+        # Pausa antes de llenar el campo
+        await self.page.wait_for_timeout(500)
+        
         for intento in range(1, 6):
             self.logger.info(f"📝 Año del modelo - Intento {intento}/5")
             try:
@@ -720,6 +769,10 @@ class PlacaPage(BasePage):
                     await self.page.wait_for_timeout(1000)
                     continue
                 await frame.fill(self.SELECTOR_ANO_MODELO, ano_modelo)
+                
+                # Pausa después de llenar el campo
+                await self.page.wait_for_timeout(500)
+                
                 valor = await frame.input_value(self.SELECTOR_ANO_MODELO)
                 if valor == ano_modelo:
                     self.logger.info("✅ Año del modelo llenado correctamente en el iframe")

@@ -117,15 +117,33 @@ class FormulaConfigWindow:
         
         ttk.Label(fecha_frame, text="(AAAA-MM-DD)", foreground="gray").pack(side=tk.RIGHT, padx=(5, 0))
         
-        # Campo 3: Tasa
+        # Campo 3: Tasa con mensaje especial para Solidaria
         ttk.Label(fields_frame, text="Tasa (%):", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(0, 5))
+        
+        # Mensaje especial para Solidaria
+        if self.company.lower() == 'solidaria':
+            tasa_info_frame = ttk.Frame(fields_frame)
+            tasa_info_frame.pack(fill=tk.X, pady=(0, 5))
+            
+            info_label = ttk.Label(
+                tasa_info_frame, 
+                text="💡 SOLIDARIA: Deje vacío para usar tasas automáticas por departamento, o llene para usar tasa manual",
+                font=("Arial", 9),
+                foreground="blue",
+                wraplength=450
+            )
+            info_label.pack(anchor=tk.W)
+        
         tasa_frame = ttk.Frame(fields_frame)
         tasa_frame.pack(fill=tk.X, pady=(0, 15))
         
         self.tasa_entry = ttk.Entry(tasa_frame, textvariable=self.tasa_var, width=40)
         self.tasa_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        ttk.Label(tasa_frame, text="(ej: 4.5)", foreground="gray").pack(side=tk.RIGHT, padx=(5, 0))
+        if self.company.lower() == 'solidaria':
+            ttk.Label(tasa_frame, text="(vacío = automático)", foreground="gray").pack(side=tk.RIGHT, padx=(5, 0))
+        else:
+            ttk.Label(tasa_frame, text="(ej: 4.5)", foreground="gray").pack(side=tk.RIGHT, padx=(5, 0))
         
         # Campo 4: Fórmula (editable)
         ttk.Label(fields_frame, text="Fórmula:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(0, 5))
@@ -149,8 +167,6 @@ class FormulaConfigWindow:
         info_frame.pack(fill=tk.X, pady=(0, 20))
         
         info_text = """• La configuración se guarda automáticamente y es persistente
-• La tasa se puede modificar según las necesidades del mercado
-• La fecha de vigencia es informativa y editable
 • La fórmula es fija según la compañía seleccionada"""
         
         ttk.Label(info_frame, text=info_text, font=("Arial", 9)).pack(anchor=tk.W)
@@ -242,18 +258,33 @@ class FormulaConfigWindow:
         
         # Validar tasa
         tasa = self.tasa_var.get().strip()
-        if not tasa:
-            messagebox.showerror("Error", "La tasa es obligatoria")
-            return False
         
-        try:
-            tasa_float = float(tasa)
-            if tasa_float < 0 or tasa_float > 100:
-                messagebox.showerror("Error", "La tasa debe estar entre 0 y 100")
+        # Para Solidaria, permitir tasa vacía (modo automático)
+        if self.company.lower() == 'solidaria':
+            if tasa:  # Si hay tasa, validarla
+                try:
+                    tasa_float = float(tasa)
+                    if tasa_float < 0 or tasa_float > 100:
+                        messagebox.showerror("Error", "La tasa debe estar entre 0 y 100")
+                        return False
+                except ValueError:
+                    messagebox.showerror("Error", "La tasa debe ser un número válido")
+                    return False
+            # Si está vacía, es válido (modo automático)
+        else:
+            # Para Bolívar y otras, la tasa es obligatoria
+            if not tasa:
+                messagebox.showerror("Error", "La tasa es obligatoria")
                 return False
-        except ValueError:
-            messagebox.showerror("Error", "La tasa debe ser un número válido")
-            return False
+            
+            try:
+                tasa_float = float(tasa)
+                if tasa_float < 0 or tasa_float > 100:
+                    messagebox.showerror("Error", "La tasa debe estar entre 0 y 100")
+                    return False
+            except ValueError:
+                messagebox.showerror("Error", "La tasa debe ser un número válido")
+                return False
         
         return True
     
@@ -262,7 +293,10 @@ class FormulaConfigWindow:
         if not self.validate_data():
             return
         
-        # Crear configuración
+        # Obtener configuración actual para preservar datos existentes
+        current_config = self.formulas_config.get_formula_config(self.company)
+        
+        # Crear configuración con datos del formulario
         config = {
             'compania': self.compania_var.get(),
             'fecha_fin_vigencia': self.fecha_fin_var.get().strip(),
@@ -270,18 +304,33 @@ class FormulaConfigWindow:
             'formula': self.get_current_formula()
         }
         
+        # Preservar tasas por departamento si existen (especialmente para Solidaria)
+        if 'tasas_por_departamento' in current_config:
+            config['tasas_por_departamento'] = current_config['tasas_por_departamento']
+            print(f"DEBUG - Preservando tasas por departamento para {self.company}")
+        
         # Guardar
         self.formulas_config.update_formula_config(self.company, config)
         
         # Mostrar confirmación con la compañía seleccionada
         company_name = self.company.capitalize()
         selected_company = self.compania_var.get()
+        tasa_display = self.tasa_var.get().strip()
+        
+        # Mensaje especial para Solidaria en modo automático
+        if self.company.lower() == 'solidaria' and not tasa_display:
+            tasa_info = "Automática (por departamento y antigüedad)"
+            modo_info = "\n🤖 Modo automático activado - se usarán las tasas por departamento"
+        else:
+            tasa_info = f"{tasa_display}%"
+            modo_info = ""
+        
         messagebox.showinfo(
             "Configuración Guardada", 
             f"✅ {company_name} configurado exitosamente\n\n"
             f"📋 Compañía seleccionada: {selected_company}\n"
             f"📅 Vigencia: {self.fecha_fin_var.get().strip()}\n"
-            f"📊 Tasa: {self.tasa_var.get().strip()}%\n\n"
+            f"📊 Tasa: {tasa_info}{modo_info}\n\n"
             f"Esta configuración se aplicará en los cálculos."
         )
         

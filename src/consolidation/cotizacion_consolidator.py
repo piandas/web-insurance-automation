@@ -197,9 +197,37 @@ class CotizacionConsolidator:
         except Exception as e:
             self.logger.error(f"❌ Error calculando Bolívar: {e}")
         
-        # Calcular Solidaria
+        # Calcular Solidaria con tasa automática
         try:
-            solidaria_result = self.formulas_config.calculate_cotizacion('solidaria', valor_asegurado)
+            # Obtener información del cliente para tasa automática
+            # Usar client_department si está disponible, sino usar client_city como fallback
+            departamento = getattr(ClientConfig, 'CLIENT_DEPARTMENT', None) or getattr(ClientConfig, 'CLIENT_CITY', None)
+            año_vehiculo = getattr(ClientConfig, 'VEHICLE_MODEL_YEAR', None)
+            
+            # Intentar usar tasa automática si tenemos la información necesaria
+            if departamento and año_vehiculo:
+                try:
+                    año_vehiculo_int = int(año_vehiculo)
+                    solidaria_result = self.formulas_config.calculate_cotizacion('solidaria', valor_asegurado, departamento, año_vehiculo_int)
+                    
+                    # Obtener la tasa que se usó para el log
+                    tasa_usada = self.formulas_config.get_tasa_solidaria_automatica(departamento, año_vehiculo_int)
+                    self.logger.info(f"🎯 Solidaria usando tasa automática: {tasa_usada}% para {departamento}, vehículo {año_vehiculo}")
+                    
+                except (ValueError, TypeError):
+                    # Fallback a tasa manual si hay error en la conversión
+                    solidaria_result = self.formulas_config.calculate_cotizacion('solidaria', valor_asegurado)
+                    self.logger.warning(f"⚠️ Error procesando datos automáticos, usando tasa manual para Solidaria")
+            else:
+                # Usar tasa manual si no tenemos la información necesaria
+                solidaria_result = self.formulas_config.calculate_cotizacion('solidaria', valor_asegurado)
+                falta_info = []
+                if not departamento:
+                    falta_info.append("departamento")
+                if not año_vehiculo:
+                    falta_info.append("año del vehículo")
+                self.logger.warning(f"⚠️ Información faltante para tasa automática ({', '.join(falta_info)}), usando tasa manual para Solidaria")
+            
             if solidaria_result is not None:
                 plans['Solidaria'] = f"{solidaria_result:,.0f}".replace(",", ".")
                 self.logger.info(f"✅ Solidaria calculado: ${plans['Solidaria']}")

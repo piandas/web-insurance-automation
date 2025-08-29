@@ -24,6 +24,7 @@ try:
     from config.client_history_manager import ClientHistoryManager
     from interfaces.client_edit_window import ClientEditWindow
     from interfaces.formula_config_window import FormulaConfigWindow
+    from interfaces.solidaria_rates_window import SolidariaRatesWindow
 except ImportError:
     # Intentar imports relativos si los absolutos fallan
     try:
@@ -31,6 +32,7 @@ except ImportError:
         from ..config.client_history_manager import ClientHistoryManager
         from ..interfaces.client_edit_window import ClientEditWindow
         from ..interfaces.formula_config_window import FormulaConfigWindow
+        from ..interfaces.solidaria_rates_window import SolidariaRatesWindow
     except ImportError:
         # Como último recurso, imports desde la raíz del proyecto
         project_root = Path(__file__).parent.parent.parent
@@ -39,6 +41,7 @@ except ImportError:
         from src.config.client_history_manager import ClientHistoryManager
         from src.interfaces.client_edit_window import ClientEditWindow
         from src.interfaces.formula_config_window import FormulaConfigWindow
+        from src.interfaces.solidaria_rates_window import SolidariaRatesWindow
 
 
 class AutomationGUI:
@@ -207,9 +210,17 @@ class AutomationGUI:
             formulas_buttons_frame,
             text="💰 Fórmulas Solidaria",
             command=self.abrir_formulas_solidaria,
-            width=18
+            width=20
         )
-        self.solidaria_btn.pack(side=tk.LEFT)
+        self.solidaria_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.solidaria_rates_btn = ttk.Button(
+            formulas_buttons_frame,
+            text="📊 Tasas Solidaria",
+            command=self.abrir_tasas_solidaria,
+            width=16
+        )
+        self.solidaria_rates_btn.pack(side=tk.LEFT)
         
         # Frame de controles
         control_frame = ttk.Frame(main_frame)
@@ -452,6 +463,14 @@ class AutomationGUI:
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir la configuración de Solidaria: {e}")
             self.agregar_mensaje(f"❌ Error abriendo configuración de Solidaria: {e}", "error")
+    
+    def abrir_tasas_solidaria(self):
+        """Abre la ventana de configuración de tasas de Solidaria por departamento."""
+        try:
+            SolidariaRatesWindow(self.root, self.on_formula_config_saved)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir la configuración de tasas de Solidaria: {e}")
+            self.agregar_mensaje(f"❌ Error abriendo configuración de tasas de Solidaria: {e}", "error")
     
     def on_formula_config_saved(self):
         """Callback llamado cuando se guarda una configuración de fórmula."""
