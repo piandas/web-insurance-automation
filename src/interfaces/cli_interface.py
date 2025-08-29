@@ -154,31 +154,33 @@ Ejemplos de uso:
             
             if all_success:
                 print("\n🎉 ¡TODAS LAS AUTOMATIZACIONES COMPLETADAS EXITOSAMENTE!")
-                
-                # Si ambas compañías fueron ejecutadas exitosamente, ejecutar consolidación
-                if len(parsed_args.companies) >= 2 and 'sura' in parsed_args.companies and 'allianz' in parsed_args.companies:
-                    print("\n" + "="*50)
-                    print("📋 INICIANDO CONSOLIDACIÓN DE COTIZACIONES...")
-                    print("="*50)
-                    
-                    try:
-                        consolidator = CotizacionConsolidator()
-                        consolidation_success = consolidator.consolidate()
-                        
-                        if consolidation_success:
-                            print("\n✅ ¡CONSOLIDACIÓN COMPLETADA EXITOSAMENTE!")
-                            print("📄 El archivo Excel consolidado ha sido creado en la carpeta 'Consolidados'")
-                        else:
-                            print("\n⚠️ Error durante la consolidación. Revisa los logs para más detalles.")
-                            
-                    except Exception as e:
-                        print(f"\n❌ Error inesperado durante la consolidación: {e}")
-                
-                return 0
             else:
                 print("\n⚠️ Algunas automatizaciones fallaron. Revisa los logs para más detalles.")
-                print("💡 La consolidación solo se ejecuta cuando ambas automatizaciones son exitosas.")
-                return 1
+                
+            # Ejecutar consolidación si se solicitaron ambas compañías (exitosas o no)
+            if len(parsed_args.companies) >= 2 and 'sura' in parsed_args.companies and 'allianz' in parsed_args.companies:
+                print("\n" + "="*50)
+                print("📋 INICIANDO CONSOLIDACIÓN DE COTIZACIONES...")
+                if not all_success:
+                    print("⚠️  Generando consolidado con datos parciales (fallos marcados como 'FALLÓ')")
+                print("="*50)
+                
+                try:
+                    consolidator = CotizacionConsolidator()
+                    consolidation_success = consolidator.consolidate_with_failures(results)
+                    
+                    if consolidation_success:
+                        print("\n✅ ¡CONSOLIDACIÓN COMPLETADA EXITOSAMENTE!")
+                        print("📄 El archivo Excel consolidado ha sido creado en la carpeta 'Consolidados'")
+                        if not all_success:
+                            print("⚠️  Nota: Algunas aseguradoras aparecen como 'FALLÓ' debido a errores en sus automatizaciones")
+                    else:
+                        print("\n⚠️ Error durante la consolidación. Revisa los logs para más detalles.")
+                        
+                except Exception as e:
+                    print(f"\n❌ Error inesperado durante la consolidación: {e}")
+            
+            return 0 if all_success else 1
                 
         except KeyboardInterrupt:
             print("\n⚠️ Proceso interrumpido por el usuario")

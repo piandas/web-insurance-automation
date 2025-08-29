@@ -542,6 +542,71 @@ class CotizacionConsolidator:
         self.logger.info(f"📊 Reporte Excel consolidado creado exitosamente: {filename}")
         return str(file_path)
     
+    def consolidate_with_failures(self, automation_results: Dict[str, bool]) -> bool:
+        """
+        Ejecuta el proceso de consolidación incluso si algunas automatizaciones fallaron.
+        
+        Args:
+            automation_results: Dict con resultados de automatizaciones {'allianz': True/False, 'sura': True/False}
+        """
+        try:
+            self.logger.info("Iniciando proceso de consolidación con posibles fallos...")
+            self.logger.info(f"Resultados de automatización: {automation_results}")
+            
+            # 1. Extraer datos de configuración de Sura (siempre intentar)
+            sura_data = self.extract_sura_data()
+            
+            # 2. Obtener PDFs más recientes
+            sura_pdf = self.get_latest_sura_pdf()
+            allianz_pdf = self.get_latest_allianz_pdf()
+            
+            # 3. Extraer planes según el éxito de cada automatización
+            if automation_results.get('sura', False):
+                # Sura exitosa: extraer normalmente
+                sura_plans = self.extract_sura_plans_from_logs()
+                
+                # Si no se encontraron en logs, intentar desde PDF
+                if all(plan == 'No encontrado' for plan in sura_plans.values()) and sura_pdf:
+                    self.logger.info("📄 No se encontraron valores en logs, intentando desde PDF...")
+                    sura_plans = self.extract_sura_plans_from_pdf(sura_pdf)
+            else:
+                # Sura falló: llenar con "FALLÓ"
+                self.logger.warning("❌ Sura falló, llenando planes con 'FALLÓ'")
+                sura_plans = {
+                    'A TODO RIESGO C/D 15%': 'FALLÓ',
+                    'A TODO RIESGO C/D 10%': 'FALLÓ',
+                    'RESPONSABILIDAD CIVIL + PT + HU': 'FALLÓ'
+                }
+            
+            if automation_results.get('allianz', False):
+                # Allianz exitosa: extraer normalmente
+                allianz_plans = self.extract_allianz_plans_from_logs()
+            else:
+                # Allianz falló: llenar con "FALLÓ"
+                self.logger.warning("❌ Allianz falló, llenando planes con 'FALLÓ'")
+                allianz_plans = {
+                    'Autos Esencial': 'FALLÓ',
+                    'Autos Plus': 'FALLÓ',
+                    'Autos Llave en Mano': 'FALLÓ',
+                    'Autos Esencial + Totales': 'FALLÓ'
+                }
+            
+            self.logger.info(f"Planes de Sura: {sura_plans}")
+            self.logger.info(f"Planes de Allianz: {allianz_plans}")
+            
+            # 4. Calcular cotizaciones de Bolívar y Solidaria (siempre posible)
+            bolivar_solidaria_plans = self.calculate_bolivar_solidaria_plans()
+            
+            # 5. Crear reporte Excel consolidado
+            excel_path = self.create_excel_report(sura_data, sura_plans, allianz_plans, bolivar_solidaria_plans)
+            
+            self.logger.info(f"Consolidación con fallos completada. Archivo: {excel_path}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error durante la consolidación con fallos: {e}")
+            return False
+
     def consolidate(self) -> bool:
         """Ejecuta el proceso de consolidación completo."""
         try:
