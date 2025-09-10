@@ -7,7 +7,7 @@ from tkinter import ttk, messagebox
 from tkinter.ttk import Combobox
 import json
 from datetime import datetime, date
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import re
 from pathlib import Path
 
@@ -142,6 +142,9 @@ class ClientEditWindow:
         # Variables de pólizas
         self.policy_number = tk.StringVar()
         self.policy_number_allianz = tk.StringVar()
+        
+        # Variable para fondo seleccionado (vacío por defecto)
+        self.selected_fondo = tk.StringVar(value="")
         
         # Variable para historial
         self.selected_history_item = tk.StringVar()
@@ -813,23 +816,25 @@ class ClientEditWindow:
         self.error_labels['ch_code'] = ch_error
     
     def create_policy_section(self, parent):
-        """Crea la sección de pólizas."""
-        policy_frame = ttk.LabelFrame(parent, text="📋 Números de Póliza", padding="10")
+        """Crea la sección de pólizas y fondo."""
+        policy_frame = ttk.LabelFrame(parent, text="📋 Números de Póliza y Fondo", padding="10")
         policy_frame.pack(fill=tk.X, pady=(0, 15))
         
-        # Configurar grid
-        policy_frame.columnconfigure(1, weight=1)
-        policy_frame.columnconfigure(3, weight=1)
+        # Configurar grid - 6 columnas para distribuir mejor el espacio
+        policy_frame.columnconfigure(1, weight=3)  # Póliza Sura (más ancha)
+        policy_frame.columnconfigure(3, weight=3)  # Póliza Allianz (más ancha)
+        policy_frame.columnconfigure(5, weight=1)  # Fondo (más angosta)
         
         row = 0
         
-        # Pólizas en la misma fila
+        # Todos los campos en la misma fila
+        # Póliza Sura
         ttk.Label(policy_frame, text="Póliza Sura (12 dígitos):").grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 5))
         sura_frame = ttk.Frame(policy_frame)
-        sura_frame.grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 15))
+        sura_frame.grid(row=row, column=1, sticky=tk.W+tk.E, pady=5, padx=(0, 10))
         sura_frame.columnconfigure(0, weight=1)
         
-        sura_entry = ttk.Entry(sura_frame, textvariable=self.policy_number, width=20)
+        sura_entry = ttk.Entry(sura_frame, textvariable=self.policy_number, width=15)
         sura_entry.grid(row=0, column=0, sticky=tk.W+tk.E)
         sura_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'poliza_sura'))
         
@@ -841,10 +846,10 @@ class ClientEditWindow:
         # Póliza Allianz
         ttk.Label(policy_frame, text="Póliza Allianz (8 dígitos):").grid(row=row, column=2, sticky=tk.W, pady=5, padx=(0, 5))
         allianz_frame = ttk.Frame(policy_frame)
-        allianz_frame.grid(row=row, column=3, sticky=tk.W+tk.E, pady=5)
+        allianz_frame.grid(row=row, column=3, sticky=tk.W+tk.E, pady=5, padx=(0, 10))
         allianz_frame.columnconfigure(0, weight=1)
         
-        allianz_entry = ttk.Entry(allianz_frame, textvariable=self.policy_number_allianz, width=20)
+        allianz_entry = ttk.Entry(allianz_frame, textvariable=self.policy_number_allianz, width=15)
         allianz_entry.grid(row=0, column=0, sticky=tk.W+tk.E)
         allianz_entry.bind('<KeyRelease>', lambda event: self.validate_field(event, 'poliza_allianz'))
         
@@ -852,6 +857,71 @@ class ClientEditWindow:
         allianz_error = ttk.Label(allianz_frame, text="", foreground="red", font=("Arial", 8))
         allianz_error.grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
         self.error_labels['poliza_allianz'] = allianz_error
+        
+        # Fondo
+        ttk.Label(policy_frame, text="Fondo *:").grid(row=row, column=4, sticky=tk.W, pady=5, padx=(0, 5))
+        
+        # Obtener fondos disponibles basados en las imágenes
+        available_fondos = self._get_available_fondos_from_images()
+        
+        fondo_frame = ttk.Frame(policy_frame)
+        fondo_frame.grid(row=row, column=5, sticky=tk.W+tk.E, pady=5)
+        fondo_frame.columnconfigure(0, weight=1)
+        
+        fondo_combo = ttk.Combobox(
+            fondo_frame,
+            textvariable=self.selected_fondo,
+            values=available_fondos,
+            state="readonly",
+            width=12  # Más angosto que las pólizas
+        )
+        fondo_combo.grid(row=0, column=0, sticky=tk.W+tk.E)
+        
+        # Error label para fondo
+        fondo_error = ttk.Label(fondo_frame, text="", foreground="red", font=("Arial", 8))
+        fondo_error.grid(row=1, column=0, sticky=tk.W, pady=(2, 0))
+        self.error_labels['fondo'] = fondo_error
+        
+        # Validación en tiempo real
+        fondo_combo.bind('<<ComboboxSelected>>', self._validate_fondo_selection)
+    
+    def _get_available_fondos_from_images(self) -> List[str]:
+        """Obtiene los fondos disponibles basados en las imágenes existentes."""
+        try:
+            logos_path = Path(__file__).parent.parent.parent / "docs" / "IMAGENES FONDOS"
+            if not logos_path.exists():
+                return []
+            
+            # Obtener todos los archivos .png en la carpeta
+            png_files = list(logos_path.glob("*.png"))
+            
+            # Extraer nombres de archivos sin extensión
+            fondos = []
+            for png_file in png_files:
+                fondo_name = png_file.stem  # Nombre sin extensión
+                # Filtrar algunos logos que no son fondos
+                if fondo_name not in ['INFONDO']:  # Puedes añadir más exclusiones aquí
+                    fondos.append(fondo_name)
+            
+            # Ordenar alfabéticamente
+            fondos.sort()
+            return fondos
+            
+        except Exception as e:
+            print(f"Error obteniendo fondos desde imágenes: {e}")
+            return ['EPM', 'FEPEP']  # Fallback por defecto
+    
+    def _validate_fondo_selection(self, event=None):
+        """Valida que se haya seleccionado un fondo."""
+        fondo = self.selected_fondo.get()
+        error_label = self.error_labels.get('fondo')
+        
+        if not fondo or fondo.strip() == "":
+            if error_label:
+                error_label.config(text="Debe seleccionar un fondo")
+        else:
+            if error_label:
+                error_label.config(text="")
     
     def create_buttons_section(self, parent):
         """Crea la sección de botones."""
@@ -1071,6 +1141,9 @@ class ClientEditWindow:
         self.policy_number.set(data.get('policy_number', ''))
         self.policy_number_allianz.set(data.get('policy_number_allianz', ''))
         
+        # Cargar fondo seleccionado (vacío por defecto)
+        self.selected_fondo.set(data.get('selected_fondo', ''))
+        
         # Configurar estado del vehículo después de cargar datos
         self.on_vehicle_state_change()
     
@@ -1099,12 +1172,35 @@ class ClientEditWindow:
             'manual_ch_code': self.manual_ch_code.get(),
             
             'policy_number': self.policy_number.get(),
-            'policy_number_allianz': self.policy_number_allianz.get()
+            'policy_number_allianz': self.policy_number_allianz.get(),
+            
+            'selected_fondo': self.selected_fondo.get()  # Nuevo campo para fondo
         }
     
     def validate_data(self) -> bool:
         """Valida los datos antes de guardar."""
         data = self.get_data_from_fields()
+        
+        # Validación específica para fondo (obligatorio)
+        if not data.get('selected_fondo') or data.get('selected_fondo').strip() == '':
+            self.window.lift()
+            self.window.focus_force()
+            messagebox.showerror("Error de Validación", "Debe seleccionar un fondo antes de guardar.", parent=self.window)
+            self.window.lift()
+            
+            # Mostrar error en el campo
+            error_label = self.error_labels.get('fondo')
+            if error_label:
+                error_label.config(text="Debe seleccionar un fondo")
+            
+            return False
+        
+        # Limpiar error de fondo si está válido
+        error_label = self.error_labels.get('fondo')
+        if error_label:
+            error_label.config(text="")
+        
+        # Validación del historial manager
         errors = self.history_manager.validate_client_data(data)
         
         if errors:
@@ -1258,6 +1354,9 @@ class ClientEditWindow:
         # Limpiar pólizas
         self.policy_number.set('')
         self.policy_number_allianz.set('')
+        
+        # Limpiar fondo (vacío, campo obligatorio)
+        self.selected_fondo.set('')
         
         # Limpiar selección del historial
         self.selected_history_item.set('')

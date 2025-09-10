@@ -16,6 +16,7 @@ import pandas as pd
 from ..config.client_config import ClientConfig
 from ..config.formulas_config import FormulasConfig
 from ..core.logger_factory import LoggerFactory
+from .template_handler import TemplateHandler
 
 
 class CotizacionConsolidator:
@@ -73,6 +74,9 @@ class CotizacionConsolidator:
         
         # Inicializar configuración de fórmulas
         self.formulas_config = FormulasConfig()
+        
+        # Inicializar manejador de plantillas
+        self.template_handler = TemplateHandler()
         
         # Crear directorio si no existe
         self.consolidados_path.mkdir(exist_ok=True)
@@ -480,11 +484,33 @@ class CotizacionConsolidator:
     
     def create_excel_report(self, sura_data: Dict[str, Any], sura_plans: Dict[str, str], 
                           allianz_plans: Dict[str, str], bolivar_solidaria_plans: Dict[str, str]) -> str:
-        """Crea el reporte Excel consolidado con estructura mejorada en una sola hoja."""
+        """Crea el reporte Excel consolidado. Si hay un fondo seleccionado, usa plantilla, sino usa el formato anterior."""
+        
+        # Verificar si hay un fondo seleccionado
+        selected_fondo = ClientConfig.get_selected_fondo()
+        
+        if selected_fondo and selected_fondo in self.template_handler.get_available_fondos():
+            # Usar plantilla del fondo
+            self.logger.info(f"📋 Usando plantilla de {selected_fondo}")
+            return self.template_handler.create_consolidado_from_template(
+                selected_fondo, sura_data, sura_plans, allianz_plans, bolivar_solidaria_plans
+            )
+        else:
+            # Usar formato anterior (consolidado estándar)
+            if selected_fondo:
+                self.logger.warning(f"⚠️ Fondo '{selected_fondo}' no disponible, usando formato estándar")
+            else:
+                self.logger.info("📊 No hay fondo seleccionado, usando formato estándar")
+            
+            return self._create_standard_excel_report(sura_data, sura_plans, allianz_plans, bolivar_solidaria_plans)
+    
+    def _create_standard_excel_report(self, sura_data: Dict[str, Any], sura_plans: Dict[str, str], 
+                          allianz_plans: Dict[str, str], bolivar_solidaria_plans: Dict[str, str]) -> str:
+        """Crea el reporte Excel consolidado con estructura estándar (formato anterior)."""
         filename = self.generate_filename()
         file_path = self.consolidados_path / filename
         
-        self.logger.info(f"📊 Creando reporte Excel consolidado: {filename}")
+        self.logger.info(f"📊 Creando reporte Excel consolidado estándar: {filename}")
         
         # Obtener valor asegurado
         valor_asegurado = self.get_valor_asegurado()

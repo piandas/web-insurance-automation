@@ -36,7 +36,8 @@ class ClientConfig:
         'manual_cf_code': '20900024001',
         'manual_ch_code': '20900024001',
         'policy_number': '040007325677',
-        'policy_number_allianz': '23541048'
+        'policy_number_allianz': '23541048',
+        'selected_fondo': ''  # Campo obligatorio, vacío por defecto
     }
     
     # CONFIGURACIÓN DE FASECOLDA
@@ -85,6 +86,7 @@ class ClientConfig:
     MANUAL_CH_CODE = '20900024001'
     POLICY_NUMBER = '040007325677'
     POLICY_NUMBER_ALLIANZ = '23541048'
+    SELECTED_FONDO = ''  # Campo obligatorio, vacío por defecto
     
     @classmethod
     def _update_class_variables(cls):
@@ -110,6 +112,7 @@ class ClientConfig:
         cls.MANUAL_CH_CODE = data.get('manual_ch_code', cls._DEFAULT_CLIENT_DATA['manual_ch_code'])
         cls.POLICY_NUMBER = data.get('policy_number', cls._DEFAULT_CLIENT_DATA['policy_number'])
         cls.POLICY_NUMBER_ALLIANZ = data.get('policy_number_allianz', cls._DEFAULT_CLIENT_DATA['policy_number_allianz'])
+        cls.SELECTED_FONDO = data.get('selected_fondo', cls._DEFAULT_CLIENT_DATA['selected_fondo'])
 
     # ==========================================
     # ⚙️ CONFIGURACIONES POR DEFECTO
@@ -429,5 +432,16 @@ class ClientConfig:
         cls._load_gui_overrides()
         print(f"🔍 DEBUG ClientConfig - Valor asegurado actual: '{cls.VEHICLE_INSURED_VALUE}'")
         return cls.VEHICLE_INSURED_VALUE
+    
+    @classmethod
+    def get_selected_fondo(cls) -> str:
+        """
+        Obtiene el fondo seleccionado.
+        
+        Returns:
+            str: Fondo seleccionado (ej: "EPM", "FEPEP")
+        """
+        cls._load_gui_overrides()
+        return cls.SELECTED_FONDO
     
     
