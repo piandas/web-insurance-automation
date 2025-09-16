@@ -756,28 +756,34 @@ class TemplateHandler:
             if not value or not value.strip() or value == 'No encontrado':
                 return value
             
-            # Limpiar el valor (quitar caracteres no numéricos excepto puntos)
+            # Si el valor ya viene con formato colombiano (punto para miles, coma para decimales)
+            # Como: "337.753,02" -> solo quitar decimales y agregar $
+            if ',' in value:
+                # Formato colombiano: separar parte entera de decimales
+                parts = value.split(',')
+                integer_part = parts[0]  # "337.753"
+                # Ignorar la parte decimal como pediste
+                return f"${integer_part}"
+            
+            # Si no tiene coma, asumir que es solo la parte entera
+            # Limpiar caracteres no numéricos excepto puntos (separadores de miles)
             clean_value = ''.join(c for c in value if c.isdigit() or c == '.')
             if not clean_value:
                 return value
             
-            # Si ya tiene puntos como separadores de miles, convertir a número
-            if '.' in clean_value:
-                # Asumir que el último punto es decimal si hay más de 3 dígitos después
-                parts = clean_value.split('.')
-                if len(parts) > 1 and len(parts[-1]) <= 2:
-                    # El último punto es decimal
-                    integer_part = ''.join(parts[:-1])
-                    decimal_part = parts[-1]
-                    clean_value = integer_part + decimal_part
-                else:
-                    # Todos los puntos son separadores de miles
-                    clean_value = clean_value.replace('.', '')
+            # Si ya tiene formato con puntos como separadores de miles, mantenerlo
+            if '.' in clean_value and len(clean_value.split('.')[-1]) == 3:
+                # Ya está formateado correctamente
+                return f"${clean_value}"
             
-            # Convertir a número y formatear
-            num = int(clean_value)
-            formatted = f"{num:,}".replace(",", ".")
-            return f"${formatted}"
+            # Si es solo números, formatear como moneda
+            if clean_value.isdigit():
+                num = int(clean_value)
+                formatted = f"{num:,}".replace(",", ".")
+                return f"${formatted}"
+            
+            # Fallback: devolver como está
+            return f"${clean_value}"
             
         except Exception:
             return value

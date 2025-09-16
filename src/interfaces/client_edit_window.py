@@ -16,6 +16,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.client_history_manager import ClientHistoryManager
 from config.client_config import ClientConfig
+from config.formulas_config import FormulasConfig
 
 # Importar Utils de manera robusta
 try:
@@ -957,8 +958,29 @@ class ClientEditWindow:
                 print(f"Error en fallback de imágenes: {e2}")
                 return ['EPM', 'FEPEP']  # Fallback por defecto
     
+    def _update_formulas_for_fondo(self, fondo: str):
+        """Actualiza automáticamente las configuraciones de fórmulas para el fondo seleccionado."""
+        try:
+            # Inicializar FormulasConfig para actualizar las configuraciones
+            formulas_config = FormulasConfig()
+            
+            # Configurar la compañía actual para todas las categorías de fórmulas
+            categories = ['bolivar', 'solidaria']  # Las dos categorías principales
+            
+            for category in categories:
+                # Establecer la compañía actual para esta categoría
+                formulas_config.set_compania_actual(category, fondo)
+            
+            # Guardar las configuraciones
+            formulas_config.save_config()
+            
+            print(f"✅ Fórmulas actualizadas automáticamente para {fondo}")
+            
+        except Exception as e:
+            print(f"⚠️ Error actualizando fórmulas para {fondo}: {e}")
+
     def _validate_fondo_selection(self, event=None):
-        """Valida que se haya seleccionado un fondo y muestra las aseguradoras permitidas."""
+        """Valida que se haya seleccionado un fondo y actualiza las configuraciones automáticamente."""
         fondo = self.selected_fondo.get()
         error_label = self.error_labels.get('fondo')
         
@@ -968,6 +990,9 @@ class ClientEditWindow:
         else:
             if error_label:
                 try:
+                    # Actualizar las configuraciones de fórmulas automáticamente
+                    self._update_formulas_for_fondo(fondo)
+                    
                     # Mostrar aseguradoras permitidas para el fondo seleccionado
                     # Mapeo directo de fondos a aseguradoras para evitar problemas de importación
                     fondo_aseguradoras_map = {
@@ -986,7 +1011,7 @@ class ClientEditWindow:
                     
                     aseguradoras_text = ", ".join(aseguradoras_permitidas)
                     error_label.config(
-                        text=f"✅ {fondo}: {aseguradoras_text}", 
+                        text=f"✅ {fondo}: {aseguradoras_text} | 🔧 Fórmulas actualizadas", 
                         foreground="green"
                     )
                 except Exception as e:

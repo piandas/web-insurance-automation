@@ -18,17 +18,94 @@ class FormulasConfig:
         self.config_path = Path(__file__).parent.parent.parent / "client_history" / "config_formulas.json"
         self._default_config = {
             "bolivar": {
-                "compania": "EPM",
-                "fecha_fin_vigencia": "2025-10-01",  # Fecha de vigencia para cálculo prorrateado
-                "tasa": "3.3",
-                "formula": "((VALORASEGURADO*TASA/100)+(279890)+(104910))*1.19"
+                "compania_actual": "EPM",  # Compañía actualmente seleccionada
+                "EPM": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "3.9",
+                    "formula": "((VALORASEGURADO*TASA/100)+(279890)+(104910))*1.19"
+                },
+                "FEPEP": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "3.5",
+                    "formula": "((VALORASEGURADO*TASA/100)+(250000)+(95000))*1.19"
+                },
+                "CHEC": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "3.7",
+                    "formula": "((VALORASEGURADO*TASA/100)+(290000)+(110000))*1.19"
+                },
+                "EMVARIAS": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "3.6",
+                    "formula": "((VALORASEGURADO*TASA/100)+(275000)+(105000))*1.19"
+                },
+                "CONFAMILIA": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "3.8",
+                    "formula": "((VALORASEGURADO*TASA/100)+(285000)+(108000))*1.19"
+                },
+                "FECORA": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "3.4",
+                    "formula": "((VALORASEGURADO*TASA/100)+(260000)+(98000))*1.19"
+                },
+                "FODELSA": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "3.2",
+                    "formula": "((VALORASEGURADO*TASA/100)+(240000)+(90000))*1.19"
+                },
+                "MANPOWER": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "4.0",
+                    "formula": "((VALORASEGURADO*TASA/100)+(300000)+(115000))*1.19"
+                }
             },
             "solidaria": {
-                "compania": "EPM",
-                "fecha_fin_vigencia": "2025-10-01",  # Fecha de vigencia para cálculo prorrateado
-                "tasa": "",  # Vacío para usar tasas automáticas por departamento
-                "formula": "((VALORASEGURADO*TASA/100)+(246000)+(93600)+(13200))*1.19",
-                "tasas_por_departamento": {
+                "compania_actual": "EPM",  # Compañía actualmente seleccionada
+                "EPM": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "",  # Vacío para usar tasas automáticas por departamento
+                    "formula": "((VALORASEGURADO*TASA/100)+(246000)+(93600)+(13200))*1.19"
+                },
+                "FEPEP": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "",
+                    "formula": "((VALORASEGURADO*TASA/100)+(220000)+(85000)+(12000))*1.19"
+                },
+                "CHEC": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "",
+                    "formula": "((VALORASEGURADO*TASA/100)+(260000)+(98000)+(14000))*1.19"
+                },
+                "EMVARIAS": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "",
+                    "formula": "((VALORASEGURADO*TASA/100)+(240000)+(92000)+(13000))*1.19"
+                },
+                "CONFAMILIA": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "",
+                    "formula": "((VALORASEGURADO*TASA/100)+(250000)+(95000)+(13500))*1.19"
+                },
+                "FECORA": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "",
+                    "formula": "((VALORASEGURADO*TASA/100)+(230000)+(88000)+(12500))*1.19"
+                },
+                "FODELSA": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "",
+                    "formula": "((VALORASEGURADO*TASA/100)+(210000)+(80000)+(11500))*1.19"
+                },
+                "MANPOWER": {
+                    "fecha_fin_vigencia": "2025-10-01",
+                    "tasa": "",
+                    "formula": "((VALORASEGURADO*TASA/100)+(270000)+(100000)+(14500))*1.19"
+                }
+            },
+            "tasas_solidaria": {
+                "compania_actual": "EPM",  # Compañía actualmente seleccionada
+                "EPM": {
                     "Cundinamarca": {
                         "0_1": 3.56, "2_6": 3.76, "7_10": 4.63, "11_15": 5.70, "16_30": 5.70
                     },
@@ -49,6 +126,83 @@ class FormulasConfig:
                     },
                     "Huila, Santander y Norte de Santander": {
                         "0_1": 3.29, "2_6": 3.47, "7_10": 4.27, "11_15": 5.26, "16_30": 5.26
+                    }
+                },
+                "FEPEP": {
+                    "Cundinamarca": {
+                        "0_1": 3.80, "2_6": 4.00, "7_10": 4.90, "11_15": 6.00, "16_30": 6.00
+                    },
+                    "Antioquia": {
+                        "0_1": 4.90, "2_6": 5.15, "7_10": 6.30, "11_15": 7.70, "16_30": 7.70
+                    },
+                    "Valle": {
+                        "0_1": 4.40, "2_6": 4.65, "7_10": 5.70, "11_15": 7.00, "16_30": 7.00
+                    }
+                },
+                "CHEC": {
+                    "Cundinamarca": {
+                        "0_1": 3.40, "2_6": 3.60, "7_10": 4.40, "11_15": 5.40, "16_30": 5.40
+                    },
+                    "Antioquia": {
+                        "0_1": 4.40, "2_6": 4.65, "7_10": 5.70, "11_15": 7.00, "16_30": 7.00
+                    },
+                    "Valle": {
+                        "0_1": 3.95, "2_6": 4.15, "7_10": 5.10, "11_15": 6.25, "16_30": 6.25
+                    }
+                },
+                "EMVARIAS": {
+                    "Cundinamarca": {
+                        "0_1": 3.65, "2_6": 3.85, "7_10": 4.75, "11_15": 5.85, "16_30": 5.85
+                    },
+                    "Antioquia": {
+                        "0_1": 4.75, "2_6": 5.00, "7_10": 6.15, "11_15": 7.55, "16_30": 7.55
+                    },
+                    "Valle": {
+                        "0_1": 4.25, "2_6": 4.50, "7_10": 5.55, "11_15": 6.85, "16_30": 6.85
+                    }
+                },
+                "CONFAMILIA": {
+                    "Cundinamarca": {
+                        "0_1": 3.70, "2_6": 3.90, "7_10": 4.80, "11_15": 5.90, "16_30": 5.90
+                    },
+                    "Antioquia": {
+                        "0_1": 4.80, "2_6": 5.05, "7_10": 6.20, "11_15": 7.60, "16_30": 7.60
+                    },
+                    "Valle": {
+                        "0_1": 4.30, "2_6": 4.55, "7_10": 5.60, "11_15": 6.90, "16_30": 6.90
+                    }
+                },
+                "FECORA": {
+                    "Cundinamarca": {
+                        "0_1": 3.45, "2_6": 3.65, "7_10": 4.50, "11_15": 5.55, "16_30": 5.55
+                    },
+                    "Antioquia": {
+                        "0_1": 4.55, "2_6": 4.80, "7_10": 5.90, "11_15": 7.25, "16_30": 7.25
+                    },
+                    "Valle": {
+                        "0_1": 4.05, "2_6": 4.30, "7_10": 5.30, "11_15": 6.50, "16_30": 6.50
+                    }
+                },
+                "FODELSA": {
+                    "Cundinamarca": {
+                        "0_1": 3.35, "2_6": 3.55, "7_10": 4.35, "11_15": 5.35, "16_30": 5.35
+                    },
+                    "Antioquia": {
+                        "0_1": 4.35, "2_6": 4.60, "7_10": 5.65, "11_15": 6.95, "16_30": 6.95
+                    },
+                    "Valle": {
+                        "0_1": 3.90, "2_6": 4.10, "7_10": 5.05, "11_15": 6.20, "16_30": 6.20
+                    }
+                },
+                "MANPOWER": {
+                    "Cundinamarca": {
+                        "0_1": 3.85, "2_6": 4.05, "7_10": 4.95, "11_15": 6.05, "16_30": 6.05
+                    },
+                    "Antioquia": {
+                        "0_1": 4.95, "2_6": 5.20, "7_10": 6.35, "11_15": 7.75, "16_30": 7.75
+                    },
+                    "Valle": {
+                        "0_1": 4.45, "2_6": 4.70, "7_10": 5.75, "11_15": 7.05, "16_30": 7.05
                     }
                 }
             }
@@ -87,7 +241,67 @@ class FormulasConfig:
         Returns:
             Dict con configuración de la fórmula
         """
-        return self._config.get(company, self._default_config.get(company, {})).copy()
+        company_config = self._config.get(company, self._default_config.get(company, {}))
+        
+        # Determinar qué compañía usar (automático basado en fondo seleccionado o manual)
+        compania_seleccionada = self._get_compania_actual(company)
+        
+        # Obtener configuración específica de la compañía
+        if compania_seleccionada in company_config:
+            config_especifica = company_config[compania_seleccionada].copy()
+            # Para solidaria, también incluir las tasas por departamento
+            if company == 'solidaria':
+                config_especifica['tasas_por_departamento'] = self._get_tasas_solidaria_por_compania(compania_seleccionada)
+            return config_especifica
+        else:
+            # Fallback a configuración por defecto
+            return self._default_config.get(company, {}).get('EPM', {}).copy()
+    
+    def _get_compania_actual(self, company: str) -> str:
+        """Obtiene la compañía actual para una categoría."""
+        # Primero intentar obtener desde el fondo seleccionado en ClientConfig
+        try:
+            from .client_config import ClientConfig
+            fondo_seleccionado = ClientConfig.get_selected_fondo()
+            if fondo_seleccionado:
+                return fondo_seleccionado.upper()
+        except:
+            pass
+        
+        # Fallback a configuración manual
+        company_config = self._config.get(company, self._default_config.get(company, {}))
+        return company_config.get('compania_actual', 'EPM')
+    
+    def _get_tasas_solidaria_por_compania(self, compania: str) -> Dict[str, Dict[str, float]]:
+        """Obtiene las tasas de Solidaria para una compañía específica."""
+        tasas_config = self._config.get('tasas_solidaria', self._default_config.get('tasas_solidaria', {}))
+        return tasas_config.get(compania, tasas_config.get('EPM', {}))
+    
+    def set_compania_actual(self, company: str, compania: str) -> None:
+        """
+        Establece la compañía actual para una categoría.
+        
+        Args:
+            company: 'bolivar', 'solidaria', o 'tasas_solidaria'
+            compania: Nombre de la compañía (ej: 'EPM', 'FEPEP', etc.)
+        """
+        if company in self._config:
+            self._config[company]['compania_actual'] = compania
+            self._save_config(self._config)
+    
+    def update_tasas_solidaria_compania(self, compania: str, tasas_departamentos: Dict[str, Dict[str, float]]) -> None:
+        """
+        Actualiza las tasas de Solidaria para una compañía específica.
+        
+        Args:
+            compania: Nombre de la compañía (ej: 'EPM', 'FEPEP', etc.)
+            tasas_departamentos: Dict con tasas por departamento y rango
+        """
+        if 'tasas_solidaria' not in self._config:
+            self._config['tasas_solidaria'] = self._default_config.get('tasas_solidaria', {}).copy()
+        
+        self._config['tasas_solidaria'][compania] = tasas_departamentos.copy()
+        self._save_config(self._config)
     
     def update_formula_config(self, company: str, config: Dict[str, str]) -> None:
         """
@@ -104,6 +318,7 @@ class FormulasConfig:
     def get_tasa_solidaria_automatica(self, departamento: str, año_vehiculo: int) -> float:
         """
         Obtiene la tasa de Solidaria automáticamente basada en departamento y antigüedad del vehículo.
+        Usa las tasas específicas de la compañía actual.
         
         Args:
             departamento: Nombre del departamento
@@ -115,8 +330,11 @@ class FormulasConfig:
         try:
             from datetime import datetime
             
-            config = self.get_formula_config('solidaria')
-            tasas_departamentos = config.get('tasas_por_departamento', {})
+            # Obtener compañía actual y sus tasas específicas
+            compania_actual = self._get_compania_actual('solidaria')
+            tasas_departamentos = self._get_tasas_solidaria_por_compania(compania_actual)
+            
+            print(f"DEBUG Solidaria - Usando tasas de compañía: {compania_actual}")
             
             # Calcular antigüedad del vehículo
             año_actual = datetime.now().year
@@ -181,8 +399,7 @@ class FormulasConfig:
                         tasa_encontrada = float(tasa_valor)
                     else:
                         # Si no existe el rango, usar tasa por defecto
-                        default_tasa = config.get('tasa', '4.89')
-                        tasa_encontrada = float(default_tasa) if default_tasa else 4.89
+                        tasa_encontrada = 4.89
                     print(f"DEBUG Solidaria - ✅ TASA ENCONTRADA: {tasa_encontrada} para grupo '{grupo_solidaria}' rango '{rango}'")
                     print(f"DEBUG Solidaria - Tasas disponibles para el grupo: {tasas_departamentos[grupo_solidaria]}")
                     return tasa_encontrada
@@ -199,8 +416,7 @@ class FormulasConfig:
                     if tasa_valor is not None:
                         tasa_encontrada = float(tasa_valor)
                     else:
-                        default_tasa = config.get('tasa', '4.89')
-                        tasa_encontrada = float(default_tasa) if default_tasa else 4.89
+                        tasa_encontrada = 4.89
                     print(f"DEBUG Solidaria - ✅ TASA ENCONTRADA (búsqueda exacta): {tasa_encontrada} para grupo '{grupo}' rango '{rango}'")
                     return tasa_encontrada
             
@@ -215,14 +431,12 @@ class FormulasConfig:
                     if tasa_valor is not None:
                         tasa_encontrada = float(tasa_valor)
                     else:
-                        default_tasa = config.get('tasa', '4.89')
-                        tasa_encontrada = float(default_tasa) if default_tasa else 4.89
+                        tasa_encontrada = 4.89
                     print(f"DEBUG Solidaria - ✅ TASA ENCONTRADA (búsqueda parcial): {tasa_encontrada} para grupo '{grupo}' rango '{rango}'")
                     return tasa_encontrada
             
             # Si no se encuentra, usar tasa por defecto
-            default_tasa = config.get('tasa', '4.89')
-            tasa_default = float(default_tasa) if default_tasa else 4.89
+            tasa_default = 4.89
             print(f"DEBUG Solidaria - ❌ NO SE ENCONTRÓ TASA - Usando tasa por defecto: {tasa_default}")
             print(f"DEBUG Solidaria - Grupos disponibles: {list(tasas_departamentos.keys())}")
             return tasa_default
@@ -406,3 +620,46 @@ class FormulasConfig:
     def get_all_configs(self) -> Dict[str, Dict[str, str]]:
         """Obtiene todas las configuraciones."""
         return self._config.copy()
+    
+    def get_companias_disponibles(self, category: str) -> list:
+        """
+        Obtiene la lista de compañías disponibles para una categoría.
+        
+        Args:
+            category: 'bolivar', 'solidaria', o 'tasas_solidaria'
+            
+        Returns:
+            Lista de nombres de compañías disponibles
+        """
+        config_category = self._config.get(category, self._default_config.get(category, {}))
+        companias = [key for key in config_category.keys() if key != 'compania_actual']
+        return sorted(companias)
+    
+    def update_compania_config(self, category: str, compania: str, config: Dict[str, Any]) -> None:
+        """
+        Actualiza la configuración de una compañía específica.
+        
+        Args:
+            category: 'bolivar', 'solidaria', o 'tasas_solidaria'
+            compania: Nombre de la compañía
+            config: Nueva configuración
+        """
+        if category not in self._config:
+            self._config[category] = self._default_config.get(category, {}).copy()
+        
+        self._config[category][compania] = config.copy()
+        self._save_config(self._config)
+    
+    def get_compania_config(self, category: str, compania: str) -> Dict[str, Any]:
+        """
+        Obtiene la configuración de una compañía específica.
+        
+        Args:
+            category: 'bolivar', 'solidaria', o 'tasas_solidaria'
+            compania: Nombre de la compañía
+            
+        Returns:
+            Configuración de la compañía
+        """
+        config_category = self._config.get(category, self._default_config.get(category, {}))
+        return config_category.get(compania, {}).copy()

@@ -98,10 +98,17 @@ class FormulaConfigWindow:
         
         # Campo 1: Compañía
         ttk.Label(fields_frame, text="Compañía:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(0, 5))
+        
+        # Obtener compañías disponibles dinámicamente
+        companias_disponibles = self.formulas_config.get_companias_disponibles(self.company)
+        if not companias_disponibles:
+            # Fallback si no hay compañías configuradas
+            companias_disponibles = ["EPM", "FEPEP", "CHEC", "EMVARIAS", "CONFAMILIA", "FECORA", "FODELSA", "MANPOWER"]
+        
         compania_combo = ttk.Combobox(
             fields_frame,
             textvariable=self.compania_var,
-            values=["EPM", "CHEK", "EMVARIAS"],
+            values=sorted(companias_disponibles),
             state="readonly",
             width=40
         )
@@ -203,13 +210,19 @@ class FormulaConfigWindow:
     
     def load_current_config(self):
         """Carga la configuración actual."""
-        config = self.formulas_config.get_formula_config(self.company)
+        # Obtener compañía actual
+        compania_actual = self.formulas_config._get_compania_actual(self.company)
+        if not compania_actual:
+            compania_actual = 'EPM'
         
-        self.compania_var.set(config.get('compania', 'EPM'))
+        # Cargar configuración de la compañía actual
+        config = self.formulas_config.get_compania_config(self.company, compania_actual)
+        
+        self.compania_var.set(compania_actual)
         self.fecha_fin_var.set(config.get('fecha_fin_vigencia', '2025-12-31'))
         self.tasa_var.set(config.get('tasa', '4.0'))
         
-        # Cargar fórmula guardada o usar por defecto
+        # Cargar fórmula de la compañía específica
         formula_guardada = config.get('formula', '')
         if formula_guardada:
             self.formula_text.delete(1.0, tk.END)
@@ -220,11 +233,36 @@ class FormulaConfigWindow:
     
     def on_company_change(self, event=None):
         """Maneja el cambio de compañía."""
-        self.update_formula_display()
+        compania_seleccionada = self.compania_var.get()
+        if compania_seleccionada:
+            # Cargar configuración de la compañía seleccionada
+            config = self.formulas_config.get_compania_config(self.company, compania_seleccionada)
+            
+            # Actualizar campos con la configuración específica de la compañía
+            self.fecha_fin_var.set(config.get('fecha_fin_vigencia', '2025-12-31'))
+            self.tasa_var.set(config.get('tasa', '4.0'))
+            
+            # Actualizar fórmula específica de la compañía
+            formula = config.get('formula', '')
+            if formula:
+                self.formula_text.delete(1.0, tk.END)
+                self.formula_text.insert(1.0, formula)
+            else:
+                self.update_formula_display()
     
     def update_formula_display(self):
-        """Actualiza la visualización de la fórmula."""
-        # Obtener la fórmula según la compañía
+        """Actualiza la visualización de la fórmula con valores por defecto."""
+        # Obtener la fórmula por defecto según la compañía seleccionada
+        compania_seleccionada = self.compania_var.get()
+        if compania_seleccionada:
+            config = self.formulas_config.get_compania_config(self.company, compania_seleccionada)
+            formula = config.get('formula', '')
+            if formula:
+                self.formula_text.delete(1.0, tk.END)
+                self.formula_text.insert(1.0, formula)
+                return
+        
+        # Fallback a fórmulas genéricas
         if self.company == 'bolivar':
             formula = "((VALORASEGURADO*TASA/100)+(279890)+(104910))*1.19"
         elif self.company == 'solidaria':
@@ -232,7 +270,7 @@ class FormulaConfigWindow:
         else:
             formula = "Fórmula no definida"
         
-        # Actualizar el campo de texto (ahora editable)
+        # Actualizar el campo de texto
         self.formula_text.delete(1.0, tk.END)
         self.formula_text.insert(1.0, formula)
     
@@ -289,32 +327,30 @@ class FormulaConfigWindow:
         return True
     
     def save_config(self):
-        """Guarda la configuración."""
+        """Guarda la configuración para la compañía específica."""
         if not self.validate_data():
             return
         
-        # Obtener configuración actual para preservar datos existentes
-        current_config = self.formulas_config.get_formula_config(self.company)
+        compania_seleccionada = self.compania_var.get()
+        if not compania_seleccionada:
+            messagebox.showerror("Error", "Debe seleccionar una compañía")
+            return
         
-        # Crear configuración con datos del formulario
-        config = {
-            'compania': self.compania_var.get(),
+        # Crear configuración específica para la compañía
+        config_compania = {
             'fecha_fin_vigencia': self.fecha_fin_var.get().strip(),
             'tasa': self.tasa_var.get().strip(),
             'formula': self.get_current_formula()
         }
         
-        # Preservar tasas por departamento si existen (especialmente para Solidaria)
-        if 'tasas_por_departamento' in current_config:
-            config['tasas_por_departamento'] = current_config['tasas_por_departamento']
-            print(f"DEBUG - Preservando tasas por departamento para {self.company}")
+        # Actualizar configuración de la compañía específica
+        self.formulas_config.update_compania_config(self.company, compania_seleccionada, config_compania)
         
-        # Guardar
-        self.formulas_config.update_formula_config(self.company, config)
+        # También establecer como compañía actual
+        self.formulas_config.set_compania_actual(self.company, compania_seleccionada)
         
         # Mostrar confirmación con la compañía seleccionada
         company_name = self.company.capitalize()
-        selected_company = self.compania_var.get()
         tasa_display = self.tasa_var.get().strip()
         
         # Mensaje especial para Solidaria en modo automático
@@ -328,7 +364,7 @@ class FormulaConfigWindow:
         messagebox.showinfo(
             "Configuración Guardada", 
             f"✅ {company_name} configurado exitosamente\n\n"
-            f"📋 Compañía seleccionada: {selected_company}\n"
+            f"📋 Compañía seleccionada: {compania_seleccionada}\n"
             f"📅 Vigencia: {self.fecha_fin_var.get().strip()}\n"
             f"📊 Tasa: {tasa_info}{modo_info}\n\n"
             f"Esta configuración se aplicará en los cálculos."

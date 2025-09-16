@@ -39,12 +39,15 @@ class SolidariaRatesWindow:
         self.callback = callback
         self.formulas_config = FormulasConfig()
         
+        # Variable para la compañía seleccionada
+        self.selected_company = tk.StringVar()
+        
         # Crear la ventana
         self.window = tk.Toplevel(parent)
         self.window.title("📊 Configuración de Tasas Solidaria por Departamento")
-        self.window.geometry("800x600")
+        self.window.geometry("800x650")
         self.window.resizable(True, True)
-        self.window.minsize(750, 550)
+        self.window.minsize(750, 600)
         
         # Centrar la ventana
         self.center_window()
@@ -86,12 +89,51 @@ class SolidariaRatesWindow:
         )
         title_label.pack(pady=(0, 15))
         
+        # Frame de selección de compañía
+        company_frame = ttk.LabelFrame(main_frame, text="🏢 Seleccionar Compañía", padding="10")
+        company_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        # Obtener compañías disponibles
+        companias_disponibles = self.formulas_config.get_companias_disponibles('tasas_solidaria')
+        if not companias_disponibles:
+            companias_disponibles = ['EPM', 'FEPEP', 'CHEC', 'EMVARIAS', 'CONFAMILIA', 'FECORA', 'FODELSA', 'MANPOWER']
+        
+        # Configurar valor inicial
+        compania_actual = self.formulas_config._get_compania_actual('solidaria')
+        if compania_actual not in companias_disponibles:
+            compania_actual = companias_disponibles[0]
+        
+        self.selected_company.set(compania_actual)
+        
+        # ComboBox para seleccionar compañía
+        ttk.Label(company_frame, text="Compañía:", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        company_combo = ttk.Combobox(
+            company_frame, 
+            textvariable=self.selected_company,
+            values=companias_disponibles,
+            state="readonly",
+            width=15
+        )
+        company_combo.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Botón para cargar tasas de la compañía seleccionada
+        load_button = ttk.Button(
+            company_frame,
+            text="🔄 Cargar Tasas",
+            command=self.load_company_rates
+        )
+        load_button.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Evento para cambio de compañía
+        company_combo.bind('<<ComboboxSelected>>', self.on_company_changed)
+        
         # Frame de información compacto
         info_frame = ttk.LabelFrame(main_frame, text="ℹ️ Información", padding="10")
         info_frame.pack(fill=tk.X, pady=(0, 15))
         
-        info_text = """Configure las tasas de Solidaria según el departamento y la antigüedad del vehículo.
-Rangos: 0-1 años • 2-6 años • 7-10 años • 11-15 años • 16-30 años"""
+        info_text = """Configure las tasas de Solidaria específicas para cada compañía según el departamento y la antigüedad del vehículo.
+Rangos: 0-1 años • 2-6 años • 7-10 años • 11-15 años • 16-30 años
+💡 Estas tasas se usarán automáticamente cuando deje la tasa vacía en la configuración de Solidaria."""
         
         ttk.Label(info_frame, text=info_text, justify=tk.LEFT, font=("Arial", 9)).pack(anchor=tk.W)
         
@@ -225,21 +267,42 @@ Rangos: 0-1 años • 2-6 años • 7-10 años • 11-15 años • 16-30 años""
     
     def load_current_rates(self):
         """Carga las tasas actuales desde la configuración."""
+        self.load_company_rates()
+    
+    def load_company_rates(self):
+        """Carga las tasas de la compañía seleccionada."""
         try:
-            config = self.formulas_config.get_formula_config('solidaria')
-            tasas_departamentos = config.get('tasas_por_departamento', {})
+            selected_company = self.selected_company.get()
+            if not selected_company:
+                return
+            
+            # Obtener tasas específicas de la compañía
+            tasas_departamentos = self.formulas_config._get_tasas_solidaria_por_compania(selected_company)
             
             for departamento, vars_dict in self.rate_vars.items():
                 if departamento in tasas_departamentos:
                     for rango, var in vars_dict.items():
                         tasa = tasas_departamentos[departamento].get(rango, 0.0)
                         var.set(str(tasa))
+                else:
+                    # Si no hay tasas para este departamento, limpiar los campos
+                    for rango, var in vars_dict.items():
+                        var.set("0.0")
         except Exception as e:
             messagebox.showerror("Error", f"Error al cargar tasas: {str(e)}")
     
+    def on_company_changed(self, event=None):
+        """Maneja el cambio de compañía seleccionada."""
+        self.load_company_rates()
+    
     def save_rates(self):
-        """Guarda las tasas configuradas."""
+        """Guarda las tasas configuradas para la compañía seleccionada."""
         try:
+            selected_company = self.selected_company.get()
+            if not selected_company:
+                messagebox.showerror("Error", "Debe seleccionar una compañía")
+                return
+            
             # Validar que todos los campos tengan valores válidos
             for departamento, vars_dict in self.rate_vars.items():
                 for rango, var in vars_dict.items():
@@ -253,8 +316,7 @@ Rangos: 0-1 años • 2-6 años • 7-10 años • 11-15 años • 16-30 años""
                         messagebox.showerror("Error", f"El valor '{value}' en {departamento} - {rango} no es válido")
                         return
             
-            # Preparar configuración actualizada
-            config = self.formulas_config.get_formula_config('solidaria')
+            # Preparar configuración actualizada para la compañía específica
             tasas_departamentos = {}
             
             for departamento, vars_dict in self.rate_vars.items():
@@ -262,11 +324,10 @@ Rangos: 0-1 años • 2-6 años • 7-10 años • 11-15 años • 16-30 años""
                 for rango, var in vars_dict.items():
                     tasas_departamentos[departamento][rango] = float(var.get().strip())
             
-            # Actualizar configuración
-            config['tasas_por_departamento'] = tasas_departamentos
-            self.formulas_config.update_formula_config('solidaria', config)
+            # Actualizar configuración de tasas para la compañía específica
+            self.formulas_config.update_tasas_solidaria_compania(selected_company, tasas_departamentos)
             
-            messagebox.showinfo("Éxito", "Tasas guardadas correctamente")
+            messagebox.showinfo("Éxito", f"Tasas de {selected_company} guardadas correctamente")
             
             # Llamar callback si existe
             if self.callback:
@@ -278,28 +339,29 @@ Rangos: 0-1 años • 2-6 años • 7-10 años • 11-15 años • 16-30 años""
             messagebox.showerror("Error", f"Error al guardar tasas: {str(e)}")
     
     def restore_defaults(self):
-        """Restaura los valores por defecto."""
-        if messagebox.askyesno("Confirmar", "¿Está seguro de que desea restaurar los valores por defecto?"):
+        """Restaura los valores por defecto para la compañía seleccionada."""
+        selected_company = self.selected_company.get()
+        if not selected_company:
+            messagebox.showerror("Error", "Debe seleccionar una compañía")
+            return
+            
+        if messagebox.askyesno("Confirmar", f"¿Está seguro de que desea restaurar los valores por defecto para {selected_company}?"):
             try:
-                # Valores por defecto de la imagen
-                default_rates = {
-                    "Cundinamarca": {"0_1": 3.56, "2_6": 3.76, "7_10": 4.63, "11_15": 5.70, "16_30": 5.70},
-                    "Antioquia": {"0_1": 4.63, "2_6": 4.89, "7_10": 6.02, "11_15": 7.41, "16_30": 7.41},
-                    "Valle": {"0_1": 4.15, "2_6": 4.38, "7_10": 5.39, "11_15": 6.64, "16_30": 6.64},
-                    "Quindio, Caldas y Risaralda": {"0_1": 3.70, "2_6": 3.91, "7_10": 4.81, "11_15": 5.92, "16_30": 5.92},
-                    "Tolima, Nariño, Meta, Boyacá y Cauca": {"0_1": 3.18, "2_6": 3.36, "7_10": 4.14, "11_15": 5.09, "16_30": 5.09},
-                    "Córdoba, Cesar, Bolívar y Atlántico": {"0_1": 3.39, "2_6": 3.58, "7_10": 4.41, "11_15": 5.42, "16_30": 5.42},
-                    "Huila, Santander y Norte de Santander": {"0_1": 3.29, "2_6": 3.47, "7_10": 4.27, "11_15": 5.26, "16_30": 5.26}
-                }
+                # Obtener valores por defecto de la compañía desde FormulasConfig
+                default_tasas = self.formulas_config._default_config.get('tasas_solidaria', {}).get(selected_company, {})
+                
+                # Si no hay valores por defecto específicos, usar los de EPM como base
+                if not default_tasas:
+                    default_tasas = self.formulas_config._default_config.get('tasas_solidaria', {}).get('EPM', {})
                 
                 # Cargar valores por defecto en los campos
-                for departamento, tasas in default_rates.items():
+                for departamento, tasas in default_tasas.items():
                     if departamento in self.rate_vars:
                         for rango, tasa in tasas.items():
                             if rango in self.rate_vars[departamento]:
                                 self.rate_vars[departamento][rango].set(str(tasa))
                 
-                messagebox.showinfo("Éxito", "Valores por defecto restaurados")
+                messagebox.showinfo("Éxito", f"Valores por defecto de {selected_company} restaurados")
                 
             except Exception as e:
                 messagebox.showerror("Error", f"Error al restaurar valores por defecto: {str(e)}")
