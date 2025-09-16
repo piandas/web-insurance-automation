@@ -115,6 +115,37 @@ Ejemplos de uso:
             print("\nError: Debe especificar al menos una compañía usando --companies")
             return 1
         
+        # Aplicar filtro de fondo si está configurado
+        filtered_companies = self._filter_companies_by_fondo(parsed_args.companies)
+        if len(filtered_companies) != len(parsed_args.companies):
+            excluded = [c for c in parsed_args.companies if c not in filtered_companies]
+            print(f"⚠️ Algunas compañías fueron excluidas por restricciones del fondo:")
+            print(f"   Solicitadas: {', '.join(parsed_args.companies)}")
+            print(f"   Permitidas: {', '.join(filtered_companies) if filtered_companies else 'Ninguna'}")
+            print(f"   Excluidas: {', '.join(excluded)}")
+            
+            if not filtered_companies:
+                from ..config.client_config import ClientConfig
+                from ..consolidation.template_handler import TemplateHandler
+                selected_fondo = ClientConfig.get_selected_fondo()
+                template_handler = TemplateHandler()
+                allowed_for_fondo = template_handler.get_fondo_aseguradoras(selected_fondo)
+                supported_companies = AutomationFactory.get_supported_companies()
+                
+                print(f"\n❌ Error: Ninguna compañía está permitida para el fondo seleccionado")
+                print(f"🏛️ Fondo actual: {selected_fondo}")
+                print(f"📋 Compañías requeridas por {selected_fondo}: {', '.join(allowed_for_fondo)}")
+                print(f"⚙️ Compañías soportadas por el sistema: {', '.join(supported_companies)}")
+                
+                missing_implementations = [c for c in allowed_for_fondo if c.lower() not in supported_companies]
+                if missing_implementations:
+                    print(f"🚧 Faltan implementar: {', '.join(missing_implementations)}")
+                
+                return 1
+        
+        # Actualizar la lista de compañías a ejecutar
+        companies_to_run = filtered_companies
+        
         # Preparar argumentos para las automatizaciones
         automation_kwargs = {}
         if parsed_args.user:
@@ -125,18 +156,18 @@ Ejemplos de uso:
             automation_kwargs['headless'] = True  # Modo oculto/minimizado, no verdadero headless
         
         try:
-            print(f"🚀 Iniciando automatización para: {', '.join(parsed_args.companies)}")
+            print(f"🚀 Iniciando automatización para: {', '.join(companies_to_run)}")
             print(f"📋 Modo: {'Paralelo' if parsed_args.parallel else 'Secuencial'}")
             
             # Ejecutar automatizaciones
             if parsed_args.parallel:
                 results = await self.manager.run_parallel(
-                    parsed_args.companies, 
+                    companies_to_run, 
                     **automation_kwargs
                 )
             else:
                 results = await self.manager.run_sequential(
-                    parsed_args.companies, 
+                    companies_to_run, 
                     **automation_kwargs
                 )
             
@@ -190,6 +221,61 @@ Ejemplos de uso:
             print(f"\n❌ Error inesperado: {e}")
             await self.manager.stop_all()
             return 1
+    
+    def _filter_companies_by_fondo(self, companies: List[str]) -> List[str]:
+        """
+        Filtra las compañías según el fondo seleccionado en la configuración.
+        
+        Args:
+            companies: Lista original de compañías
+            
+        Returns:
+            Lista de compañías que deben ejecutarse para el fondo seleccionado
+        """
+        try:
+            # Obtener el fondo seleccionado
+            from ..config.client_config import ClientConfig
+            selected_fondo = ClientConfig.get_selected_fondo()
+            
+            if not selected_fondo:
+                print("📋 No hay fondo seleccionado, ejecutando todas las compañías solicitadas")
+                return companies
+            
+            print(f"🏛️ Fondo seleccionado: {selected_fondo}")
+            
+            # Obtener compañías permitidas para el fondo
+            from ..factory.automation_factory import AutomationFactory
+            allowed_companies = AutomationFactory.get_allowed_companies_for_fondo(selected_fondo)
+            
+            print(f"✅ Compañías permitidas para {selected_fondo}: {', '.join(allowed_companies)}")
+            
+            # Mostrar información de debug sobre el cliente actual
+            try:
+                current_data = ClientConfig._get_current_data()
+                client_name = f"{current_data.get('client_first_name', '')} {current_data.get('client_first_lastname', '')}".strip()
+                if client_name:
+                    print(f"👤 Cliente actual: {client_name}")
+            except:
+                pass
+            
+            # Si el fondo tiene restricciones, usar SOLO las compañías permitidas por el fondo
+            # (no las de la lista original)
+            print(f"🏛️ Fondo '{selected_fondo}' requiere solo: {allowed_companies}")
+            
+            if companies != allowed_companies:
+                original_companies = [company for company in companies if company.lower() not in allowed_companies]
+                if original_companies:
+                    print(f"🔍 Fondo '{selected_fondo}' - Ignorando compañías no permitidas: {original_companies}")
+                
+                added_companies = [company for company in allowed_companies if company.lower() not in [c.lower() for c in companies]]
+                if added_companies:
+                    print(f"➕ Fondo '{selected_fondo}' - Agregando compañías requeridas: {added_companies}")
+            
+            return allowed_companies
+            
+        except Exception as e:
+            print(f"⚠️ Error filtrando compañías por fondo: {e}")
+            return companies
 
 async def main():
     """Función principal para la interfaz CLI."""

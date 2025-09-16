@@ -886,42 +886,70 @@ class ClientEditWindow:
         fondo_combo.bind('<<ComboboxSelected>>', self._validate_fondo_selection)
     
     def _get_available_fondos_from_images(self) -> List[str]:
-        """Obtiene los fondos disponibles basados en las imágenes existentes."""
+        """Obtiene los fondos disponibles desde el TemplateHandler."""
         try:
-            logos_path = Path(__file__).parent.parent.parent / "docs" / "IMAGENES FONDOS"
-            if not logos_path.exists():
-                return []
+            # Importar TemplateHandler para obtener fondos disponibles con plantillas
+            from consolidation.template_handler import TemplateHandler
             
-            # Obtener todos los archivos .png en la carpeta
-            png_files = list(logos_path.glob("*.png"))
+            template_handler = TemplateHandler()
+            available_fondos = template_handler.get_available_fondos()
             
-            # Extraer nombres de archivos sin extensión
-            fondos = []
-            for png_file in png_files:
-                fondo_name = png_file.stem  # Nombre sin extensión
-                # Filtrar algunos logos que no son fondos
-                if fondo_name not in ['INFONDO']:  # Puedes añadir más exclusiones aquí
-                    fondos.append(fondo_name)
+            # Filtrar duplicados y ordenar
+            fondos = sorted(list(set(available_fondos)))
             
-            # Ordenar alfabéticamente
-            fondos.sort()
+            print(f"[DEBUG] Fondos disponibles desde TemplateHandler: {fondos}")
             return fondos
             
         except Exception as e:
-            print(f"Error obteniendo fondos desde imágenes: {e}")
-            return ['EPM', 'FEPEP']  # Fallback por defecto
+            print(f"Error obteniendo fondos desde TemplateHandler: {e}")
+            # Fallback: obtener desde imágenes como antes
+            try:
+                logos_path = Path(__file__).parent.parent.parent / "docs" / "IMAGENES FONDOS"
+                if not logos_path.exists():
+                    return []
+                
+                # Obtener todos los archivos .png en la carpeta
+                png_files = list(logos_path.glob("*.png"))
+                
+                # Extraer nombres de archivos sin extensión
+                fondos = []
+                for png_file in png_files:
+                    fondo_name = png_file.stem  # Nombre sin extensión
+                    # Filtrar algunos logos que no son fondos
+                    if fondo_name not in ['INFONDO']:  # Puedes añadir más exclusiones aquí
+                        fondos.append(fondo_name)
+                
+                # Ordenar alfabéticamente
+                fondos.sort()
+                return fondos
+                
+            except Exception as e2:
+                print(f"Error en fallback de imágenes: {e2}")
+                return ['EPM', 'FEPEP']  # Fallback por defecto
     
     def _validate_fondo_selection(self, event=None):
-        """Valida que se haya seleccionado un fondo."""
+        """Valida que se haya seleccionado un fondo y muestra las aseguradoras permitidas."""
         fondo = self.selected_fondo.get()
         error_label = self.error_labels.get('fondo')
         
         if not fondo or fondo.strip() == "":
             if error_label:
-                error_label.config(text="Debe seleccionar un fondo")
+                error_label.config(text="⚠️ Debe seleccionar un fondo", foreground="red")
         else:
             if error_label:
-                error_label.config(text="")
+                try:
+                    # Mostrar aseguradoras permitidas para el fondo seleccionado
+                    from consolidation.template_handler import TemplateHandler
+                    template_handler = TemplateHandler()
+                    aseguradoras_permitidas = template_handler.get_fondo_aseguradoras(fondo)
+                    
+                    aseguradoras_text = ", ".join(aseguradoras_permitidas)
+                    error_label.config(
+                        text=f"✅ {fondo}: {aseguradoras_text}", 
+                        foreground="green"
+                    )
+                except Exception as e:
+                    error_label.config(text="✅ Fondo seleccionado", foreground="green")
     
     def create_buttons_section(self, parent):
         """Crea la sección de botones."""

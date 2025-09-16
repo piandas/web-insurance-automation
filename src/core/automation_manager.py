@@ -25,7 +25,12 @@ class AutomationManager:
         Returns:
             Diccionario con resultados por compañía
         """
-        self.logger.info(f"🔄 Ejecutando automatizaciones secuenciales: {companies}")
+        # Filtrar compañías según el fondo seleccionado
+        filtered_companies = self._filter_companies_by_fondo(companies)
+        
+        self.logger.info(f"🔄 Ejecutando automatizaciones secuenciales: {filtered_companies}")
+        if len(filtered_companies) != len(companies):
+            self.logger.info(f"🔍 Compañías filtradas por fondo: {companies} → {filtered_companies}")
         
         # Detectar si se debe ejecutar en modo headless
         headless_mode = kwargs.get('headless', False)
@@ -36,7 +41,7 @@ class AutomationManager:
         results = {}
         
         try:
-            for company in companies:
+            for company in filtered_companies:
                 self.logger.info(f"📋 Procesando {company.upper()}...")
                 try:
                     # Importar dinámicamente la factory
@@ -78,7 +83,12 @@ class AutomationManager:
         Returns:
             Diccionario con resultados por compañía
         """
-        self.logger.info(f"⚡ Ejecutando automatizaciones en paralelo: {companies}")
+        # Filtrar compañías según el fondo seleccionado
+        filtered_companies = self._filter_companies_by_fondo(companies)
+        
+        self.logger.info(f"⚡ Ejecutando automatizaciones en paralelo: {filtered_companies}")
+        if len(filtered_companies) != len(companies):
+            self.logger.info(f"🔍 Compañías filtradas por fondo: {companies} → {filtered_companies}")
         
         # Detectar si se debe ejecutar en modo headless
         headless_mode = kwargs.get('headless', False)
@@ -94,7 +104,7 @@ class AutomationManager:
             # Importar dinámicamente la factory
             from ..factory.automation_factory import AutomationFactory
             
-            for company in companies:
+            for company in filtered_companies:
                 automation = AutomationFactory.create(company, **kwargs)
                 automations[company] = automation
                 task = self._run_single_automation(company, automation)
@@ -105,7 +115,7 @@ class AutomationManager:
             
             # Procesar resultados
             results = {}
-            for i, company in enumerate(companies):
+            for i, company in enumerate(filtered_companies):
                 result = results_list[i]
                 if isinstance(result, Exception):
                     self.logger.error(f"❌ Excepción en {company.upper()}: {result}")
@@ -121,7 +131,7 @@ class AutomationManager:
             
         except Exception as e:
             self.logger.error(f"❌ Error en ejecución paralela: {e}")
-            return {company: False for company in companies}
+            return {company: False for company in filtered_companies}
         finally:
             # Limpiar recursos
             for company, automation in automations.items():
@@ -197,5 +207,47 @@ class AutomationManager:
         
         # Limpiar extractor global
         await cleanup_global_fasecolda_extractor()
+    
+    def _filter_companies_by_fondo(self, companies: List[str]) -> List[str]:
+        """
+        Filtra las compañías según el fondo seleccionado en la configuración.
+        
+        Args:
+            companies: Lista original de compañías
+            
+        Returns:
+            Lista de compañías que deben ejecutarse para el fondo seleccionado
+        """
+        try:
+            # Obtener el fondo seleccionado
+            from ..config.client_config import ClientConfig
+            selected_fondo = ClientConfig.get_selected_fondo()
+            
+            if not selected_fondo:
+                self.logger.info("📋 No hay fondo seleccionado, ejecutando todas las compañías")
+                return companies
+            
+            # Obtener compañías permitidas para el fondo
+            from ..factory.automation_factory import AutomationFactory
+            allowed_companies = AutomationFactory.get_allowed_companies_for_fondo(selected_fondo)
+            
+            # Si el fondo tiene restricciones, usar SOLO las compañías permitidas por el fondo
+            # (no las de la lista original)
+            self.logger.info(f"🏛️ Fondo '{selected_fondo}' requiere solo: {allowed_companies}")
+            
+            if companies != allowed_companies:
+                original_companies = [company for company in companies if company.lower() not in allowed_companies]
+                if original_companies:
+                    self.logger.info(f"🔍 Fondo '{selected_fondo}' - Ignorando compañías no permitidas: {original_companies}")
+                
+                added_companies = [company for company in allowed_companies if company.lower() not in [c.lower() for c in companies]]
+                if added_companies:
+                    self.logger.info(f"➕ Fondo '{selected_fondo}' - Agregando compañías requeridas: {added_companies}")
+            
+            return allowed_companies
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error filtrando compañías por fondo: {e}")
+            return companies
         
         self.logger.info("✅ Todas las automatizaciones detenidas")

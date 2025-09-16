@@ -56,9 +56,12 @@ class ClientConfig:
     
     @classmethod
     def load_client_data(cls, client_data: Dict[str, str]) -> None:
-        """Carga nuevos datos del cliente."""
+        """Carga nuevos datos del cliente y configura variables de entorno para compatibilidad."""
         cls._current_client_data = client_data.copy()
         cls._update_class_variables()
+        
+        # También configurar variables de entorno para compatibilidad con _load_gui_overrides()
+        cls._set_environment_variables(client_data)
     
     @classmethod
     def clear_client_data(cls) -> None:
@@ -92,6 +95,12 @@ class ClientConfig:
     def _update_class_variables(cls):
         """Actualiza las variables de clase con los datos actuales."""
         data = cls._get_current_data()
+        cls._update_class_variables_direct()
+    
+    @classmethod 
+    def _update_class_variables_direct(cls):
+        """Actualiza las variables de clase directamente sin llamar _load_gui_overrides()."""
+        data = cls._get_current_data()
         cls.CLIENT_DOCUMENT_NUMBER = data.get('client_document_number', cls._DEFAULT_CLIENT_DATA['client_document_number'])
         cls.CLIENT_FIRST_NAME = data.get('client_first_name', cls._DEFAULT_CLIENT_DATA['client_first_name'])
         cls.CLIENT_SECOND_NAME = data.get('client_second_name', cls._DEFAULT_CLIENT_DATA['client_second_name'])
@@ -101,7 +110,7 @@ class ClientConfig:
         cls.CLIENT_GENDER = data.get('client_gender', cls._DEFAULT_CLIENT_DATA['client_gender'])
         cls.CLIENT_CITY = data.get('client_city', cls._DEFAULT_CLIENT_DATA['client_city'])
         cls.CLIENT_DEPARTMENT = data.get('client_department', cls._DEFAULT_CLIENT_DATA['client_department'])
-        cls.VEHICLE_PLATE = data.get('vehicle_plate', cls._DEFAULT_CLIENT_DATA['vehicle_plate'])
+        cls.VEHICLE_PLATE = data.get('vehicle_plate') if 'vehicle_plate' in data else cls._DEFAULT_CLIENT_DATA['vehicle_plate']
         cls.VEHICLE_MODEL_YEAR = data.get('vehicle_model_year', cls._DEFAULT_CLIENT_DATA['vehicle_model_year'])
         cls.VEHICLE_BRAND = data.get('vehicle_brand', cls._DEFAULT_CLIENT_DATA['vehicle_brand'])
         cls.VEHICLE_REFERENCE = data.get('vehicle_reference', cls._DEFAULT_CLIENT_DATA['vehicle_reference'])
@@ -113,6 +122,45 @@ class ClientConfig:
         cls.POLICY_NUMBER = data.get('policy_number', cls._DEFAULT_CLIENT_DATA['policy_number'])
         cls.POLICY_NUMBER_ALLIANZ = data.get('policy_number_allianz', cls._DEFAULT_CLIENT_DATA['policy_number_allianz'])
         cls.SELECTED_FONDO = data.get('selected_fondo', cls._DEFAULT_CLIENT_DATA['selected_fondo'])
+    
+    @classmethod
+    def _set_environment_variables(cls, client_data: Dict[str, str]) -> None:
+        """Configura variables de entorno GUI_* desde los datos del cliente."""
+        import os
+        
+        # Mapeo de keys de client_data a variables de entorno
+        env_mapping = {
+            'client_document_number': 'GUI_CLIENT_DOCUMENT_NUMBER',
+            'client_first_name': 'GUI_CLIENT_FIRST_NAME',
+            'client_second_name': 'GUI_CLIENT_SECOND_NAME',
+            'client_first_lastname': 'GUI_CLIENT_FIRST_LASTNAME',
+            'client_second_lastname': 'GUI_CLIENT_SECOND_LASTNAME',
+            'client_birth_date': 'GUI_CLIENT_BIRTH_DATE',
+            'client_gender': 'GUI_CLIENT_GENDER',
+            'client_city': 'GUI_CLIENT_CITY',
+            'client_department': 'GUI_CLIENT_DEPARTMENT',
+            'vehicle_plate': 'GUI_VEHICLE_PLATE',
+            'vehicle_model_year': 'GUI_VEHICLE_MODEL_YEAR',
+            'vehicle_brand': 'GUI_VEHICLE_BRAND',
+            'vehicle_reference': 'GUI_VEHICLE_REFERENCE',
+            'vehicle_full_reference': 'GUI_VEHICLE_FULL_REFERENCE',
+            'vehicle_state': 'GUI_VEHICLE_STATE',
+            'vehicle_insured_value': 'GUI_VEHICLE_INSURED_VALUE',
+            'manual_cf_code': 'GUI_MANUAL_CF_CODE',
+            'manual_ch_code': 'GUI_MANUAL_CH_CODE',
+            'policy_number': 'GUI_POLICY_NUMBER',
+            'policy_number_allianz': 'GUI_POLICY_NUMBER_ALLIANZ',
+            'selected_fondo': 'GUI_SELECTED_FONDO'
+        }
+        
+        # Configurar variables de entorno
+        for data_key, env_var in env_mapping.items():
+            if data_key in client_data:  # Si la key existe en client_data, usar ese valor (incluso si es vacío)
+                value = client_data[data_key]
+                os.environ[env_var] = str(value) if value is not None else ""
+            elif env_var in os.environ:
+                # Limpiar variable si la key no existe en client_data
+                del os.environ[env_var]
 
     # ==========================================
     # ⚙️ CONFIGURACIONES POR DEFECTO
@@ -372,13 +420,14 @@ class ClientConfig:
             'GUI_MANUAL_CF_CODE': 'manual_cf_code',
             'GUI_MANUAL_CH_CODE': 'manual_ch_code',
             'GUI_POLICY_NUMBER': 'policy_number',
-            'GUI_POLICY_NUMBER_ALLIANZ': 'policy_number_allianz'
+            'GUI_POLICY_NUMBER_ALLIANZ': 'policy_number_allianz',
+            'GUI_SELECTED_FONDO': 'selected_fondo'
         }
         
         # Cargar datos desde variables de entorno
         for env_var, data_key in env_mapping.items():
             value = os.environ.get(env_var)
-            if value:  # Solo aplicar si la variable existe y no está vacía
+            if value is not None:  # Solo aplicar si la variable existe (incluso si está vacía)
                 print(f"🔍 DEBUG ClientConfig - Cargando {env_var}={value} -> {data_key}")
                 # Normalizar ciertos campos a mayúsculas para consistencia
                 if data_key in ['client_first_name', 'client_second_name', 'client_first_lastname', 
@@ -387,9 +436,15 @@ class ClientConfig:
                     value = value.upper()
                 gui_client_data[data_key] = value
         
-        # Si se encontraron datos de GUI, cargarlos en el ClientConfig
+        # Si se encontraron datos de GUI, cargarlos directamente en _current_client_data
         if gui_client_data:
-            cls.load_client_data(gui_client_data)
+            # Si ya hay datos cargados, actualizarlos con los datos de GUI
+            if cls._current_client_data:
+                cls._current_client_data.update(gui_client_data)
+            else:
+                cls._current_client_data = gui_client_data.copy()
+            # Actualizar variables de clase sin llamar _load_gui_overrides otra vez
+            cls._update_class_variables_direct()
     
     @classmethod
     def update_vehicle_state(cls, state: str) -> None:
