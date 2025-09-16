@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 import openpyxl
 import shutil
+import unicodedata
 
 from ..config.client_config import ClientConfig
 from ..core.logger_factory import LoggerFactory
@@ -28,6 +29,19 @@ class TemplateHandler:
         
         # Mapeo de fondos a archivos de plantilla (dinámico)
         self.template_files = self._discover_template_files()
+        
+        # Mapeo de fondos a aseguradoras que cotizan
+        self.fondo_aseguradoras_map = {
+            'FEPEP': ['SURA', 'ALLIANZ', 'BOLIVAR'],
+            'CHEC': ['SURA', 'ALLIANZ', 'BOLIVAR'], 
+            'EMVARIAS': ['SURA', 'BOLIVAR'],
+            'EPM': ['SURA', 'ALLIANZ', 'BOLIVAR'],
+            'CONFAMILIA': ['SURA', 'SOLIDARIA', 'BOLIVAR'],
+            'FECORA': ['ALLIANZ', 'SOLIDARIA'],
+            'FEMFUTURO': ['SBS', 'SOLIDARIA'],
+            'FODELSA': ['SOLIDARIA'],
+            'MANPOWER': ['SOLIDARIA', 'ALLIANZ', 'BOLIVAR']
+        }
         
         # Crear directorio si no existe
         self.consolidados_path.mkdir(exist_ok=True)
@@ -59,6 +73,29 @@ class TemplateHandler:
         
         return templates
     
+    def _normalize_text(self, text: str) -> str:
+        """
+        Normaliza texto removiendo tildes, acentos y convirtiendo a minúsculas.
+        
+        Args:
+            text: Texto a normalizar
+            
+        Returns:
+            str: Texto normalizado sin tildes en minúsculas
+        """
+        if not text:
+            return ""
+        
+        # Convertir a string por si acaso
+        text = str(text)
+        
+        # Remover tildes y acentos usando unicodedata
+        text_normalized = unicodedata.normalize('NFD', text)
+        text_without_accents = ''.join(c for c in text_normalized if unicodedata.category(c) != 'Mn')
+        
+        # Convertir a minúsculas
+        return text_without_accents.lower()
+    
     def get_available_fondos(self) -> List[str]:
         """Obtiene la lista de fondos disponibles basada en las plantillas existentes."""
         available_fondos = []
@@ -79,6 +116,18 @@ class TemplateHandler:
                 self.logger.warning(f"Plantilla no encontrada para {fondo}: {template_path}")
         
         return available_fondos
+    
+    def get_fondo_aseguradoras(self, fondo: str) -> List[str]:
+        """
+        Obtiene las aseguradoras que cotiza un fondo específico.
+        
+        Args:
+            fondo: Nombre del fondo
+            
+        Returns:
+            List[str]: Lista de aseguradoras que cotiza el fondo
+        """
+        return self.fondo_aseguradoras_map.get(fondo, ['SURA', 'ALLIANZ', 'BOLIVAR'])  # Default para fondos no mapeados
     
     def generate_filename(self) -> str:
         """Genera un nombre único para el archivo basado en la fecha actual."""
@@ -195,7 +244,7 @@ class TemplateHandler:
             
             # === PARTE 2: LLENAR VALORES COTIZADOS ===
             # Usar sistema de intersección para valores cotizados
-            self._fill_quoted_values(worksheet, sura_plans, allianz_plans, bolivar_solidaria_plans)
+            self._fill_quoted_values(worksheet, fondo, sura_plans, allianz_plans, bolivar_solidaria_plans)
             
             self.logger.info(f"✅ Datos llenados en plantilla de {fondo}")
             
@@ -308,15 +357,20 @@ class TemplateHandler:
                 worksheet.cell(row=valor_total_row, column=3).value = valor_formateado
                 self.logger.info(f"✅ Valor asegurado total: {valor_formateado}")
     
-    def _fill_quoted_values(self, worksheet, sura_plans: Dict[str, str], 
+    def _fill_quoted_values(self, worksheet, fondo: str, sura_plans: Dict[str, str], 
                           allianz_plans: Dict[str, str], bolivar_solidaria_plans: Dict[str, str]):
         """
         Llena los valores cotizados usando el sistema de intersección.
         
         Busca la fila "VALOR A PAGAR (IVA INCLUIDO)" y las columnas de las aseguradoras
         para crear intersecciones donde colocar los valores.
+        Solo llena aseguradoras que el fondo tiene permitidas.
         """
-        self.logger.info("💰 Llenando valores cotizados usando sistema de intersección...")
+        self.logger.info(f"💰 Llenando valores cotizados para fondo {fondo} usando sistema de intersección...")
+        
+        # Obtener aseguradoras permitidas para el fondo
+        aseguradoras_permitidas = self.get_fondo_aseguradoras(fondo)
+        self.logger.info(f"🔒 Aseguradoras permitidas para {fondo}: {aseguradoras_permitidas}")
         
         # 1. Buscar la fila "VALOR A PAGAR (IVA INCLUIDO)"
         valor_pagar_row = self._find_cell_with_text_in_any_column(worksheet, 'valor a pagar', 'iva incluido')
@@ -350,14 +404,23 @@ class TemplateHandler:
                 'Autos Clasico': sura_plans.get('Plan Autos Clasico', 'No encontrado')
             }
         
-        # 3. Buscar columnas de SURA y llenar valores
-        self._fill_sura_values(worksheet, valor_pagar_row, sura_plan_map, plan_mapping['sura'])
+        # 3. Buscar columnas de SURA y llenar valores (si está permitida)
+        if 'SURA' in aseguradoras_permitidas:
+            self._fill_sura_values(worksheet, valor_pagar_row, sura_plan_map, plan_mapping['sura'])
+        else:
+            self.logger.info(f"⚠️ SURA omitida para fondo {fondo} (no permitida)")
         
-        # 4. Buscar columnas de ALLIANZ y llenar valores
-        self._fill_allianz_values(worksheet, valor_pagar_row, allianz_plans, plan_mapping['allianz'])
+        # 4. Buscar columnas de ALLIANZ y llenar valores (si está permitida)
+        if 'ALLIANZ' in aseguradoras_permitidas:
+            self._fill_allianz_values(worksheet, valor_pagar_row, allianz_plans, plan_mapping['allianz'])
+        else:
+            self.logger.info(f"⚠️ ALLIANZ omitida para fondo {fondo} (no permitida)")
         
-        # 5. Llenar Bolívar y Solidaria si hay espacio
-        self._fill_other_values(worksheet, valor_pagar_row, bolivar_solidaria_plans)
+        # 5. Llenar Bolívar y Solidaria si están permitidas
+        self._fill_other_values(worksheet, valor_pagar_row, bolivar_solidaria_plans, aseguradoras_permitidas, fondo)
+        
+        # 6. Calcular y llenar valores anualizados (PRIMA ANUAL IVA INCLUIDO)
+        self._fill_annualized_values(worksheet, valor_pagar_row)
     
     def _fill_sura_values(self, worksheet, valor_pagar_row: int, sura_plan_map: Dict[str, str], 
                          expected_plans: List[str]):
@@ -417,42 +480,139 @@ class TemplateHandler:
                 worksheet.cell(row=valor_pagar_row, column=column).value = formatted_value
                 self.logger.info(f"✅ ALLIANZ {plan_name}: {formatted_value} en columna {column}")
     
-    def _fill_other_values(self, worksheet, valor_pagar_row: int, bolivar_solidaria_plans: Dict[str, str]):
-        """Llena valores de otras aseguradoras si hay espacio."""
-        self.logger.info("📊 Intentando llenar valores de otras aseguradoras...")
+    def _fill_other_values(self, worksheet, valor_pagar_row: int, bolivar_solidaria_plans: Dict[str, str], 
+                         aseguradoras_permitidas: List[str], fondo: str):
+        """Llena valores de otras aseguradoras si están permitidas para el fondo."""
+        self.logger.info(f"📊 Intentando llenar valores de otras aseguradoras para fondo {fondo}...")
         
-        # Buscar columnas de BOLIVAR
-        bolivar_columns = self._find_company_columns(worksheet, 'bolivar')
-        if bolivar_columns:
-            bolivar_value = bolivar_solidaria_plans.get('Bolívar', 'No calculado')
-            if bolivar_value != 'No calculado':
-                formatted_value = self._format_currency_from_string(bolivar_value)
-                worksheet.cell(row=valor_pagar_row, column=bolivar_columns[0]).value = formatted_value
-                self.logger.info(f"✅ BOLIVAR: {formatted_value}")
+        # Buscar columnas de BOLIVAR (solo si está permitida)
+        if 'BOLIVAR' in aseguradoras_permitidas:
+            bolivar_columns = self._find_company_columns(worksheet, 'bolivar')
+            if bolivar_columns:
+                bolivar_value = bolivar_solidaria_plans.get('Bolívar', 'No calculado')
+                if bolivar_value != 'No calculado':
+                    formatted_value = self._format_currency_from_string(bolivar_value)
+                    worksheet.cell(row=valor_pagar_row, column=bolivar_columns[0]).value = formatted_value
+                    self.logger.info(f"✅ BOLIVAR: {formatted_value}")
+        else:
+            self.logger.info(f"⚠️ BOLIVAR omitida para fondo {fondo} (no permitida)")
         
-        # Buscar columnas de SOLIDARIA
-        solidaria_columns = self._find_company_columns(worksheet, 'solidaria')
-        if solidaria_columns:
-            solidaria_value = bolivar_solidaria_plans.get('Solidaria', 'No calculado')
-            if solidaria_value != 'No calculado':
-                formatted_value = self._format_currency_from_string(solidaria_value)
-                worksheet.cell(row=valor_pagar_row, column=solidaria_columns[0]).value = formatted_value
-                self.logger.info(f"✅ SOLIDARIA: {formatted_value}")
+        # Buscar columnas de SOLIDARIA (solo si está permitida)
+        if 'SOLIDARIA' in aseguradoras_permitidas:
+            solidaria_columns = self._find_company_columns(worksheet, 'solidaria')
+            if solidaria_columns:
+                solidaria_value = bolivar_solidaria_plans.get('Solidaria', 'No calculado')
+                if solidaria_value != 'No calculado':
+                    formatted_value = self._format_currency_from_string(solidaria_value)
+                    worksheet.cell(row=valor_pagar_row, column=solidaria_columns[0]).value = formatted_value
+                    self.logger.info(f"✅ SOLIDARIA: {formatted_value}")
+        else:
+            self.logger.info(f"⚠️ SOLIDARIA omitida para fondo {fondo} (no permitida)")
+        
+        # Buscar columnas de SBS (solo si está permitida)
+        if 'SBS' in aseguradoras_permitidas:
+            sbs_columns = self._find_company_columns(worksheet, 'sbs')
+            if sbs_columns:
+                sbs_value = bolivar_solidaria_plans.get('SBS', 'No calculado')
+                if sbs_value != 'No calculado':
+                    formatted_value = self._format_currency_from_string(sbs_value)
+                    worksheet.cell(row=valor_pagar_row, column=sbs_columns[0]).value = formatted_value
+                    self.logger.info(f"✅ SBS: {formatted_value}")
+        else:
+            self.logger.info(f"⚠️ SBS omitida para fondo {fondo} (no permitida)")
+    
+    def _fill_annualized_values(self, worksheet, valor_pagar_row: int):
+        """
+        Calcula y llena los valores anualizados usando la fórmula:
+        (Valor a pagar) / (Días de cobertura) * 365
+        """
+        self.logger.info("📊 Calculando valores anualizados...")
+        
+        # 1. Buscar la fila "Días de Cobertura"
+        dias_cobertura_row = self._find_cell_with_text_in_any_column(worksheet, 'días de cobertura', 'dias de cobertura')
+        if not dias_cobertura_row:
+            self.logger.warning("❌ No se encontró la fila 'Días de Cobertura'")
+            return
+        
+        # 2. Buscar la fila "PRIMA ANUAL IVA INCLUIDO"
+        prima_anual_row = self._find_cell_with_text_in_any_column(worksheet, 'prima anual', 'iva incluido')
+        if not prima_anual_row:
+            self.logger.warning("❌ No se encontró la fila 'PRIMA ANUAL IVA INCLUIDO'")
+            return
+        
+        self.logger.info(f"✅ Fila 'Días de Cobertura': {dias_cobertura_row}")
+        self.logger.info(f"✅ Fila 'PRIMA ANUAL IVA INCLUIDO': {prima_anual_row}")
+        
+        # 3. Recorrer las columnas y calcular valores anualizados
+        for col in range(2, 20):  # Columnas B hasta S
+            try:
+                # Obtener valor a pagar de la fila correspondiente
+                valor_pagar_cell = worksheet.cell(row=valor_pagar_row, column=col)
+                valor_pagar = valor_pagar_cell.value
+                
+                # Obtener días de cobertura
+                dias_cobertura_cell = worksheet.cell(row=dias_cobertura_row, column=col)
+                dias_cobertura = dias_cobertura_cell.value
+                
+                # Solo calcular si ambos valores existen y son válidos
+                if valor_pagar and dias_cobertura and str(valor_pagar).strip() != "":
+                    # Limpiar valor a pagar (quitar $ y puntos)
+                    valor_numerico = self._extract_numeric_value(str(valor_pagar))
+                    dias_numerico = self._extract_numeric_value(str(dias_cobertura))
+                    
+                    if valor_numerico > 0 and dias_numerico > 0:
+                        # Calcular valor anualizado: (Valor a pagar) / (Días de cobertura) * 365
+                        valor_anualizado = (valor_numerico / dias_numerico) * 365
+                        
+                        # Formatear como moneda
+                        valor_formateado = f"${valor_anualizado:,.0f}".replace(",", ".")
+                        
+                        # Colocar en la fila PRIMA ANUAL
+                        worksheet.cell(row=prima_anual_row, column=col).value = valor_formateado
+                        
+                        self.logger.info(f"✅ Columna {col}: ${valor_numerico:,.0f} ÷ {dias_numerico} × 365 = {valor_formateado}")
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ Error calculando valor anualizado en columna {col}: {e}")
+                continue
+    
+    def _extract_numeric_value(self, value_str: str) -> float:
+        """Extrae el valor numérico de una string, removiendo caracteres no numéricos."""
+        try:
+            if not value_str or not value_str.strip():
+                return 0.0
+            
+            # Quitar símbolos de moneda y separadores
+            clean_value = str(value_str).replace("$", "").replace(".", "").replace(",", "").strip()
+            
+            # Convertir a float
+            if clean_value.isdigit():
+                return float(clean_value)
+            else:
+                return 0.0
+                
+        except Exception:
+            return 0.0
     
     def _find_cell_with_text_in_any_column(self, worksheet, *search_terms) -> Optional[int]:
         """
         Busca una celda que contenga alguno de los términos especificados en cualquier columna.
+        Usa normalización de texto para ignorar tildes y acentos.
         
         Returns:
             int: Número de fila si se encuentra, None si no se encuentra
         """
         try:
+            # Normalizar términos de búsqueda
+            normalized_terms = [self._normalize_text(term) for term in search_terms]
+            
             for row in range(1, 100):  # Buscar en las primeras 100 filas
                 for col in range(1, 20):  # Buscar en las primeras 20 columnas
                     cell_value = worksheet.cell(row=row, column=col).value
                     if cell_value:
-                        cell_text = str(cell_value).lower()
-                        if all(term.lower() in cell_text for term in search_terms):
+                        cell_text_normalized = self._normalize_text(str(cell_value))
+                        # Verificar si TODOS los términos están en el texto de la celda
+                        if all(term in cell_text_normalized for term in normalized_terms):
                             return row
             return None
         except Exception:
@@ -461,20 +621,21 @@ class TemplateHandler:
     def _find_company_columns(self, worksheet, company_name: str) -> List[int]:
         """
         Busca las columnas de una aseguradora específica.
+        Usa normalización de texto para ignorar tildes y acentos.
         
         Returns:
             List[int]: Lista de números de columna donde aparece la aseguradora
         """
         columns = []
         try:
-            company_name_lower = company_name.lower()
+            company_name_normalized = self._normalize_text(company_name)
             
             for row in range(1, 50):  # Buscar en las primeras 50 filas
                 for col in range(1, 20):  # Buscar en las primeras 20 columnas
                     cell_value = worksheet.cell(row=row, column=col).value
                     if cell_value:
-                        cell_text = str(cell_value).lower()
-                        if company_name_lower in cell_text:
+                        cell_text_normalized = self._normalize_text(str(cell_value))
+                        if company_name_normalized in cell_text_normalized:
                             if col not in columns:
                                 columns.append(col)
             
@@ -517,17 +678,21 @@ class TemplateHandler:
     def _find_cell_with_text(self, worksheet, *search_terms) -> Optional[int]:
         """
         Busca una celda que contenga alguno de los términos especificados en la columna A.
+        Usa normalización de texto para ignorar tildes y acentos.
         
         Returns:
             int: Número de fila si se encuentra, None si no se encuentra
         """
         try:
+            # Normalizar términos de búsqueda
+            normalized_terms = [self._normalize_text(term) for term in search_terms]
+            
             for row in range(1, 50):  # Buscar en las primeras 50 filas
                 cell_value = worksheet.cell(row=row, column=1).value
                 if cell_value:
-                    cell_text = str(cell_value).lower()
-                    for term in search_terms:
-                        if term.lower() in cell_text:
+                    cell_text_normalized = self._normalize_text(str(cell_value))
+                    for normalized_term in normalized_terms:
+                        if normalized_term in cell_text_normalized:
                             return row
             return None
         except Exception:
