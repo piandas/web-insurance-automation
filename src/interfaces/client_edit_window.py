@@ -886,18 +886,48 @@ class ClientEditWindow:
         fondo_combo.bind('<<ComboboxSelected>>', self._validate_fondo_selection)
     
     def _get_available_fondos_from_images(self) -> List[str]:
-        """Obtiene los fondos disponibles desde el TemplateHandler."""
+        """Obtiene los fondos disponibles desde las plantillas disponibles."""
         try:
-            # Importar TemplateHandler para obtener fondos disponibles con plantillas
-            from consolidation.template_handler import TemplateHandler
+            # Obtener fondos directamente desde las plantillas para evitar problemas de importación
+            from pathlib import Path
             
-            template_handler = TemplateHandler()
-            available_fondos = template_handler.get_available_fondos()
+            # Ruta a las plantillas
+            base_path = Path(__file__).parent.parent.parent
+            templates_path = base_path / "Bases Consolidados"
             
-            # Filtrar duplicados y ordenar
-            fondos = sorted(list(set(available_fondos)))
+            available_fondos = []
+            processed_fondos = set()
             
-            print(f"[DEBUG] Fondos disponibles desde TemplateHandler: {fondos}")
+            if templates_path.exists():
+                # Buscar archivos que empiecen con "PANTILLA" o "PLANTILLA"
+                for file_path in templates_path.glob("*ANTILLA*.xlsx"):
+                    file_name = file_path.name
+                    
+                    # Filtrar archivos temporales de Excel (que empiecen con ~$)
+                    if file_name.startswith("~$"):
+                        continue
+                    
+                    # Extraer nombre del fondo del nombre del archivo
+                    # Formato esperado: "PANTILLA FONDO N.xlsx" o "PLANTILLA FONDO U.xlsx"
+                    if "PANTILLA" in file_name or "PLANTILLA" in file_name:
+                        # Dividir por espacios y tomar la parte después de PANTILLA/PLANTILLA
+                        parts = file_name.replace("PANTILLA", "").replace("PLANTILLA", "").strip()
+                        fondo_name = parts.replace(".xlsx", "").strip()
+                        
+                        if fondo_name:
+                            # Extraer el fondo base (sin N o U)
+                            base_fondo = fondo_name
+                            if fondo_name.endswith(' N') or fondo_name.endswith(' U'):
+                                base_fondo = fondo_name[:-2].strip()
+                            
+                            if base_fondo not in processed_fondos:
+                                available_fondos.append(base_fondo)
+                                processed_fondos.add(base_fondo)
+            
+            # Ordenar alfabéticamente
+            fondos = sorted(available_fondos)
+            
+            print(f"[DEBUG] Fondos disponibles desde plantillas: {fondos}")
             return fondos
             
         except Exception as e:
@@ -939,9 +969,20 @@ class ClientEditWindow:
             if error_label:
                 try:
                     # Mostrar aseguradoras permitidas para el fondo seleccionado
-                    from consolidation.template_handler import TemplateHandler
-                    template_handler = TemplateHandler()
-                    aseguradoras_permitidas = template_handler.get_fondo_aseguradoras(fondo)
+                    # Mapeo directo de fondos a aseguradoras para evitar problemas de importación
+                    fondo_aseguradoras_map = {
+                        'FEPEP': ['SURA', 'ALLIANZ', 'BOLIVAR'],
+                        'CHEC': ['SURA', 'ALLIANZ', 'BOLIVAR'], 
+                        'EMVARIAS': ['SURA', 'BOLIVAR'],
+                        'EPM': ['SURA', 'ALLIANZ', 'BOLIVAR'],
+                        'CONFAMILIA': ['SURA', 'SOLIDARIA', 'BOLIVAR'],
+                        'FECORA': ['ALLIANZ', 'SOLIDARIA'],
+                        'FEMFUTURO': ['SBS', 'SOLIDARIA'],
+                        'FODELSA': ['SOLIDARIA'],
+                        'MANPOWER': ['SOLIDARIA', 'ALLIANZ', 'BOLIVAR']
+                    }
+                    
+                    aseguradoras_permitidas = fondo_aseguradoras_map.get(fondo, ['SURA', 'ALLIANZ'])
                     
                     aseguradoras_text = ", ".join(aseguradoras_permitidas)
                     error_label.config(
