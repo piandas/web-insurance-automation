@@ -96,6 +96,100 @@ class TemplateHandler:
         # Convertir a minúsculas
         return text_without_accents.lower()
     
+    def _write_to_cell_safe(self, worksheet, row: int, column: int, value):
+        """
+        Escribe un valor en una celda de forma segura, manejando celdas fusionadas.
+        
+        Args:
+            worksheet: Hoja de Excel
+            row: Número de fila
+            column: Número de columna
+            value: Valor a escribir
+        """
+        try:
+            cell = worksheet.cell(row=row, column=column)
+            
+            # Verificar si la celda está fusionada
+            if hasattr(cell, 'coordinate'):
+                for merged_range in worksheet.merged_cells.ranges:
+                    if cell.coordinate in merged_range:
+                        # Es una celda fusionada, escribir en la celda principal (top-left)
+                        top_left_cell = worksheet.cell(row=merged_range.min_row, column=merged_range.min_col)
+                        top_left_cell.value = value
+                        self.logger.debug(f"📝 Escribiendo en celda fusionada {merged_range}: {value}")
+                        return
+            
+            # No es una celda fusionada, escribir normalmente
+            cell.value = value
+            self.logger.debug(f"📝 Escribiendo en celda {cell.coordinate}: {value}")
+            
+        except Exception as e:
+            self.logger.warning(f"❌ Error escribiendo en celda ({row}, {column}): {e}")
+            # Intentar escribir directamente como fallback
+            try:
+                worksheet.cell(row=row, column=column).value = value
+            except:
+                self.logger.error(f"❌ Fallback también falló para celda ({row}, {column})")
+    
+    def _find_best_plan_match(self, target_plan: str, available_plans: Dict[str, str]) -> Optional[str]:
+        """
+        Encuentra la mejor coincidencia para un plan objetivo en la lista de planes disponibles.
+        
+        Args:
+            target_plan: Nombre del plan objetivo (de la plantilla)
+            available_plans: Diccionario de planes disponibles {nombre: valor}
+            
+        Returns:
+            str: Valor del plan que mejor coincide, o None si no encuentra coincidencia
+        """
+        if not target_plan or not available_plans:
+            return None
+        
+        # Normalizar el plan objetivo
+        target_normalized = self._normalize_text(target_plan)
+        
+        # Primero buscar coincidencia exacta normalizada
+        for plan_name, plan_value in available_plans.items():
+            if self._normalize_text(plan_name) == target_normalized:
+                return plan_value
+        
+        # Buscar coincidencias parciales inteligentes
+        # Definir mapeos específicos conocidos
+        known_mappings = {
+            'autos esencial + total': ['autos esencial + totales'],
+            'autos llave en mano': ['autos llave en mano'],
+            'autos esencial': ['autos esencial'],
+            'autos plus': ['autos plus']
+        }
+        
+        # Buscar en mapeos conocidos
+        for pattern, variations in known_mappings.items():
+            if target_normalized == pattern:
+                for variation in variations:
+                    for plan_name, plan_value in available_plans.items():
+                        if self._normalize_text(plan_name) == variation:
+                            return plan_value
+        
+        # Buscar coincidencias por palabras clave
+        target_keywords = set(target_normalized.split())
+        best_match = None
+        best_score = 0
+        
+        for plan_name, plan_value in available_plans.items():
+            plan_keywords = set(self._normalize_text(plan_name).split())
+            
+            # Calcular intersección de palabras clave
+            common_keywords = target_keywords.intersection(plan_keywords)
+            score = len(common_keywords)
+            
+            # Requiere al menos 2 palabras en común para considerarlo válido
+            if score >= 2 and score > best_score:
+                best_match = plan_value
+                best_score = score
+        
+        return best_match
+    
+    
     def get_available_fondos(self) -> List[str]:
         """Obtiene la lista de fondos disponibles basada en las plantillas existentes."""
         available_fondos = []
@@ -260,61 +354,61 @@ class TemplateHandler:
         fecha_row = self._find_cell_with_text(worksheet, 'fecha de cotización', 'fecha cotización')
         if fecha_row:
             fecha_actual = datetime.now().strftime('%d/%m/%Y')
-            worksheet.cell(row=fecha_row, column=3).value = fecha_actual  # Columna C
+            self._write_to_cell_safe(worksheet, fecha_row, 3, fecha_actual)  # Columna C
             self.logger.info(f"✅ Fecha de cotización: {fecha_actual}")
         
         # 2. Nombre Funcionario o asociado (dejar vacío por ahora)
         funcionario_row = self._find_cell_with_text(worksheet, 'nombre funcionario', 'funcionario o asociado')
         if funcionario_row:
-            worksheet.cell(row=funcionario_row, column=3).value = ""
+            self._write_to_cell_safe(worksheet, funcionario_row, 3, "")
             self.logger.info(f"✅ Nombre funcionario (vacío)")
         
         # 3. C.C. Funcionario o asociado (dejar vacío por ahora)
         cc_funcionario_row = self._find_cell_with_text(worksheet, 'c.c. funcionario', 'cc funcionario')
         if cc_funcionario_row:
-            worksheet.cell(row=cc_funcionario_row, column=3).value = ""
+            self._write_to_cell_safe(worksheet, cc_funcionario_row, 3, "")
             self.logger.info(f"✅ CC funcionario (vacío)")
         
         # 4. Nombre Asegurado
         nombre_row = self._find_cell_with_text(worksheet, 'nombre asegurado')
         if nombre_row:
             nombre_completo = f"{sura_data.get('CLIENT_FIRST_NAME', '')} {sura_data.get('CLIENT_SECOND_NAME', '')} {sura_data.get('CLIENT_FIRST_LASTNAME', '')} {sura_data.get('CLIENT_SECOND_LASTNAME', '')}"
-            worksheet.cell(row=nombre_row, column=3).value = nombre_completo.strip()
+            self._write_to_cell_safe(worksheet, nombre_row, 3, nombre_completo.strip())
             self.logger.info(f"✅ Nombre asegurado: {nombre_completo.strip()}")
         
         # 5. C.C. Asegurado
         cc_asegurado_row = self._find_cell_with_text(worksheet, 'c.c. asegurado', 'cc asegurado')
         if cc_asegurado_row:
             cc_asegurado = sura_data.get('CLIENT_DOCUMENT_NUMBER', '')
-            worksheet.cell(row=cc_asegurado_row, column=3).value = cc_asegurado
+            self._write_to_cell_safe(worksheet, cc_asegurado_row, 3, cc_asegurado)
             self.logger.info(f"✅ CC asegurado: {cc_asegurado}")
         
         # 6. Placa
         placa_row = self._find_cell_with_text(worksheet, 'placa')
         if placa_row:
             placa = ClientConfig.VEHICLE_PLATE
-            worksheet.cell(row=placa_row, column=3).value = placa
+            self._write_to_cell_safe(worksheet, placa_row, 3, placa)
             self.logger.info(f"✅ Placa: {placa}")
         
         # 7. Modelo
         modelo_row = self._find_cell_with_text(worksheet, 'modelo')
         if modelo_row:
             modelo = ClientConfig.VEHICLE_MODEL_YEAR
-            worksheet.cell(row=modelo_row, column=3).value = modelo
+            self._write_to_cell_safe(worksheet, modelo_row, 3, modelo)
             self.logger.info(f"✅ Modelo: {modelo}")
         
         # 8. Marca Y Tipo
         marca_row = self._find_cell_with_text(worksheet, 'marca y tipo', 'marca tipo')
         if marca_row:
             marca_tipo = f"{ClientConfig.VEHICLE_BRAND} - {ClientConfig.VEHICLE_REFERENCE}"
-            worksheet.cell(row=marca_row, column=3).value = marca_tipo
+            self._write_to_cell_safe(worksheet, marca_row, 3, marca_tipo)
             self.logger.info(f"✅ Marca y tipo: {marca_tipo}")
         
         # 9. Clase (referencia escogida en fasecolda)
         clase_row = self._find_cell_with_text(worksheet, 'clase')
         if clase_row:
             clase = ClientConfig.VEHICLE_REFERENCE
-            worksheet.cell(row=clase_row, column=3).value = clase
+            self._write_to_cell_safe(worksheet, clase_row, 3, clase)
             self.logger.info(f"✅ Clase: {clase}")
         
         # 10. Código Fasecolda (ambos códigos CF y CH)
@@ -323,14 +417,14 @@ class TemplateHandler:
             cf_code = ClientConfig.MANUAL_CF_CODE
             ch_code = ClientConfig.MANUAL_CH_CODE
             codigo_completo = f"CF: {cf_code} / CH: {ch_code}"
-            worksheet.cell(row=codigo_row, column=3).value = codigo_completo
+            self._write_to_cell_safe(worksheet, codigo_row, 3, codigo_completo)
             self.logger.info(f"✅ Código Fasecolda: {codigo_completo}")
         
         # 11. Ciudad de circulación
         ciudad_row = self._find_cell_with_text(worksheet, 'ciudad de circulación', 'ciudad circulación')
         if ciudad_row:
             ciudad = ClientConfig.CLIENT_CITY
-            worksheet.cell(row=ciudad_row, column=3).value = ciudad
+            self._write_to_cell_safe(worksheet, ciudad_row, 3, ciudad)
             self.logger.info(f"✅ Ciudad de circulación: {ciudad}")
         
         # 12. Valor asegurado
@@ -339,13 +433,13 @@ class TemplateHandler:
             valor_asegurado = self._get_valor_asegurado()
             if valor_asegurado:
                 valor_formateado = self._format_currency(valor_asegurado)
-                worksheet.cell(row=valor_row, column=3).value = valor_formateado
+                self._write_to_cell_safe(worksheet, valor_row, 3, valor_formateado)
                 self.logger.info(f"✅ Valor asegurado: {valor_formateado}")
         
         # 13. Valor accesorios (dejar vacío por ahora)
         accesorios_row = self._find_cell_with_text(worksheet, 'valor accesorios', 'accesorios')
         if accesorios_row:
-            worksheet.cell(row=accesorios_row, column=3).value = ""
+            self._write_to_cell_safe(worksheet, accesorios_row, 3, "")
             self.logger.info(f"✅ Valor accesorios (vacío)")
         
         # 14. Valor asegurado total
@@ -354,7 +448,7 @@ class TemplateHandler:
             valor_asegurado = self._get_valor_asegurado()
             if valor_asegurado:
                 valor_formateado = self._format_currency(valor_asegurado)
-                worksheet.cell(row=valor_total_row, column=3).value = valor_formateado
+                self._write_to_cell_safe(worksheet, valor_total_row, 3, valor_formateado)
                 self.logger.info(f"✅ Valor asegurado total: {valor_formateado}")
     
     def _fill_quoted_values(self, worksheet, fondo: str, sura_plans: Dict[str, str], 
@@ -448,7 +542,7 @@ class TemplateHandler:
                     formatted_value = plan_value
                 
                 # Colocar en intersección
-                worksheet.cell(row=valor_pagar_row, column=column).value = formatted_value
+                self._write_to_cell_safe(worksheet, valor_pagar_row, column, formatted_value)
                 self.logger.info(f"✅ SURA {plan_name}: {formatted_value} en columna {column}")
     
     def _fill_allianz_values(self, worksheet, valor_pagar_row: int, allianz_plans: Dict[str, str], 
@@ -464,21 +558,34 @@ class TemplateHandler:
         
         self.logger.info(f"✅ Columnas de ALLIANZ encontradas: {allianz_columns}")
         
-        # Mapear planes a columnas
+        # Mapear planes a columnas usando mapeo inteligente
         for i, plan_name in enumerate(expected_plans):
             if i < len(allianz_columns):
                 column = allianz_columns[i]
-                plan_value = allianz_plans.get(plan_name, 'No encontrado')
+                
+                # Usar mapeo inteligente para encontrar la mejor coincidencia
+                plan_value = self._find_best_plan_match(plan_name, allianz_plans)
+                
+                if plan_value is None:
+                    # Fallback al método anterior
+                    plan_value = allianz_plans.get(plan_name, 'No encontrado')
                 
                 # Formatear valor
-                if plan_value != 'No encontrado':
+                if plan_value and plan_value != 'No encontrado':
                     formatted_value = self._format_currency_from_string(plan_value)
+                    # Log de éxito con detalles del mapeo
+                    matched_key = None
+                    for key, val in allianz_plans.items():
+                        if val == plan_value:
+                            matched_key = key
+                            break
+                    self.logger.info(f"✅ ALLIANZ {plan_name} -> {matched_key}: {formatted_value} en columna {column}")
                 else:
-                    formatted_value = plan_value
+                    formatted_value = 'No encontrado'
+                    self.logger.warning(f"⚠️ ALLIANZ {plan_name}: No encontrado en columna {column}")
                 
                 # Colocar en intersección
-                worksheet.cell(row=valor_pagar_row, column=column).value = formatted_value
-                self.logger.info(f"✅ ALLIANZ {plan_name}: {formatted_value} en columna {column}")
+                self._write_to_cell_safe(worksheet, valor_pagar_row, column, formatted_value)
     
     def _fill_other_values(self, worksheet, valor_pagar_row: int, bolivar_solidaria_plans: Dict[str, str], 
                          aseguradoras_permitidas: List[str], fondo: str):
@@ -492,7 +599,7 @@ class TemplateHandler:
                 bolivar_value = bolivar_solidaria_plans.get('Bolívar', 'No calculado')
                 if bolivar_value != 'No calculado':
                     formatted_value = self._format_currency_from_string(bolivar_value)
-                    worksheet.cell(row=valor_pagar_row, column=bolivar_columns[0]).value = formatted_value
+                    self._write_to_cell_safe(worksheet, valor_pagar_row, bolivar_columns[0], formatted_value)
                     self.logger.info(f"✅ BOLIVAR: {formatted_value}")
         else:
             self.logger.info(f"⚠️ BOLIVAR omitida para fondo {fondo} (no permitida)")
@@ -504,7 +611,7 @@ class TemplateHandler:
                 solidaria_value = bolivar_solidaria_plans.get('Solidaria', 'No calculado')
                 if solidaria_value != 'No calculado':
                     formatted_value = self._format_currency_from_string(solidaria_value)
-                    worksheet.cell(row=valor_pagar_row, column=solidaria_columns[0]).value = formatted_value
+                    self._write_to_cell_safe(worksheet, valor_pagar_row, solidaria_columns[0], formatted_value)
                     self.logger.info(f"✅ SOLIDARIA: {formatted_value}")
         else:
             self.logger.info(f"⚠️ SOLIDARIA omitida para fondo {fondo} (no permitida)")
@@ -516,7 +623,7 @@ class TemplateHandler:
                 sbs_value = bolivar_solidaria_plans.get('SBS', 'No calculado')
                 if sbs_value != 'No calculado':
                     formatted_value = self._format_currency_from_string(sbs_value)
-                    worksheet.cell(row=valor_pagar_row, column=sbs_columns[0]).value = formatted_value
+                    self._write_to_cell_safe(worksheet, valor_pagar_row, sbs_columns[0], formatted_value)
                     self.logger.info(f"✅ SBS: {formatted_value}")
         else:
             self.logger.info(f"⚠️ SBS omitida para fondo {fondo} (no permitida)")
@@ -568,7 +675,7 @@ class TemplateHandler:
                         valor_formateado = f"${valor_anualizado:,.0f}".replace(",", ".")
                         
                         # Colocar en la fila PRIMA ANUAL
-                        worksheet.cell(row=prima_anual_row, column=col).value = valor_formateado
+                        self._write_to_cell_safe(worksheet, prima_anual_row, col, valor_formateado)
                         
                         self.logger.info(f"✅ Columna {col}: ${valor_numerico:,.0f} ÷ {dias_numerico} × 365 = {valor_formateado}")
                 

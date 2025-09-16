@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-09-16T13:04:32.125833",
+  "last_updated": "2025-09-16T13:38:14.485758",
   "clients": [
     {
       "id": "20250916_114553",
@@ -66,14 +66,14 @@
         "vehicle_reference": "FORTUNER",
         "vehicle_full_reference": "TOYOTA FORTUNER",
         "vehicle_state": "Nuevo",
-        "vehicle_insured_value": "123",
+        "vehicle_insured_value": "250000000",
         "manual_cf_code": "09036238",
         "manual_ch_code": "09008262",
         "policy_number": "900001250624",
         "policy_number_allianz": "23688722",
-        "selected_fondo": "FODELSA"
+        "selected_fondo": "MANPOWER"
       },
-      "updated_at": "2025-09-16T13:04:32.125829"
+      "updated_at": "2025-09-16T13:38:14.485755"
     },
     {
       "id": "20250821_091739",
