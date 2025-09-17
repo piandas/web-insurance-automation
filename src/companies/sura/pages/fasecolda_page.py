@@ -779,6 +779,67 @@ class FasecoldaPage(BasePage):
             self.logger.error(f"❌ Error activando menú flotante: {e}")
             return False
 
+    async def _handle_optional_pdf_modal(self) -> bool:
+        """Maneja específicamente el modal opcional que aparece justo antes del PDF."""
+        self.logger.info("🔍 Verificando modal opcional específico antes del PDF...")
+        
+        try:
+            # Selectores más específicos para el modal antes del PDF
+            pdf_modal_selectors = [
+                # Botones de aceptar/confirmar genéricos
+                "paper-button:has-text('Aceptar')",
+                "paper-button:has-text('ACEPTAR')",
+                "paper-button:has-text('Confirmar')",
+                "paper-button:has-text('OK')",
+                "paper-button:has-text('Continuar')",
+                "paper-button:has-text('Sí')",
+                
+                # Por ID específicos
+                "#btnOne",
+                "#btnAceptar", 
+                "#accept-btn",
+                "#confirm-btn",
+                
+                # Por clases
+                "paper-button[class*='accent']",
+                "paper-button[class*='primary']",
+                ".accept-button",
+                ".confirm-button",
+                
+                # Botones en diálogos/modales
+                "paper-dialog paper-button:has-text('Aceptar')",
+                "paper-dialog-scrollable paper-button:has-text('Aceptar')",
+                "iron-overlay-backdrop ~ * paper-button:has-text('Aceptar')"
+            ]
+            
+            # Intentar con cada selector con timeouts más largos
+            for selector in pdf_modal_selectors:
+                try:
+                    self.logger.info(f"🔍 Probando selector: {selector}")
+                    
+                    # Verificar visibilidad con timeout corto
+                    if await self.is_visible_safe(selector, timeout=2000):
+                        self.logger.info(f"📋 Modal PDF específico encontrado: {selector}")
+                        
+                        # Hacer clic con timeout más largo
+                        if await self.safe_click(selector, timeout=8000):
+                            self.logger.info("✅ Modal PDF específico manejado exitosamente")
+                            await self.page.wait_for_timeout(3000)  # Esperar más tiempo después del clic
+                            return True
+                        else:
+                            self.logger.warning(f"⚠️ No se pudo hacer clic en modal PDF: {selector}")
+                            
+                except Exception as e:
+                    self.logger.debug(f"Selector {selector} falló: {e}")
+                    continue
+            
+            self.logger.info("✅ No se detectó modal opcional específico para PDF")
+            return True
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error verificando modal PDF específico: {e}")
+            return True  # No bloqueamos el flujo
+
     async def download_pdf_quote(self) -> bool:
         """Descarga el PDF de la cotización usando conversión blob → base64."""
         self.logger.info("📄 Iniciando descarga de PDF...")
@@ -786,6 +847,9 @@ class FasecoldaPage(BasePage):
         try:
             # Primero manejar cualquier modal que pueda aparecer
             await self.handle_pre_action_modal()
+            
+            # Verificación específica para modal opcional antes del PDF
+            await self._handle_optional_pdf_modal()
             
             # Esperar por nueva pestaña y hacer clic en PDF
             self.logger.info("🌐 Detectando nueva pestaña con el PDF...")

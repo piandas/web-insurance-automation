@@ -1,6 +1,32 @@
 {
-  "last_updated": "2025-09-16T18:28:32.013813",
+  "last_updated": "2025-09-17T18:08:37.371136",
   "clients": [
+    {
+      "id": "20250917_174931",
+      "name": "SERGIO AREIZA - Ejecución 2025-09-17 17:49 (Con errores)",
+      "created_at": "2025-09-17T17:49:31.466537",
+      "data": {
+        "client_document_number": "71750823",
+        "client_first_name": "SERGIO",
+        "client_second_name": "ALEXIS",
+        "client_first_lastname": "AREIZA",
+        "client_second_lastname": "LOAIZA",
+        "client_birth_date": "1974-07-06",
+        "client_gender": "M",
+        "client_city": "MEDELLIN",
+        "client_department": "ANTIOQUIA",
+        "vehicle_plate": "",
+        "vehicle_model_year": "2026",
+        "vehicle_brand": "MAZDA",
+        "vehicle_reference": "CX50 - UTILITARIO DEPORTIVO 4X4",
+        "vehicle_full_reference": "MAZDA CX-50 GRAND TOURING",
+        "vehicle_state": "Nuevo",
+        "manual_cf_code": "20900024001",
+        "manual_ch_code": "20900024001",
+        "policy_number": "040007325677",
+        "policy_number_allianz": "23541048"
+      }
+    },
     {
       "id": "20250916_114553",
       "name": "CLAUDIA MEDINA",
@@ -127,9 +153,10 @@
         "manual_cf_code": "20900024001",
         "manual_ch_code": "20900024001",
         "policy_number": "040007325677",
-        "policy_number_allianz": "23541048"
+        "policy_number_allianz": "23541048",
+        "selected_fondo": "EPM"
       },
-      "updated_at": "2025-08-27T18:02:11.999870"
+      "updated_at": "2025-09-17T18:08:37.371128"
     }
   ]
 }
