@@ -1,6 +1,14 @@
 @echo off
 chcp 65001 >nul
 title Sistema de Automatizacion de Cotizaciones
+:: Configurar ventana de consola mas pequena y minimizada
+mode con: cols=80 lines=25
+:: Minimizar la ventana de consola
+if not defined MINIMIZED (
+    set MINIMIZED=1
+    start /min cmd /c "%~f0" %*
+    exit
+)
 echo.
 echo ===============================================
 echo   Sistema de Automatizacion de Cotizaciones

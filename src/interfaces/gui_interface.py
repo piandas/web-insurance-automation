@@ -51,17 +51,25 @@ class AutomationGUI:
         self.root = tk.Tk()
         self.root.title("Sistema de Automatización de Cotizaciones")
         
-        # Configurar tamaño y centrar ventana
-        window_width = 600
-        window_height = 750  # Aumentado para acomodar consola más larga
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
+        # Maximizar ventana al inicio
+        self.root.state('zoomed')  # Para Windows
         
-        # Calcular posición para centrar
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
+        # Configuración de respaldo por si 'zoomed' no funciona
+        try:
+            self.root.wm_state('zoomed')
+        except tk.TclError:
+            # Si no funciona, usar tamaño grande
+            window_width = 1200
+            window_height = 800
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            
+            # Calcular posición para centrar
+            x = (screen_width - window_width) // 2
+            y = (screen_height - window_height) // 2
+            
+            self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
         
-        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
         self.root.resizable(True, True)
         
         # Variables de configuración

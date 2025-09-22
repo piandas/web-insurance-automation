@@ -80,7 +80,7 @@ class ClientEditWindow:
         # Crear ventana
         self.window = tk.Toplevel() if parent_window else tk.Tk()
         self.window.title("Editor de Datos del Cliente")
-        self.window.geometry("1200x880")  # Más ancha y menos larga
+        self.window.geometry("900x600")  # Más pequeña - ancho reducido de 1200 a 900, alto de 880 a 600
         self.window.resizable(True, True)
         
         # Configurar ventana para mantenerse al frente cuando sea necesario
@@ -444,7 +444,7 @@ class ClientEditWindow:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Bind mousewheel
+        # Bind mousewheel - mejorado para funcionar en toda la ventana
         def _on_mousewheel(event):
             bbox = canvas.bbox("inner")
             if not bbox:
@@ -454,7 +454,20 @@ class ClientEditWindow:
                 return  # no hay nada que desplazar
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
+        # Bind scroll del mouse a múltiples elementos para mejor experiencia
         canvas.bind("<MouseWheel>", _on_mousewheel)
+        scrollable_frame.bind("<MouseWheel>", _on_mousewheel)
+        content_frame.bind("<MouseWheel>", _on_mousewheel)
+        self.window.bind("<MouseWheel>", _on_mousewheel)
+        
+        # Función recursiva para bind a todos los widgets hijos
+        def bind_to_mousewheel(widget):
+            widget.bind("<MouseWheel>", _on_mousewheel)
+            for child in widget.winfo_children():
+                bind_to_mousewheel(child)
+        
+        # Aplicar bind después de crear todos los elementos
+        self.window.after(100, lambda: bind_to_mousewheel(content_frame))
     
     def create_history_section(self, parent):
         """Crea la sección de historial."""
