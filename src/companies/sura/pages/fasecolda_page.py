@@ -580,13 +580,20 @@ class FasecoldaPage(BasePage):
                     if element:
                         text_content = await element.text_content()
                         if text_content and text_content.strip():
-                            # Extraer solo los números del texto
-                            import re
-                            numbers = re.sub(r'[^\d]', '', text_content)
-                            if numbers:
-                                value = float(numbers)
-                                self.logger.info(f"✅ Prima anual extraída: ${value:,.0f} (texto original: '{text_content.strip()}')")
-                                return value
+                            # ⏱️ ESPERA ADICIONAL DE 2 SEGUNDOS PARA COMPUTADORES LENTOS
+                            self.logger.info("✅ Valor detectado, esperando 2 segundos adicionales para estabilización...")
+                            await self.page.wait_for_timeout(2000)  # Espera 2 segundos
+                            
+                            # Volver a extraer el texto después de la espera para asegurar estabilidad
+                            text_content = await element.text_content()
+                            if text_content and text_content.strip():
+                                # Extraer solo los números del texto
+                                import re
+                                numbers = re.sub(r'[^\d]', '', text_content)
+                                if numbers:
+                                    value = float(numbers)
+                                    self.logger.info(f"✅ Prima anual extraída: ${value:,.0f} (texto original: '{text_content.strip()}')")
+                                    return value
                     
                     await self.page.wait_for_timeout(1000)
                     

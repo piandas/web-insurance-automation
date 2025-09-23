@@ -1,9 +1,9 @@
 {
-  "last_updated": "2025-09-22T18:56:31.225925",
+  "last_updated": "2025-09-22T20:08:15.711880",
   "clients": [
     {
       "id": "20250917_174931",
-      "name": "SERGIO AREIZA - Ejecución 2025-09-17 17:49 (Con errores)",
+      "name": "SERGIO AREIZA",
       "created_at": "2025-09-17T17:49:31.466537",
       "data": {
         "client_document_number": "71750823",
@@ -21,11 +21,14 @@
         "vehicle_reference": "CX50 - UTILITARIO DEPORTIVO 4X4",
         "vehicle_full_reference": "MAZDA CX-50 GRAND TOURING",
         "vehicle_state": "Nuevo",
+        "vehicle_insured_value": "120000000",
         "manual_cf_code": "20900024001",
         "manual_ch_code": "20900024001",
         "policy_number": "040007325677",
-        "policy_number_allianz": "23541048"
-      }
+        "policy_number_allianz": "23688722",
+        "selected_fondo": "MANPOWER"
+      },
+      "updated_at": "2025-09-22T20:08:15.711873"
     },
     {
       "id": "20250916_114553",
@@ -43,18 +46,18 @@
         "client_department": "ANTIOQUIA",
         "vehicle_plate": "",
         "vehicle_model_year": "2026",
-        "vehicle_brand": "VOLKSWAGEN",
+        "vehicle_brand": "TOYOTA",
         "vehicle_reference": "FORTUNER",
-        "vehicle_full_reference": "VOLKSWAGEN FORTUNER",
+        "vehicle_full_reference": "TOYOTA FORTUNER",
         "vehicle_state": "Nuevo",
-        "vehicle_insured_value": "50000000",
+        "vehicle_insured_value": "250000000",
         "manual_cf_code": "09036238",
         "manual_ch_code": "09008262",
         "policy_number": "900001250624",
         "policy_number_allianz": "23486665",
-        "selected_fondo": "FODELSA"
+        "selected_fondo": "EPM"
       },
-      "updated_at": "2025-09-22T18:56:31.225917"
+      "updated_at": "2025-09-22T19:57:20.332744"
     },
     {
       "id": "20250830_100357",
@@ -97,9 +100,9 @@
         "manual_ch_code": "09008262",
         "policy_number": "900001250624",
         "policy_number_allianz": "23688722",
-        "selected_fondo": "EPM"
+        "selected_fondo": "MANPOWER"
       },
-      "updated_at": "2025-09-16T18:28:32.013809"
+      "updated_at": "2025-09-22T20:04:01.212681"
     },
     {
       "id": "20250821_091739",

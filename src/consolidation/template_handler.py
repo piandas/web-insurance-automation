@@ -159,7 +159,9 @@ class TemplateHandler:
             'autos esencial + total': ['autos esencial + totales'],
             'autos llave en mano': ['autos llave en mano'],
             'autos esencial': ['autos esencial'],
-            'autos plus': ['autos plus']
+            'autos plus': ['autos plus'],
+            'autos parcial': ['global franquicia'],  # Sinónimo para Sura
+            'global franquicia': ['autos parcial']   # Sinónimo bidireccional
         }
         
         # Buscar en mapeos conocidos
@@ -537,11 +539,19 @@ class TemplateHandler:
         
         self.logger.info(f"✅ Columnas de SURA encontradas: {sura_columns}")
         
-        # Mapear planes a columnas
+        # Mapear planes a columnas con búsqueda inteligente por nombre
         for i, plan_name in enumerate(expected_plans):
             if i < len(sura_columns):
                 column = sura_columns[i]
                 plan_value = sura_plan_map.get(plan_name, 'No encontrado')
+                
+                # Si es "Autos Parcial", también buscar por "Global Franquicia"
+                if plan_name == 'Autos Parcial' and plan_value == 'No encontrado':
+                    # Buscar si hay una columna específica de "Global Franquicia"
+                    global_franquicia_col = self._find_column_by_header(worksheet, 'global franquicia')
+                    if global_franquicia_col:
+                        column = global_franquicia_col
+                        self.logger.info(f"✅ Usando columna 'Global Franquicia' para {plan_name}")
                 
                 # Formatear valor
                 if plan_value != 'No encontrado':
@@ -552,6 +562,15 @@ class TemplateHandler:
                 # Colocar en intersección
                 self._write_to_cell_safe(worksheet, valor_pagar_row, column, formatted_value)
                 self.logger.info(f"✅ SURA {plan_name}: {formatted_value} en columna {column}")
+        
+        # Buscar adicicionalmente por nombre específico "Global Franquicia"
+        global_franquicia_col = self._find_column_by_header(worksheet, 'global franquicia')
+        if global_franquicia_col:
+            parcial_value = sura_plan_map.get('Autos Parcial', 'No encontrado')
+            if parcial_value != 'No encontrado':
+                formatted_value = self._format_currency_from_string(parcial_value)
+                self._write_to_cell_safe(worksheet, valor_pagar_row, global_franquicia_col, formatted_value)
+                self.logger.info(f"✅ SURA Global Franquicia (sinónimo): {formatted_value} en columna {global_franquicia_col}")
     
     def _fill_allianz_values(self, worksheet, valor_pagar_row: int, allianz_plans: Dict[str, str], 
                            expected_plans: List[str]):
@@ -773,6 +792,37 @@ class TemplateHandler:
             return sorted(columns)
         except Exception:
             return []
+
+    def _find_column_by_header(self, worksheet, header_text: str) -> Optional[int]:
+        """
+        Busca una columna específica por su texto de encabezado.
+        Usa normalización de texto para ignorar tildes y acentos.
+        
+        Args:
+            worksheet: Hoja de Excel
+            header_text: Texto del encabezado a buscar
+            
+        Returns:
+            int: Número de columna si se encuentra, None si no se encuentra
+        """
+        try:
+            header_normalized = self._normalize_text(header_text)
+            
+            # Buscar en las primeras filas (donde suelen estar los encabezados)
+            for row in range(1, 20):  # Buscar en las primeras 20 filas
+                for col in range(1, 30):  # Buscar en las primeras 30 columnas
+                    cell_value = worksheet.cell(row=row, column=col).value
+                    if cell_value:
+                        cell_text_normalized = self._normalize_text(str(cell_value))
+                        if header_normalized in cell_text_normalized:
+                            self.logger.debug(f"✅ Encabezado '{header_text}' encontrado en columna {col}")
+                            return col
+            
+            self.logger.debug(f"❌ Encabezado '{header_text}' no encontrado")
+            return None
+        except Exception as e:
+            self.logger.error(f"Error buscando encabezado '{header_text}': {e}")
+            return None
     
     def _format_currency_from_string(self, value: str) -> str:
         """Formatea un valor string como moneda colombiana."""
@@ -919,32 +969,37 @@ class TemplateHandler:
         try:
             self.logger.info("📅 Configurando fechas de vigencia y calculando días de cobertura...")
             
-            # 1. Configurar fecha inicio vigencia con la fecha de hoy
-            fecha_inicio_row = self._find_cell_with_text_in_any_column(worksheet, 'fecha inicio vigencia')
-            if not fecha_inicio_row:
-                # Intentar variaciones
-                fecha_inicio_row = self._find_cell_with_text_in_any_column(worksheet, 'inicio vigencia')
+            # 1. Obtener todas las columnas de aseguradoras
+            all_company_columns = []
+            companies = ['sura', 'allianz', 'bolivar', 'solidaria', 'sbs']
+            for company in companies:
+                company_cols = self._find_company_columns(worksheet, company)
+                all_company_columns.extend(company_cols)
             
+            if not all_company_columns:
+                self.logger.warning("❌ No se encontraron columnas de aseguradoras")
+                return
+            
+            self.logger.info(f"✅ Columnas de aseguradoras encontradas: {sorted(set(all_company_columns))}")
+            
+            # 2. Configurar fecha inicio vigencia con la fecha de hoy
+            fecha_inicio_row = self._find_cell_with_text_in_any_column(worksheet, 'fecha inicio vigencia', 'inicio vigencia')
             if fecha_inicio_row:
                 fecha_hoy = datetime.now().strftime('%d/%m/%Y')
-                # Buscar la columna correcta para llenar (generalmente columna 2 o 3)
-                target_col = self._find_target_column_for_row(worksheet, fecha_inicio_row)
-                self._write_to_cell_safe(worksheet, fecha_inicio_row, target_col, fecha_hoy)
-                self.logger.info(f"✅ Fecha inicio vigencia: {fecha_hoy} en fila {fecha_inicio_row}, columna {target_col}")
+                for col in sorted(set(all_company_columns)):
+                    self._write_to_cell_safe(worksheet, fecha_inicio_row, col, fecha_hoy)
+                self.logger.info(f"✅ Fecha inicio vigencia: {fecha_hoy} en todas las columnas")
             else:
                 self.logger.warning("❌ No se encontró la fila 'Fecha inicio vigencia'")
                 return
             
-            # 2. Buscar fecha fin vigencia para calcular días de cobertura
-            fecha_fin_row = self._find_cell_with_text_in_any_column(worksheet, 'fecha fin vigencia', 'fecha fin de vigencia')
-            if not fecha_fin_row:
-                fecha_fin_row = self._find_cell_with_text_in_any_column(worksheet, 'fin vigencia')
-            
+            # 3. Buscar fecha fin vigencia para calcular días de cobertura
+            fecha_fin_row = self._find_cell_with_text_in_any_column(worksheet, 'fecha fin vigencia', 'fecha fin de vigencia', 'fin vigencia')
             if not fecha_fin_row:
                 self.logger.warning("❌ No se encontró la fila 'Fecha fin vigencia'")
                 return
             
-            # 3. Obtener fecha fin vigencia (buscar en varias columnas)
+            # 4. Obtener fecha fin vigencia (buscar en varias columnas)
             fecha_fin_value = None
             for col in range(2, 10):  # Buscar en columnas B a I
                 cell_value = worksheet.cell(row=fecha_fin_row, column=col).value
@@ -956,24 +1011,23 @@ class TemplateHandler:
                 self.logger.warning("❌ No hay fecha fin vigencia configurada en la plantilla")
                 return
             
-            # 4. Calcular días de cobertura
+            # 5. Calcular días de cobertura
             dias_cobertura = self._calculate_coverage_days(fecha_hoy, str(fecha_fin_value))
             if dias_cobertura <= 0:
                 self.logger.warning(f"❌ Días de cobertura inválidos: {dias_cobertura}")
                 return
             
-            # 5. Buscar y llenar días de cobertura
+            # 6. Llenar días de cobertura en todas las columnas
             dias_cobertura_row = self._find_cell_with_text_in_any_column(worksheet, 'días de cobertura', 'dias de cobertura')
             if dias_cobertura_row:
-                # Llenar días de cobertura en la columna correcta
-                target_col = self._find_target_column_for_row(worksheet, dias_cobertura_row)
-                self._write_to_cell_safe(worksheet, dias_cobertura_row, target_col, dias_cobertura)
-                self.logger.info(f"✅ Días de cobertura: {dias_cobertura} días en fila {dias_cobertura_row}, columna {target_col}")
+                for col in sorted(set(all_company_columns)):
+                    self._write_to_cell_safe(worksheet, dias_cobertura_row, col, dias_cobertura)
+                self.logger.info(f"✅ Días de cobertura: {dias_cobertura} días en todas las columnas")
             else:
                 self.logger.warning("❌ No se encontró la fila 'Días de cobertura'")
             
-            # 6. Calcular prima anual usando el valor existente
-            self._calculate_prima_anual(worksheet, dias_cobertura)
+            # 7. Calcular prima anual en todas las columnas
+            self._calculate_prima_anual_all_columns(worksheet, dias_cobertura, all_company_columns)
             
         except Exception as e:
             self.logger.error(f"Error configurando fechas y días de cobertura: {e}")
@@ -991,6 +1045,55 @@ class TemplateHandler:
         
         # Si todas están ocupadas, usar columna B (2) por defecto
         return 2
+
+    def _calculate_prima_anual_all_columns(self, worksheet, dias_cobertura: int, company_columns: List[int]):
+        """
+        Calcula la prima anual en todas las columnas de aseguradoras.
+        """
+        try:
+            self.logger.info(f"📊 Calculando prima anual en todas las columnas con {dias_cobertura} días de cobertura...")
+            
+            # 1. Buscar las filas necesarias
+            valor_pagar_row = self._find_cell_with_text_in_any_column(worksheet, 'valor a pagar')
+            prima_anual_row = self._find_cell_with_text_in_any_column(worksheet, 'prima anual')
+            
+            if not valor_pagar_row or not prima_anual_row:
+                self.logger.warning("❌ No se encontraron las filas necesarias para calcular prima anual")
+                return
+            
+            # 2. Calcular prima anual para cada columna de aseguradora
+            valores_calculados = 0
+            for col in sorted(set(company_columns)):
+                try:
+                    # Obtener valor a pagar de esta columna
+                    valor_pagar_cell = worksheet.cell(row=valor_pagar_row, column=col)
+                    valor_pagar = valor_pagar_cell.value
+                    
+                    if valor_pagar and str(valor_pagar).strip() and str(valor_pagar).strip() != "":
+                        # Extraer valor numérico
+                        valor_numerico = self._extract_numeric_value(str(valor_pagar))
+                        if valor_numerico > 0:
+                            # Calcular prima anual: (Valor a pagar) / (Días de cobertura) * 365
+                            prima_anual_calculada = (valor_numerico / dias_cobertura) * 365
+                            prima_formateada = f"${prima_anual_calculada:,.0f}".replace(",", ".")
+                            
+                            # Escribir en la misma columna
+                            self._write_to_cell_safe(worksheet, prima_anual_row, col, prima_formateada)
+                            valores_calculados += 1
+                            
+                            self.logger.debug(f"✅ Prima anual columna {col}: {prima_formateada}")
+                
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Error calculando prima anual en columna {col}: {e}")
+                    continue
+            
+            if valores_calculados > 0:
+                self.logger.info(f"✅ Prima anual calculada en {valores_calculados} columnas")
+            else:
+                self.logger.warning("⚠️ No se calcularon primas anuales")
+                
+        except Exception as e:
+            self.logger.error(f"Error calculando prima anual en todas las columnas: {e}")
 
     def _calculate_prima_anual(self, worksheet, dias_cobertura: int):
         """
