@@ -248,3 +248,24 @@ python -c "from src.factory.automation_factory import AutomationFactory; print(A
 **Desarrollado para Infondo Agencias de Seguros por el Ingeniero Santiago Bustos usando Playwright + Python**
 
 *Arquitectura escalable • Logging avanzado • Configuración flexible • Ejecución paralela*
+
+
+
+Ahora cambairemosun poco la estructura de los consoldaidos en el excel, te dire exctamanete que:
+
+0. Sura Autos Parcial ahora se llama Globlal Franquicia pero es lo mismo
+1. Allianz escencial ya no se tiene en ceunta apra niognuan compnia
+
+2. CHEC: Nueva
+Sura	Sura	Allianz	Allianz	Allianz	Bolivar
+Global Franquicia	Autos Global	Autos Esencial + Total	Autos Plus	Autos llave en mano	
+
+USado:
+Sura	Sura	Sura	Allianz	Allianz	Bolivar
+Global Franquicia	Autos Global	Autos Clasico	Autos Esencial + Total	Autos Plus	
+
+3. Confmailia: Nuevo
+Sura	Sura	Solidaria	Bolivar
+ Global Franquicia	Autos Global		
+
+Usado:

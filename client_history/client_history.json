@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-09-17T18:08:37.371136",
+  "last_updated": "2025-09-22T18:56:31.225925",
   "clients": [
     {
       "id": "20250917_174931",
@@ -43,18 +43,18 @@
         "client_department": "ANTIOQUIA",
         "vehicle_plate": "",
         "vehicle_model_year": "2026",
-        "vehicle_brand": "TOYOTA",
+        "vehicle_brand": "VOLKSWAGEN",
         "vehicle_reference": "FORTUNER",
-        "vehicle_full_reference": "TOYOTA FORTUNER",
+        "vehicle_full_reference": "VOLKSWAGEN FORTUNER",
         "vehicle_state": "Nuevo",
         "vehicle_insured_value": "50000000",
         "manual_cf_code": "09036238",
         "manual_ch_code": "09008262",
         "policy_number": "900001250624",
         "policy_number_allianz": "23486665",
-        "selected_fondo": "FEPEP"
+        "selected_fondo": "FODELSA"
       },
-      "updated_at": "2025-09-16T11:55:49.585579"
+      "updated_at": "2025-09-22T18:56:31.225917"
     },
     {
       "id": "20250830_100357",

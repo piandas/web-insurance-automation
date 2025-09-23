@@ -340,6 +340,15 @@ class TemplateHandler:
             # Usar sistema de intersección para valores cotizados
             self._fill_quoted_values(worksheet, fondo, sura_plans, allianz_plans, bolivar_solidaria_plans)
             
+            # === PARTE 3: CONFIGURAR FECHAS Y CALCULAR DÍAS DE COBERTURA ===
+            # Configurar fechas de vigencia y calcular días automáticamente
+            self.logger.info("🔄 Iniciando configuración de fechas y días de cobertura...")
+            self._setup_vigencia_dates_and_coverage(worksheet)
+            
+            # === PARTE 4: REEMPLAZAR CELDAS "VALOR ASEGURADO AUTO" ===
+            # Buscar y reemplazar todas las celdas que contengan "VALOR ASEGURADO AUTO"
+            self._replace_valor_asegurado_cells(worksheet)
+            
             self.logger.info(f"✅ Datos llenados en plantilla de {fondo}")
             
         except Exception as e:
@@ -513,8 +522,7 @@ class TemplateHandler:
         # 5. Llenar Bolívar y Solidaria si están permitidas
         self._fill_other_values(worksheet, valor_pagar_row, bolivar_solidaria_plans, aseguradoras_permitidas, fondo)
         
-        # 6. Calcular y llenar valores anualizados (PRIMA ANUAL IVA INCLUIDO)
-        self._fill_annualized_values(worksheet, valor_pagar_row)
+        # Nota: Los valores anualizados se calculan en _setup_vigencia_dates_and_coverage()
     
     def _fill_sura_values(self, worksheet, valor_pagar_row: int, sura_plan_map: Dict[str, str], 
                          expected_plans: List[str]):
@@ -689,16 +697,25 @@ class TemplateHandler:
             if not value_str or not value_str.strip():
                 return 0.0
             
-            # Quitar símbolos de moneda y separadores
-            clean_value = str(value_str).replace("$", "").replace(".", "").replace(",", "").strip()
+            # Limpiar valor - quitar símbolos y mantener solo números
+            clean_value = str(value_str).replace("$", "").replace(".", "").replace(",", "").replace(" ", "").strip()
+            
+            # Quitar cualquier carácter no numérico
+            numeric_only = ''.join(c for c in clean_value if c.isdigit())
+            
+            self.logger.debug(f"🔢 Extrayendo: '{value_str}' → '{clean_value}' → '{numeric_only}'")
             
             # Convertir a float
-            if clean_value.isdigit():
-                return float(clean_value)
+            if numeric_only and numeric_only.isdigit():
+                result = float(numeric_only)
+                self.logger.debug(f"✅ Valor numérico extraído: {result}")
+                return result
             else:
+                self.logger.warning(f"⚠️ No se pudo extraer valor numérico de: '{value_str}'")
                 return 0.0
                 
-        except Exception:
+        except Exception as e:
+            self.logger.error(f"Error extrayendo valor numérico de '{value_str}': {e}")
             return 0.0
     
     def _find_cell_with_text_in_any_column(self, worksheet, *search_terms) -> Optional[int]:
@@ -713,16 +730,23 @@ class TemplateHandler:
             # Normalizar términos de búsqueda
             normalized_terms = [self._normalize_text(term) for term in search_terms]
             
+            self.logger.debug(f"🔍 Buscando términos: {search_terms}")
+            
             for row in range(1, 100):  # Buscar en las primeras 100 filas
                 for col in range(1, 20):  # Buscar en las primeras 20 columnas
                     cell_value = worksheet.cell(row=row, column=col).value
                     if cell_value:
                         cell_text_normalized = self._normalize_text(str(cell_value))
-                        # Verificar si TODOS los términos están en el texto de la celda
-                        if all(term in cell_text_normalized for term in normalized_terms):
-                            return row
+                        # Verificar si CUALQUIER término está en el texto de la celda
+                        for normalized_term in normalized_terms:
+                            if normalized_term in cell_text_normalized:
+                                self.logger.debug(f"✅ Término '{normalized_term}' encontrado en fila {row}, columna {col}: '{cell_value}'")
+                                return row
+            
+            self.logger.debug(f"❌ No se encontraron términos: {search_terms}")
             return None
-        except Exception:
+        except Exception as e:
+            self.logger.error(f"Error buscando texto en celdas: {e}")
             return None
     
     def _find_company_columns(self, worksheet, company_name: str) -> List[int]:
@@ -842,3 +866,287 @@ class TemplateHandler:
             
         except Exception:
             return value
+
+    def _replace_valor_asegurado_cells(self, worksheet):
+        """
+        Busca y reemplaza todas las celdas que contengan exactamente 'VALOR ASEGURADO AUTO'
+        por el valor asegurado real del vehículo.
+        """
+        try:
+            valor_asegurado = self._get_valor_asegurado()
+            if not valor_asegurado:
+                self.logger.warning("No se pudo obtener el valor asegurado para reemplazar")
+                return
+            
+            valor_formateado = self._format_currency(valor_asegurado)
+            reemplazos_realizados = 0
+            
+            self.logger.info(f"🔍 Buscando celdas con 'VALOR ASEGURADO AUTO' para reemplazar con: {valor_formateado}")
+            
+            # Buscar en un rango amplio de celdas
+            for row in range(1, 200):  # Buscar en las primeras 200 filas
+                for col in range(1, 30):  # Buscar en las primeras 30 columnas
+                    try:
+                        cell = worksheet.cell(row=row, column=col)
+                        if cell.value:
+                            cell_text = str(cell.value).strip().upper()
+                            # Buscar texto que contenga exactamente "VALOR ASEGURADO AUTO"
+                            if "VALOR ASEGURADO AUTO" in cell_text:
+                                # Reemplazar completamente el contenido de la celda
+                                cell.value = valor_formateado
+                                reemplazos_realizados += 1
+                                self.logger.info(f"✅ Reemplazado en celda {cell.coordinate}: '{cell_text}' → '{valor_formateado}'")
+                    except Exception as e:
+                        # Continuar si hay error en una celda específica
+                        continue
+            
+            if reemplazos_realizados > 0:
+                self.logger.info(f"✅ Total de reemplazos realizados: {reemplazos_realizados}")
+            else:
+                self.logger.warning("⚠️ No se encontraron celdas con 'VALOR ASEGURADO AUTO' para reemplazar")
+                
+        except Exception as e:
+            self.logger.error(f"Error al reemplazar celdas de VALOR ASEGURADO AUTO: {e}")
+
+    def _setup_vigencia_dates_and_coverage(self, worksheet):
+        """
+        Configura automáticamente las fechas de vigencia y calcula los días de cobertura.
+        
+        - Fecha inicio vigencia: Automáticamente la fecha de hoy
+        - Días de cobertura: Calcula automáticamente (fecha fin - fecha inicio)
+        - Prima anual IVA incluido: Usa los días calculados para la fórmula
+        """
+        try:
+            self.logger.info("📅 Configurando fechas de vigencia y calculando días de cobertura...")
+            
+            # 1. Configurar fecha inicio vigencia con la fecha de hoy
+            fecha_inicio_row = self._find_cell_with_text_in_any_column(worksheet, 'fecha inicio vigencia')
+            if not fecha_inicio_row:
+                # Intentar variaciones
+                fecha_inicio_row = self._find_cell_with_text_in_any_column(worksheet, 'inicio vigencia')
+            
+            if fecha_inicio_row:
+                fecha_hoy = datetime.now().strftime('%d/%m/%Y')
+                # Buscar la columna correcta para llenar (generalmente columna 2 o 3)
+                target_col = self._find_target_column_for_row(worksheet, fecha_inicio_row)
+                self._write_to_cell_safe(worksheet, fecha_inicio_row, target_col, fecha_hoy)
+                self.logger.info(f"✅ Fecha inicio vigencia: {fecha_hoy} en fila {fecha_inicio_row}, columna {target_col}")
+            else:
+                self.logger.warning("❌ No se encontró la fila 'Fecha inicio vigencia'")
+                return
+            
+            # 2. Buscar fecha fin vigencia para calcular días de cobertura
+            fecha_fin_row = self._find_cell_with_text_in_any_column(worksheet, 'fecha fin vigencia', 'fecha fin de vigencia')
+            if not fecha_fin_row:
+                fecha_fin_row = self._find_cell_with_text_in_any_column(worksheet, 'fin vigencia')
+            
+            if not fecha_fin_row:
+                self.logger.warning("❌ No se encontró la fila 'Fecha fin vigencia'")
+                return
+            
+            # 3. Obtener fecha fin vigencia (buscar en varias columnas)
+            fecha_fin_value = None
+            for col in range(2, 10):  # Buscar en columnas B a I
+                cell_value = worksheet.cell(row=fecha_fin_row, column=col).value
+                if cell_value and str(cell_value).strip():
+                    fecha_fin_value = cell_value
+                    break
+            
+            if not fecha_fin_value:
+                self.logger.warning("❌ No hay fecha fin vigencia configurada en la plantilla")
+                return
+            
+            # 4. Calcular días de cobertura
+            dias_cobertura = self._calculate_coverage_days(fecha_hoy, str(fecha_fin_value))
+            if dias_cobertura <= 0:
+                self.logger.warning(f"❌ Días de cobertura inválidos: {dias_cobertura}")
+                return
+            
+            # 5. Buscar y llenar días de cobertura
+            dias_cobertura_row = self._find_cell_with_text_in_any_column(worksheet, 'días de cobertura', 'dias de cobertura')
+            if dias_cobertura_row:
+                # Llenar días de cobertura en la columna correcta
+                target_col = self._find_target_column_for_row(worksheet, dias_cobertura_row)
+                self._write_to_cell_safe(worksheet, dias_cobertura_row, target_col, dias_cobertura)
+                self.logger.info(f"✅ Días de cobertura: {dias_cobertura} días en fila {dias_cobertura_row}, columna {target_col}")
+            else:
+                self.logger.warning("❌ No se encontró la fila 'Días de cobertura'")
+            
+            # 6. Calcular prima anual usando el valor existente
+            self._calculate_prima_anual(worksheet, dias_cobertura)
+            
+        except Exception as e:
+            self.logger.error(f"Error configurando fechas y días de cobertura: {e}")
+
+    def _find_target_column_for_row(self, worksheet, row: int) -> int:
+        """
+        Encuentra la columna objetivo para llenar datos en una fila específica.
+        Busca la primera columna vacía después de la columna A.
+        """
+        # Empezar desde columna B (2) y buscar la primera vacía o la segunda columna
+        for col in range(2, 6):  # Columnas B, C, D, E
+            cell_value = worksheet.cell(row=row, column=col).value
+            if not cell_value or str(cell_value).strip() == "":
+                return col
+        
+        # Si todas están ocupadas, usar columna B (2) por defecto
+        return 2
+
+    def _calculate_prima_anual(self, worksheet, dias_cobertura: int):
+        """
+        Calcula la prima anual usando el valor existente de "VALOR A PAGAR (IVA INCLUIDO)".
+        """
+        try:
+            self.logger.info(f"📊 Calculando prima anual con {dias_cobertura} días de cobertura...")
+            
+            # 1. Buscar la fila "VALOR A PAGAR (IVA INCLUIDO)"
+            valor_pagar_row = self._find_cell_with_text_in_any_column(worksheet, 'valor a pagar')
+            if not valor_pagar_row:
+                self.logger.warning("❌ No se encontró la fila 'VALOR A PAGAR (IVA INCLUIDO)'")
+                return
+            
+            # 2. Buscar la fila "PRIMA ANUAL IVA INCLUIDO"
+            prima_anual_row = self._find_cell_with_text_in_any_column(worksheet, 'prima anual')
+            if not prima_anual_row:
+                self.logger.warning("❌ No se encontró la fila 'PRIMA ANUAL IVA INCLUIDO'")
+                return
+            
+            # 3. Obtener el valor a pagar (buscar en varias columnas)
+            valor_pagar = None
+            valor_col = None
+            for col in range(2, 10):  # Buscar en columnas B a I
+                cell_value = worksheet.cell(row=valor_pagar_row, column=col).value
+                if cell_value and str(cell_value).strip() and str(cell_value).strip() != "":
+                    valor_pagar = cell_value
+                    valor_col = col
+                    break
+            
+            if not valor_pagar:
+                self.logger.warning("❌ No se encontró valor a pagar para calcular prima anual")
+                return
+            
+            # 4. Calcular prima anual
+            valor_numerico = self._extract_numeric_value(str(valor_pagar))
+            if valor_numerico > 0:
+                # Calcular: (Valor a pagar) / (Días de cobertura) * 365
+                prima_anual_calculada = (valor_numerico / dias_cobertura) * 365
+                
+                # Formatear como moneda
+                prima_formateada = f"${prima_anual_calculada:,.0f}".replace(",", ".")
+                
+                # Escribir en la misma columna donde está el valor a pagar
+                self._write_to_cell_safe(worksheet, prima_anual_row, valor_col, prima_formateada)
+                
+                self.logger.info(f"✅ Prima anual calculada: ${valor_numerico:,.0f} ÷ {dias_cobertura} × 365 = {prima_formateada}")
+            else:
+                self.logger.warning(f"❌ Valor numérico inválido extraído: {valor_numerico}")
+                
+        except Exception as e:
+            self.logger.error(f"Error calculando prima anual: {e}")
+
+    def _calculate_coverage_days(self, fecha_inicio: str, fecha_fin: str) -> int:
+        """
+        Calcula los días de cobertura entre dos fechas.
+        
+        Args:
+            fecha_inicio: Fecha de inicio en formato DD/MM/YYYY
+            fecha_fin: Fecha de fin en formato DD/MM/YYYY o datetime
+            
+        Returns:
+            int: Número de días de cobertura
+        """
+        try:
+            # Parsear fecha inicio
+            fecha_inicio_obj = datetime.strptime(fecha_inicio, '%d/%m/%Y')
+            
+            # Parsear fecha fin (puede venir en diferentes formatos)
+            if isinstance(fecha_fin, datetime):
+                fecha_fin_obj = fecha_fin
+            else:
+                # Intentar diferentes formatos de fecha
+                fecha_fin_str = str(fecha_fin).strip()
+                try:
+                    fecha_fin_obj = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+                except ValueError:
+                    try:
+                        fecha_fin_obj = datetime.strptime(fecha_fin_str, '%Y-%m-%d')
+                    except ValueError:
+                        try:
+                            # Formato con hora
+                            fecha_fin_obj = datetime.strptime(fecha_fin_str.split(' ')[0], '%Y-%m-%d')
+                        except ValueError:
+                            self.logger.error(f"No se pudo parsear fecha fin: {fecha_fin_str}")
+                            return 0
+            
+            # Calcular diferencia en días
+            diferencia = fecha_fin_obj - fecha_inicio_obj
+            dias = diferencia.days
+            
+            # Asegurar que sea positivo
+            if dias <= 0:
+                self.logger.warning(f"Días negativos o cero calculados: {dias}")
+                return 0
+            
+            self.logger.info(f"📅 Cálculo: {fecha_inicio} hasta {fecha_fin_obj.strftime('%d/%m/%Y')} = {dias} días")
+            return dias
+            
+        except Exception as e:
+            self.logger.error(f"Error calculando días de cobertura: {e}")
+            return 0
+
+    def _recalculate_annualized_values(self, worksheet, dias_cobertura: int):
+        """
+        Recalcula los valores anualizados usando los días de cobertura calculados automáticamente.
+        """
+        try:
+            self.logger.info(f"📊 Recalculando valores anualizados con {dias_cobertura} días de cobertura...")
+            
+            # 1. Buscar la fila "VALOR A PAGAR (IVA INCLUIDO)"
+            valor_pagar_row = self._find_cell_with_text_in_any_column(worksheet, 'valor a pagar', 'iva incluido')
+            if not valor_pagar_row:
+                self.logger.warning("❌ No se encontró la fila 'VALOR A PAGAR (IVA INCLUIDO)'")
+                return
+            
+            # 2. Buscar la fila "PRIMA ANUAL IVA INCLUIDO"
+            prima_anual_row = self._find_cell_with_text_in_any_column(worksheet, 'prima anual', 'iva incluido')
+            if not prima_anual_row:
+                self.logger.warning("❌ No se encontró la fila 'PRIMA ANUAL IVA INCLUIDO'")
+                return
+            
+            # 3. Recorrer las columnas y calcular valores anualizados
+            valores_calculados = 0
+            for col in range(2, 20):  # Columnas B hasta S
+                try:
+                    # Obtener valor a pagar de la fila correspondiente
+                    valor_pagar_cell = worksheet.cell(row=valor_pagar_row, column=col)
+                    valor_pagar = valor_pagar_cell.value
+                    
+                    # Solo calcular si el valor existe y es válido
+                    if valor_pagar and str(valor_pagar).strip() != "":
+                        # Limpiar valor a pagar (quitar $ y puntos)
+                        valor_numerico = self._extract_numeric_value(str(valor_pagar))
+                        
+                        if valor_numerico > 0:
+                            # Calcular valor anualizado: (Valor a pagar) / (Días de cobertura) * 365
+                            valor_anualizado = (valor_numerico / dias_cobertura) * 365
+                            
+                            # Formatear como moneda
+                            valor_formateado = f"${valor_anualizado:,.0f}".replace(",", ".")
+                            
+                            # Colocar en la fila PRIMA ANUAL
+                            self._write_to_cell_safe(worksheet, prima_anual_row, col, valor_formateado)
+                            
+                            valores_calculados += 1
+                            self.logger.info(f"✅ Columna {col}: ${valor_numerico:,.0f} ÷ {dias_cobertura} × 365 = {valor_formateado}")
+                
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Error calculando valor anualizado en columna {col}: {e}")
+                    continue
+            
+            if valores_calculados > 0:
+                self.logger.info(f"✅ Total de valores anualizados calculados: {valores_calculados}")
+            else:
+                self.logger.warning("⚠️ No se calcularon valores anualizados")
+                
+        except Exception as e:
+            self.logger.error(f"Error recalculando valores anualizados: {e}")
