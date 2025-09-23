@@ -151,17 +151,33 @@ class TemplateHandler:
         # Primero buscar coincidencia exacta normalizada
         for plan_name, plan_value in available_plans.items():
             if self._normalize_text(plan_name) == target_normalized:
+                self.logger.debug(f"🎯 Coincidencia exacta: '{target_plan}' = '{plan_name}'")
                 return plan_value
         
-        # Buscar coincidencias parciales inteligentes
-        # Definir mapeos específicos conocidos
+        # Mapeos específicos más completos
         known_mappings = {
-            'autos esencial + total': ['autos esencial + totales'],
-            'autos llave en mano': ['autos llave en mano'],
+            # Mapeos de Allianz
             'autos esencial': ['autos esencial'],
+            'autos esencial + total': ['autos esencial + totales'],
+            'autos esencial + totales': ['autos esencial + totales', 'autos esencial + total'],
             'autos plus': ['autos plus'],
-            'autos parcial': ['global franquicia'],  # Sinónimo para Sura
-            'global franquicia': ['autos parcial']   # Sinónimo bidireccional
+            'autos llave en mano': ['autos llave en mano'],
+            
+            # Mapeos de Sura
+            'autos global': ['plan autos global'],
+            'plan autos global': ['autos global'],
+            'autos clasico': ['plan autos clasico'],
+            'plan autos clasico': ['autos clasico'],
+            'autos parcial': ['global franquicia', 'perdida parcial'],
+            'global franquicia': ['autos parcial', 'perdida parcial'],
+            'perdida parcial': ['autos parcial', 'global franquicia'],
+            
+            # Variaciones adicionales
+            'esencial': ['autos esencial'],
+            'plus': ['autos plus'],
+            'llave en mano': ['autos llave en mano'],
+            'global': ['autos global', 'plan autos global'],
+            'clasico': ['autos clasico', 'plan autos clasico']
         }
         
         # Buscar en mapeos conocidos
@@ -170,12 +186,14 @@ class TemplateHandler:
                 for variation in variations:
                     for plan_name, plan_value in available_plans.items():
                         if self._normalize_text(plan_name) == variation:
+                            self.logger.debug(f"🎯 Mapeo conocido: '{target_plan}' -> '{plan_name}' vía '{pattern}'")
                             return plan_value
         
-        # Buscar coincidencias por palabras clave
+        # Buscar coincidencias por palabras clave (mejorado)
         target_keywords = set(target_normalized.split())
         best_match = None
         best_score = 0
+        best_plan_name = None
         
         for plan_name, plan_value in available_plans.items():
             plan_keywords = set(self._normalize_text(plan_name).split())
@@ -184,10 +202,22 @@ class TemplateHandler:
             common_keywords = target_keywords.intersection(plan_keywords)
             score = len(common_keywords)
             
-            # Requiere al menos 2 palabras en común para considerarlo válido
-            if score >= 2 and score > best_score:
+            # Palabras clave importantes tienen más peso
+            important_keywords = {'esencial', 'plus', 'llave', 'mano', 'global', 'clasico', 'parcial', 'franquicia', 'total', 'totales'}
+            important_matches = common_keywords.intersection(important_keywords)
+            if important_matches:
+                score += len(important_matches) * 2  # Doble peso para palabras importantes
+            
+            # Requiere al menos 1 palabra en común, pero con mejor scoring
+            if score > 0 and score > best_score:
                 best_match = plan_value
                 best_score = score
+                best_plan_name = plan_name
+        
+        if best_match:
+            self.logger.debug(f"🎯 Mejor coincidencia por keywords: '{target_plan}' -> '{best_plan_name}' (score: {best_score})")
+        else:
+            self.logger.debug(f"❌ No se encontró coincidencia para: '{target_plan}' en {list(available_plans.keys())}")
         
         return best_match
     
@@ -539,29 +569,23 @@ class TemplateHandler:
         
         self.logger.info(f"✅ Columnas de SURA encontradas: {sura_columns}")
         
-        # Mapear planes a columnas con búsqueda inteligente por nombre
-        for i, plan_name in enumerate(expected_plans):
-            if i < len(sura_columns):
-                column = sura_columns[i]
-                plan_value = sura_plan_map.get(plan_name, 'No encontrado')
+        # Mapear planes a columnas leyendo encabezados reales
+        for column in sura_columns:
+            # Buscar el encabezado de esta columna
+            column_header = self._get_column_header(worksheet, column)
+            
+            if column_header:
+                # Buscar la mejor coincidencia en los planes de Sura
+                matched_value = self._find_best_plan_match(column_header, sura_plan_map)
                 
-                # Si es "Autos Parcial", también buscar por "Global Franquicia"
-                if plan_name == 'Autos Parcial' and plan_value == 'No encontrado':
-                    # Buscar si hay una columna específica de "Global Franquicia"
-                    global_franquicia_col = self._find_column_by_header(worksheet, 'global franquicia')
-                    if global_franquicia_col:
-                        column = global_franquicia_col
-                        self.logger.info(f"✅ Usando columna 'Global Franquicia' para {plan_name}")
-                
-                # Formatear valor
-                if plan_value != 'No encontrado':
-                    formatted_value = self._format_currency_from_string(plan_value)
+                if matched_value and matched_value != 'No encontrado':
+                    formatted_value = self._format_currency_from_string(matched_value)
+                    self._write_to_cell_safe(worksheet, valor_pagar_row, column, formatted_value)
+                    self.logger.info(f"✅ SURA '{column_header}' -> {formatted_value} en columna {column}")
                 else:
-                    formatted_value = plan_value
-                
-                # Colocar en intersección
-                self._write_to_cell_safe(worksheet, valor_pagar_row, column, formatted_value)
-                self.logger.info(f"✅ SURA {plan_name}: {formatted_value} en columna {column}")
+                    self.logger.warning(f"⚠️ SURA '{column_header}': No se encontró coincidencia en columna {column}")
+            else:
+                self.logger.warning(f"⚠️ No se pudo leer encabezado de columna SURA {column}")
         
         # Buscar adicicionalmente por nombre específico "Global Franquicia"
         global_franquicia_col = self._find_column_by_header(worksheet, 'global franquicia')
@@ -585,34 +609,23 @@ class TemplateHandler:
         
         self.logger.info(f"✅ Columnas de ALLIANZ encontradas: {allianz_columns}")
         
-        # Mapear planes a columnas usando mapeo inteligente
-        for i, plan_name in enumerate(expected_plans):
-            if i < len(allianz_columns):
-                column = allianz_columns[i]
+        # Mapear planes a columnas leyendo encabezados reales
+        for column in allianz_columns:
+            # Buscar el encabezado de esta columna
+            column_header = self._get_column_header(worksheet, column)
+            
+            if column_header:
+                # Buscar la mejor coincidencia en los planes de Allianz
+                matched_value = self._find_best_plan_match(column_header, allianz_plans)
                 
-                # Usar mapeo inteligente para encontrar la mejor coincidencia
-                plan_value = self._find_best_plan_match(plan_name, allianz_plans)
-                
-                if plan_value is None:
-                    # Fallback al método anterior
-                    plan_value = allianz_plans.get(plan_name, 'No encontrado')
-                
-                # Formatear valor
-                if plan_value and plan_value != 'No encontrado':
-                    formatted_value = self._format_currency_from_string(plan_value)
-                    # Log de éxito con detalles del mapeo
-                    matched_key = None
-                    for key, val in allianz_plans.items():
-                        if val == plan_value:
-                            matched_key = key
-                            break
-                    self.logger.info(f"✅ ALLIANZ {plan_name} -> {matched_key}: {formatted_value} en columna {column}")
+                if matched_value and matched_value != 'No encontrado':
+                    formatted_value = self._format_currency_from_string(matched_value)
+                    self._write_to_cell_safe(worksheet, valor_pagar_row, column, formatted_value)
+                    self.logger.info(f"✅ ALLIANZ '{column_header}' -> {formatted_value} en columna {column}")
                 else:
-                    formatted_value = 'No encontrado'
-                    self.logger.warning(f"⚠️ ALLIANZ {plan_name}: No encontrado en columna {column}")
-                
-                # Colocar en intersección
-                self._write_to_cell_safe(worksheet, valor_pagar_row, column, formatted_value)
+                    self.logger.warning(f"⚠️ ALLIANZ '{column_header}': No se encontró coincidencia en columna {column}")
+            else:
+                self.logger.warning(f"⚠️ No se pudo leer encabezado de columna ALLIANZ {column}")
     
     def _fill_other_values(self, worksheet, valor_pagar_row: int, bolivar_solidaria_plans: Dict[str, str], 
                          aseguradoras_permitidas: List[str], fondo: str):
@@ -956,7 +969,63 @@ class TemplateHandler:
                 self.logger.warning("⚠️ No se encontraron celdas con 'VALOR ASEGURADO AUTO' para reemplazar")
                 
         except Exception as e:
-            self.logger.error(f"Error al reemplazar celdas de VALOR ASEGURADO AUTO: {e}")
+                self.logger.error(f"Error al reemplazar celdas de VALOR ASEGURADO AUTO: {e}")
+
+    def _get_column_header(self, worksheet, column: int) -> Optional[str]:
+        """
+        Obtiene el encabezado de una columna específica.
+        Busca en las primeras filas el texto que mejor describe el plan.
+        """
+        try:
+            # Buscar en las primeras 30 filas
+            potential_headers = []
+            
+            for row in range(1, 31):
+                cell_value = worksheet.cell(row=row, column=column).value
+                if cell_value and str(cell_value).strip():
+                    header_text = str(cell_value).strip()
+                    
+                    # Filtrar encabezados que parecen nombres de planes
+                    if len(header_text) > 3 and not header_text.isdigit():
+                        # Ignorar fechas (formato DD/MM/YYYY)
+                        if '/' in header_text and len(header_text.split('/')) == 3:
+                            continue
+                        
+                        # Ignorar encabezados genéricos
+                        generic_headers = ['allianz', 'sura', 'bolivar', 'solidaria', 'coberturas', 'aseguradora', 'valor', 'prima', 'iva', 'incluido']
+                        if self._normalize_text(header_text) in [self._normalize_text(g) for g in generic_headers]:
+                            continue
+                        
+                        # Buscar términos que indican nombres de planes
+                        plan_keywords = ['autos', 'plus', 'esencial', 'llave', 'mano', 'global', 'clasico', 'parcial', 'franquicia', 'total', 'totales']
+                        if any(keyword in self._normalize_text(header_text) for keyword in plan_keywords):
+                            potential_headers.append((row, header_text))
+            
+            # Si encontramos múltiples candidatos, usar el que esté más arriba en la plantilla
+            if potential_headers:
+                # Ordenar por fila (más arriba primero) 
+                potential_headers.sort(key=lambda x: x[0])
+                best_header = potential_headers[0][1]
+                self.logger.debug(f"📋 Encabezado columna {column}: '{best_header}' (fila {potential_headers[0][0]})")
+                return best_header
+            
+            # Si no encontramos nada específico, buscar cualquier texto no genérico
+            for row in range(1, 31):
+                cell_value = worksheet.cell(row=row, column=column).value
+                if cell_value and str(cell_value).strip():
+                    header_text = str(cell_value).strip()
+                    if len(header_text) > 3 and not header_text.isdigit() and '/' not in header_text:
+                        generic_headers = ['allianz', 'sura', 'bolivar', 'solidaria', 'coberturas', 'aseguradora']
+                        if self._normalize_text(header_text) not in [self._normalize_text(g) for g in generic_headers]:
+                            self.logger.debug(f"📋 Encabezado fallback columna {column}: '{header_text}'")
+                            return header_text
+            
+            self.logger.warning(f"❌ No se encontró encabezado válido para columna {column}")
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error obteniendo encabezado de columna {column}: {e}")
+            return None
 
     def _setup_vigencia_dates_and_coverage(self, worksheet):
         """

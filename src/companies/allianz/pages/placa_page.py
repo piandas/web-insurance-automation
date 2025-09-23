@@ -483,8 +483,8 @@ class PlacaPage(BasePage):
                 self.SELECTOR_BTN_ARCHIVAR,
                 "botón 'Archivar'",
                 condition="is_visible",
-                attempts=10,
-                interval_ms=1000,
+                attempts=45,
+                interval_ms=2000,
                 immediate_check=False
             ):
                 self.logger.error("❌ El botón 'Archivar' no apareció")
