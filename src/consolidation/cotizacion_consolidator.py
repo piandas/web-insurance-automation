@@ -36,12 +36,19 @@ class CotizacionConsolidator:
                 return plans
             with open(allianz_log_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
-            recent_lines = lines[-500:] if len(lines) > 500 else lines
+            # Leer solo las últimas 120 líneas en lugar de 500
+            recent_lines = lines[-120:] if len(lines) > 120 else lines
+            
+            self.logger.info(f"🔍 Analizando las últimas {len(recent_lines)} líneas del log de Allianz...")
+            
             patterns = {
                 'Autos Esencial': r'\[EXTRACCIÓN\] Autos Esencial: ([0-9.,]+)',
                 'Autos Plus': r'\[EXTRACCIÓN\] Autos Plus: ([0-9.,]+)',
-                'Autos Llave en Mano': r'\[EXTRACCIÓN\] Autos Llave en Mano: ([0-9.,]+)'
+                'Autos Llave en Mano': r'\[EXTRACCIÓN\] Autos Llave en Mano: ([0-9.,]+)',
+                'Autos Esencial + Totales': r'\[EXTRACCIÓN\] Autos Esencial \+ Totales: ([0-9.,]+)'
             }
+            
+            # Buscar cada plan en el log (desde las líneas más recientes hacia atrás)
             for plan_name, pattern in patterns.items():
                 for line in reversed(recent_lines):
                     match = re.search(pattern, line)
@@ -50,16 +57,11 @@ class CotizacionConsolidator:
                         try:
                             numeric_value = float(value)
                             plans[plan_name] = f"{numeric_value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+                            self.logger.info(f"✅ Encontrado {plan_name}: {plans[plan_name]} (línea: {match.group(1)})")
                         except Exception:
                             plans[plan_name] = match.group(1)
+                            self.logger.info(f"✅ Encontrado {plan_name}: {plans[plan_name]} (valor original)")
                         break
-            # Autos Esencial + Totales: suma de los otros tres si todos existen
-            try:
-                if all(plans[k] != 'No encontrado' for k in ['Autos Esencial', 'Autos Plus', 'Autos Llave en Mano']):
-                    total = sum(float(plans[k].replace('.', '').replace(',', '.')) for k in ['Autos Esencial', 'Autos Plus', 'Autos Llave en Mano'])
-                    plans['Autos Esencial + Totales'] = f"{total:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
-            except Exception:
-                pass
             return plans
         except Exception as e:
             self.logger.error(f"Error extrayendo valores de Allianz desde logs: {e}")
@@ -261,48 +263,6 @@ class CotizacionConsolidator:
         
         return plans
     
-    def get_latest_sura_pdf(self) -> Optional[Path]:
-        """Obtiene el PDF más reciente de Sura."""
-        sura_downloads = self.downloads_path / "sura"
-        
-        if not sura_downloads.exists():
-            self.logger.warning("Directorio de descargas de Sura no encontrado")
-            return None
-            
-        # Buscar archivos PDF de Sura
-        pdf_files = list(sura_downloads.glob("Cotizacion_Sura_*.pdf"))
-        
-        if not pdf_files:
-            self.logger.warning("No se encontraron PDFs de Sura")
-            return None
-            
-        # Ordenar por fecha de modificación (más reciente primero)
-        pdf_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        
-        self.logger.info(f"PDF más reciente de Sura: {pdf_files[0].name}")
-        return pdf_files[0]
-    
-    def get_latest_allianz_pdf(self) -> Optional[Path]:
-        """Obtiene el PDF más reciente de Allianz."""
-        allianz_downloads = self.downloads_path / "allianz"
-        
-        if not allianz_downloads.exists():
-            self.logger.warning("Directorio de descargas de Allianz no encontrado")
-            return None
-            
-        # Buscar archivos PDF de Allianz
-        pdf_files = list(allianz_downloads.glob("Cotizacion_Allianz_*.pdf"))
-        
-        if not pdf_files:
-            self.logger.warning("No se encontraron PDFs de Allianz")
-            return None
-            
-        # Ordenar por fecha de modificación (más reciente primero)
-        pdf_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        
-        self.logger.info(f"PDF más reciente de Allianz: {pdf_files[0].name}")
-        return pdf_files[0]
-    
     def extract_sura_plans_from_logs(self) -> Dict[str, str]:
         """Extrae los valores de los planes de Sura desde los logs de la automatización, incluyendo Pérdida Parcial 10-1 SMLMV."""
         self.logger.info("📊 Extrayendo valores de planes de Sura desde logs...")
@@ -354,133 +314,9 @@ class CotizacionConsolidator:
             self.logger.error(f"Error extrayendo valores de Sura desde logs: {e}")
             return plans
 
-    def extract_sura_plans_from_pdf(self, pdf_path: Path) -> Dict[str, str]:
-        """Extrae los valores de los planes de Sura del PDF (método de respaldo)."""
-        self.logger.info("📄 Extrayendo valores de Sura desde PDF (método de respaldo)...")
-        text = self.extract_text_from_pdf(pdf_path)
-        
-        plans = {
-            'Plan Autos Global': 'No encontrado',
-            'Plan Autos Clasico': 'No encontrado'
-        }
-        
-        # Patrones para buscar los valores de los planes
-        patterns = {
-            'Plan Autos Global': [
-                r'Plan\s+Autos\s+Global[:\s]*\$?\s*([0-9.,]+)',
-                r'Global[:\s]*\$?\s*([0-9.,]+)',
-                r'GLOBAL[:\s]*\$?\s*([0-9.,]+)'
-            ],
-            'Plan Autos Clasico': [
-                r'Plan\s+Autos\s+Cl[aá]sico[:\s]*\$?\s*([0-9.,]+)',
-                r'Cl[aá]sico[:\s]*\$?\s*([0-9.,]+)',
-                r'CLASICO[:\s]*\$?\s*([0-9.,]+)'
-            ]
-        }
-        
-        for plan_name, plan_patterns in patterns.items():
-            for pattern in plan_patterns:
-                matches = re.finditer(pattern, text, re.IGNORECASE)
-                for match in matches:
-                    value = match.group(1).replace(',', '').replace('.', '')
-                    if value.isdigit() and len(value) >= 3:
-                        plans[plan_name] = f"{int(value):,}"
-                        break
-            if plans[plan_name] != 'No encontrado':
-                break
-        
-        return plans
+
     
-    def extract_allianz_plans_from_pdf(self, pdf_path: Path) -> Dict[str, str]:
-        """Extrae los valores de los planes de Allianz del PDF."""
-        text = self.extract_text_from_pdf(pdf_path)
-        
-        plans = {
-            'Autos Esencial': 'No encontrado',
-            'Autos Esencial + Totales': 'No encontrado', 
-            'Autos Plus': 'No encontrado',
-            'Autos Llave en Mano': 'No encontrado'
-        }
-        
-        self.logger.info("🔍 Buscando tabla de valores de Allianz en PDF...")
-        
-        # Buscar la tabla con los valores anuales - patrón mejorado
-        anual_patterns = [
-            r'Anual\s*-?\s*Prima\s*Total\s*Vigencia\s*([\d.,]+)\s*([\d.,]+)\s*([\d.,]+)\s*([\d.,]+)',
-            r'Prima\s*Total\s*Vigencia\s*Anual[:\s]*([\d.,]+)\s*([\d.,]+)\s*([\d.,]+)\s*([\d.,]+)',
-            r'ANUAL.*?PRIMA.*?TOTAL.*?VIGENCIA[:\s]*([\d.,]+)\s*([\d.,]+)\s*([\d.,]+)\s*([\d.,]+)'
-        ]
-        
-        # Intentar encontrar la tabla completa
-        found_table = False
-        for pattern in anual_patterns:
-            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
-            if match:
-                self.logger.info("✅ Tabla de valores encontrada en PDF")
-                values = [match.group(i) for i in range(1, 5)]
-                plan_names = list(plans.keys())
-                
-                for i, value in enumerate(values):
-                    if i < len(plan_names):
-                        # Limpiar el valor (formato colombiano: 311.572,10)
-                        clean_value = value.replace('.', '').replace(',', '.')
-                        try:
-                            # Convertir a número y formatear
-                            numeric_value = float(clean_value)
-                            plans[plan_names[i]] = f"{int(numeric_value):,}"
-                            self.logger.info(f"✅ {plan_names[i]}: ${plans[plan_names[i]]}")
-                        except ValueError:
-                            self.logger.warning(f"⚠️ No se pudo convertir valor: {value}")
-                            plans[plan_names[i]] = value
-                found_table = True
-                break
-        
-        # Si no se encuentra la tabla completa, buscar valores individuales
-        if not found_table:
-            self.logger.info("🔍 Tabla completa no encontrada, buscando valores individuales...")
-            individual_patterns = {
-                'Autos Esencial': [
-                    r'Autos\s+Esencial(?!\s*\+)[^0-9]*?([0-9.,]+)',
-                    r'Esencial(?!\s*\+)[^0-9]*?([0-9.,]+)',
-                    r'ESENCIAL(?!\s*\+)[^0-9]*?([0-9.,]+)'
-                ],
-                'Autos Esencial + Totales': [
-                    r'Autos\s+Esencial\s*\+\s*Totales[^0-9]*?([0-9.,]+)',
-                    r'Esencial\s*\+\s*Totales[^0-9]*?([0-9.,]+)',
-                    r'ESENCIAL\s*\+\s*TOTALES[^0-9]*?([0-9.,]+)'
-                ],
-                'Autos Plus': [
-                    r'Autos\s+Plus[^0-9]*?([0-9.,]+)',
-                    r'Plus[^0-9]*?([0-9.,]+)',
-                    r'PLUS[^0-9]*?([0-9.,]+)'
-                ],
-                'Autos Llave en Mano': [
-                    r'Autos\s+Llave\s+en\s+Mano[^0-9]*?([0-9.,]+)',
-                    r'Llave\s+en\s+Mano[^0-9]*?([0-9.,]+)',
-                    r'LLAVE\s+EN\s+MANO[^0-9]*?([0-9.,]+)'
-                ]
-            }
-            
-            for plan_name, plan_patterns in individual_patterns.items():
-                for pattern in plan_patterns:
-                    matches = re.finditer(pattern, text, re.IGNORECASE)
-                    for match in matches:
-                        value = match.group(1)
-                        # Limpiar y validar valor
-                        clean_value = value.replace('.', '').replace(',', '.')
-                        try:
-                            if '.' in clean_value:
-                                numeric_value = float(clean_value)
-                                plans[plan_name] = f"{int(numeric_value):,}"
-                                self.logger.info(f"✅ {plan_name}: ${plans[plan_name]}")
-                                break
-                        except ValueError:
-                            continue
-                if plans[plan_name] != 'No encontrado':
-                    break
-        
-        self.logger.info(f"Planes extraídos de Allianz: {plans}")
-        return plans
+
     
     def create_excel_report(self, sura_data: Dict[str, Any], sura_plans: Dict[str, str], 
                           allianz_plans: Dict[str, str], bolivar_solidaria_plans: Dict[str, str]) -> str:
@@ -664,19 +500,10 @@ class CotizacionConsolidator:
             # 1. Extraer datos de configuración de Sura (siempre intentar)
             sura_data = self.extract_sura_data()
             
-            # 2. Obtener PDFs más recientes
-            sura_pdf = self.get_latest_sura_pdf()
-            allianz_pdf = self.get_latest_allianz_pdf()
-            
-            # 3. Extraer planes según el éxito de cada automatización
+            # 2. Extraer planes según el éxito de cada automatización
             if automation_results.get('sura', False):
-                # Sura exitosa: extraer normalmente
+                # Sura exitosa: extraer desde logs
                 sura_plans = self.extract_sura_plans_from_logs()
-                
-                # Si no se encontraron en logs, intentar desde PDF
-                if all(plan == 'No encontrado' for plan in sura_plans.values()) and sura_pdf:
-                    self.logger.info("📄 No se encontraron valores en logs, intentando desde PDF...")
-                    sura_plans = self.extract_sura_plans_from_pdf(sura_pdf)
             else:
                 # Sura falló: llenar con "FALLÓ"
                 self.logger.warning("❌ Sura falló, llenando planes con 'FALLÓ'")
@@ -723,29 +550,17 @@ class CotizacionConsolidator:
             # 1. Extraer datos de configuración de Sura
             sura_data = self.extract_sura_data()
             
-            # 2. Obtener PDFs más recientes
-            sura_pdf = self.get_latest_sura_pdf()
-            allianz_pdf = self.get_latest_allianz_pdf()
-            
-            # 3. Extraer planes de Sura (primero desde logs, luego PDF como respaldo)
+            # 2. Extraer planes de Sura desde logs únicamente
             sura_plans = self.extract_sura_plans_from_logs()
-            
-            # Si no se encontraron en logs, intentar desde PDF
-            if all(plan == 'No encontrado' for plan in sura_plans.values()) and sura_pdf:
-                self.logger.info("📄 No se encontraron valores en logs, intentando desde PDF...")
-                sura_plans = self.extract_sura_plans_from_pdf(sura_pdf)
-            elif sura_pdf is None:
-                self.logger.warning("No se encontró PDF de Sura para extracción")
-            
             self.logger.info(f"Planes de Sura: {sura_plans}")
             
-            # 4. Extraer planes de Allianz desde logs (no PDF)
+            # 3. Extraer planes de Allianz desde logs únicamente
             allianz_plans = self.extract_allianz_plans_from_logs()
             
-            # 5. Calcular cotizaciones de Bolívar y Solidaria
+            # 4. Calcular cotizaciones de Bolívar y Solidaria
             bolivar_solidaria_plans = self.calculate_bolivar_solidaria_plans()
             
-            # 6. Crear reporte Excel consolidado
+            # 5. Crear reporte Excel consolidado
             excel_path = self.create_excel_report(sura_data, sura_plans, allianz_plans, bolivar_solidaria_plans)
             
             self.logger.info(f"Consolidación completada exitosamente. Archivo: {excel_path}")

@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-09-22T20:47:53.296118",
+  "last_updated": "2025-09-23T08:40:56.283152",
   "clients": [
     {
       "id": "20250917_174931",
@@ -19,16 +19,16 @@
         "vehicle_model_year": "2026",
         "vehicle_brand": "MAZDA",
         "vehicle_reference": "CX50 - UTILITARIO DEPORTIVO 4X4",
-        "vehicle_full_reference": "MAZDA CX-50 GRAND TOURING",
+        "vehicle_full_reference": "MAZDA CX50 - UTILITARIO DEPORTIVO 4X4",
         "vehicle_state": "Nuevo",
         "vehicle_insured_value": "120000000",
         "manual_cf_code": "",
         "manual_ch_code": "",
         "policy_number": "040007325677",
         "policy_number_allianz": "23688722",
-        "selected_fondo": "MANPOWER"
+        "selected_fondo": "EPM"
       },
-      "updated_at": "2025-09-22T20:47:53.296110"
+      "updated_at": "2025-09-23T08:40:56.283145"
     },
     {
       "id": "20250916_114553",

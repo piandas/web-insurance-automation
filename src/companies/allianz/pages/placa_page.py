@@ -13,14 +13,52 @@ class PlacaPage(BasePage):
     # Selector para el input de valor asegurado en el iframe
     SELECTOR_INPUT_VALOR_ASEGURADO = 'input[name="DatosVehiculoIndividualBean$valorAsegurado"]'
     
-    async def _get_input_value_by_id(self, frame, input_id):
-        """Obtiene el valor de un input por su id dentro del frame dado."""
-        try:
-            input_elem = await frame.query_selector(f'input#{input_id}')
-            if input_elem:
-                return await input_elem.get_attribute('value')
-        except Exception as e:
-            self.logger.warning(f"⚠️ No se pudo obtener valor del input '{input_id}': {e}")
+    async def _get_input_value_by_id(self, frame, input_id, max_retries=5):
+        """
+        Obtiene el valor de un input por su id dentro del frame dado con reintentos.
+        
+        Args:
+            frame: Frame donde buscar el input
+            input_id: ID del input a buscar
+            max_retries: Número máximo de reintentos (default: 5)
+            
+        Returns:
+            str: Valor del input o string vacío si no se encuentra
+        """
+        for attempt in range(max_retries):
+            try:
+                # Esperar un poco entre intentos (excepto el primer intento)
+                if attempt > 0:
+                    await frame.page.wait_for_timeout(1000)  # 1 segundo entre reintentos
+                    self.logger.debug(f"🔄 Reintento {attempt + 1}/{max_retries} para obtener valor de '{input_id}'")
+                
+                # Buscar el input
+                input_elem = await frame.query_selector(f'input#{input_id}')
+                if input_elem:
+                    # Verificar que el elemento sea visible
+                    is_visible = await input_elem.is_visible()
+                    if not is_visible:
+                        self.logger.debug(f"⏳ Input '{input_id}' no visible en intento {attempt + 1}")
+                        continue
+                    
+                    # Obtener el valor
+                    value = await input_elem.get_attribute('value')
+                    
+                    # Verificar que el valor no esté vacío
+                    if value and value.strip():
+                        self.logger.debug(f"✅ Valor obtenido para '{input_id}': '{value}' en intento {attempt + 1}")
+                        return value.strip()
+                    else:
+                        self.logger.debug(f"⚠️ Input '{input_id}' está vacío en intento {attempt + 1}")
+                        continue
+                else:
+                    self.logger.debug(f"❌ Input '{input_id}' no encontrado en intento {attempt + 1}")
+                    
+            except Exception as e:
+                self.logger.debug(f"⚠️ Error en intento {attempt + 1} para input '{input_id}': {e}")
+        
+        # Si llegamos aquí, todos los reintentos fallaron
+        self.logger.warning(f"❌ No se pudo obtener valor del input '{input_id}' después de {max_retries} intentos")
         return ''
     
     async def get_valor_asegurado_from_iframe(self) -> str:
@@ -530,9 +568,15 @@ class PlacaPage(BasePage):
                 self.logger.warning(f"⚠️ No se detectó alert o ya fue manejado: {e}")
             
             # Paso 9: EXTRAER VALORES DE LA PÁGINA (antes de abrir el PDF)
+            self.logger.info("💰 Iniciando extracción de valores de planes de Allianz...")
             await self.page.wait_for_timeout(3000)
+            
             try:
                 frame = self.page.frame(name="appArea")
+                if not frame:
+                    self.logger.error("❌ No se pudo acceder al frame 'appArea' para extraer valores")
+                    return False
+                
                 # 1. Número de cotización
                 cotiz_td = await frame.query_selector('td.rowAppErrorInfoTextBlock.cellNoImage')
                 cotiz_text = await cotiz_td.inner_text() if cotiz_td else ''
@@ -543,6 +587,9 @@ class PlacaPage(BasePage):
                     num_cotizacion = m.group(1)
                 self.logger.info(f"[EXTRACCIÓN] Número de cotización: {num_cotizacion}")
 
+                # Esperar un poco más para que los valores se carguen
+                await self.page.wait_for_timeout(2000)
+                
                 # 2. Autos Esencial (modalidad_0_0_primaRecibo)
                 autos_esencial = await self._get_input_value_by_id(frame, "modalidad_0_0_primaRecibo")
                 self.logger.info(f"[EXTRACCIÓN] Autos Esencial: {autos_esencial}")
@@ -558,8 +605,19 @@ class PlacaPage(BasePage):
                 # 4. Autos Llave en Mano (modalidad_3_0_primaRecibo)
                 autos_llave = await self._get_input_value_by_id(frame, "modalidad_3_0_primaRecibo")
                 self.logger.info(f"[EXTRACCIÓN] Autos Llave en Mano: {autos_llave}")
+                
+                # Verificar si al menos un valor fue extraído
+                extracted_values = [autos_esencial, autos_esencial_totales, autos_plus, autos_llave]
+                valid_values = [v for v in extracted_values if v and v.strip()]
+                
+                if valid_values:
+                    self.logger.info(f"✅ Extracción exitosa: {len(valid_values)}/4 valores obtenidos")
+                else:
+                    self.logger.warning("⚠️ No se pudo extraer ningún valor de los planes de Allianz")
+                    
             except Exception as e:
                 self.logger.error(f"❌ Error extrayendo valores de la página: {e}")
+                return False
             # Paso 10: Esperar y hacer clic en "Estudio de Seguro"
             if not await self.verify_element_value_in_frame(
                 self.SELECTOR_ESTUDIO_SEGURO,
