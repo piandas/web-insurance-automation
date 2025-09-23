@@ -455,8 +455,24 @@ class TemplateHandler:
         # 10. Código Fasecolda (ambos códigos CF y CH)
         codigo_row = self._find_cell_with_text(worksheet, 'codigo fasecolda', 'fasecolda')
         if codigo_row:
-            cf_code = ClientConfig.MANUAL_CF_CODE
-            ch_code = ClientConfig.MANUAL_CH_CODE
+            # Intentar obtener códigos extraídos automáticamente primero
+            cf_code, ch_code = self._get_extracted_fasecolda_codes()
+            
+            # Si no hay códigos extraídos, usar los manuales como fallback
+            if not cf_code:
+                cf_code = ClientConfig.MANUAL_CF_CODE
+                ch_code = ClientConfig.MANUAL_CH_CODE
+                self.logger.info("📝 Usando códigos FASECOLDA manuales como fallback")
+                
+                # Verificar que los códigos manuales no estén vacíos
+                if not cf_code or not ch_code:
+                    self.logger.warning("⚠️ Códigos FASECOLDA manuales están vacíos también")
+                    cf_code = cf_code or "N/A"
+                    ch_code = ch_code or "N/A"
+            else:
+                self.logger.info("📝 Usando códigos FASECOLDA extraídos automáticamente")
+            
+            # Formato final
             codigo_completo = f"CF: {cf_code} / CH: {ch_code}"
             self._write_to_cell_safe(worksheet, codigo_row, 3, codigo_completo)
             self.logger.info(f"✅ Código Fasecolda: {codigo_completo}")
@@ -1026,6 +1042,99 @@ class TemplateHandler:
         except Exception as e:
             self.logger.error(f"Error obteniendo encabezado de columna {column}: {e}")
             return None
+
+    def _get_extracted_fasecolda_codes(self) -> tuple:
+        """
+        Obtiene los códigos FASECOLDA extraídos automáticamente.
+        
+        Returns:
+            tuple: (cf_code, ch_code) o (None, None) si no están disponibles
+        """
+        try:
+            # Método 1: Acceder directamente al extractor global
+            from ..shared.fasecolda_extractor import _global_extractor
+            
+            self.logger.debug(f"🔍 Verificando extractor global: {_global_extractor}")
+            
+            if _global_extractor:
+                self.logger.debug(f"🔍 Códigos en extractor: {_global_extractor.codes}")
+                
+                if _global_extractor.codes:
+                    codes = _global_extractor.codes
+                    cf_code = codes.get('cf_code')
+                    ch_code = codes.get('ch_code', '')
+                    
+                    if cf_code:
+                        self.logger.info(f"✅ Códigos FASECOLDA extraídos obtenidos: CF={cf_code}, CH={ch_code}")
+                        return cf_code, ch_code
+            
+            # Método 2: Verificar si hay códigos en variables de entorno
+            import os
+            env_cf = os.environ.get('EXTRACTED_CF_CODE')
+            env_ch = os.environ.get('EXTRACTED_CH_CODE')
+            
+            if env_cf:
+                self.logger.info(f"✅ Códigos FASECOLDA desde variables de entorno: CF={env_cf}, CH={env_ch or ''}")
+                return env_cf, env_ch or ''
+            
+            # Método 3: Buscar en logs recientes para códigos reportados
+            cf_code, ch_code = self._extract_codes_from_logs()
+            if cf_code:
+                self.logger.info(f"✅ Códigos FASECOLDA extraídos de logs: CF={cf_code}, CH={ch_code}")
+                return cf_code, ch_code
+            
+            self.logger.warning("⚠️ No hay códigos FASECOLDA extraídos disponibles por ningún método")
+            return None, None
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error obteniendo códigos FASECOLDA extraídos: {e}")
+            return None, None
+    
+    def _extract_codes_from_logs(self) -> tuple:
+        """
+        Intenta extraer códigos FASECOLDA de logs recientes como último recurso.
+        
+        Returns:
+            tuple: (cf_code, ch_code) o (None, None) si no encuentra
+        """
+        try:
+            import re
+            import glob
+            from pathlib import Path
+            
+            # Buscar archivos de log recientes del fasecolda_extractor
+            logs_dir = self.base_path / "LOGS" / "fasecolda_extractor"
+            if not logs_dir.exists():
+                return None, None
+            
+            # Buscar el archivo de log más reciente
+            log_files = list(logs_dir.glob("*.log"))
+            if not log_files:
+                return None, None
+            
+            # Ordenar por fecha de modificación (más reciente primero)
+            log_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            
+            # Leer el archivo más reciente
+            latest_log = log_files[0]
+            with open(latest_log, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Buscar patrón: "CF: 05636039 - CH: 05606132"
+            pattern = r'CF:\s*(\d+).*?CH:\s*(\d+)'
+            match = re.search(pattern, content)
+            
+            if match:
+                cf_code = match.group(1)
+                ch_code = match.group(2)
+                self.logger.debug(f"🔍 Códigos encontrados en logs: CF={cf_code}, CH={ch_code}")
+                return cf_code, ch_code
+            
+            return None, None
+            
+        except Exception as e:
+            self.logger.debug(f"🔍 Error extrayendo códigos de logs: {e}")
+            return None, None
 
     def _setup_vigencia_dates_and_coverage(self, worksheet):
         """
