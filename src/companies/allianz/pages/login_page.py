@@ -44,10 +44,14 @@ class LoginPage(BasePage):
                 self.logger.info("🔓 Sesión Allianz ya iniciada, saltando login.")
                 return True
             
-            # Llenar campos
+            # Llenar campos con pausa entre usuario y contraseña
             if not await self.safe_fill(self.USERNAME_INPUT, usuario):
                 self.logger.error("❌ Error llenando usuario")
                 return False
+            
+            # Esperar 1 segundo antes de llenar la contraseña para evitar concatenación
+            await asyncio.sleep(1)
+            
             if not await self.safe_fill(self.PASSWORD_INPUT, contrasena):
                 self.logger.error("❌ Error llenando contraseña")
                 return False

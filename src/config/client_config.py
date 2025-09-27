@@ -499,4 +499,77 @@ class ClientConfig:
         cls._load_gui_overrides()
         return cls.SELECTED_FONDO
     
+    @classmethod
+    def ensure_vehicle_insured_value(cls) -> bool:
+        """
+        Verifica que exista valor asegurado y lo solicita al usuario si no está disponible.
+        
+        Returns:
+            bool: True si hay valor asegurado disponible, False si usuario canceló
+        """
+        try:
+            # Cargar configuraciones actuales
+            cls._load_gui_overrides()
+            
+            # Verificar si ya tenemos valor asegurado
+            current_value = cls.VEHICLE_INSURED_VALUE
+            if current_value and current_value.strip():
+                print(f"💰 Valor asegurado ya configurado: {current_value}")
+                return True
+            
+            # Si no hay valor, pedirlo al usuario
+            print("⚠️ Valor asegurado no encontrado, solicitando al usuario...")
+            
+            import tkinter as tk
+            from tkinter import simpledialog, messagebox
+            
+            # Crear ventana principal oculta
+            root = tk.Tk()
+            root.withdraw()  # Ocultar ventana principal
+            root.attributes('-topmost', True)  # Mantener ventana al frente
+            
+            # Determinar mensaje según estado del vehículo
+            if cls.VEHICLE_STATE.lower() == 'nuevo':
+                mensaje = ("No se encontró valor asegurado configurado.\n"
+                          "Por favor ingrese el valor asegurado para el vehículo NUEVO:")
+            else:
+                mensaje = ("Valor asegurado no disponible para vehículo USADO.\n"
+                          "Por favor ingrese el valor asegurado manualmente:")
+            
+            # Mostrar diálogo para ingresar valor
+            valor_usuario = simpledialog.askstring(
+                "Valor Asegurado Requerido",
+                mensaje,
+                parent=root
+            )
+            
+            # Cerrar ventana
+            root.destroy()
+            
+            if valor_usuario:
+                # Limpiar el valor (remover comas, puntos, símbolos)
+                valor_limpio = valor_usuario.replace(",", "").replace(".", "").replace("$", "").strip()
+                
+                # Validar que sea numérico
+                if valor_limpio.isdigit():
+                    print(f"💰 Usuario ingresó valor asegurado: {valor_limpio}")
+                    # Actualizar el config con el nuevo valor
+                    cls.VEHICLE_INSURED_VALUE = valor_limpio
+                    # CRÍTICO: También actualizar la variable de entorno para evitar sobrescritura
+                    import os
+                    os.environ['GUI_VEHICLE_INSURED_VALUE'] = valor_limpio
+                    print(f"🔒 Variable de entorno GUI actualizada: GUI_VEHICLE_INSURED_VALUE={valor_limpio}")
+                    return True
+                else:
+                    print(f"❌ Valor ingresado no es válido: '{valor_usuario}'")
+                    messagebox.showerror("Error", f"El valor '{valor_usuario}' no es válido. Debe contener solo números.")
+                    return False
+            else:
+                print("⚠️ Usuario canceló ingreso de valor asegurado")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error verificando valor asegurado: {e}")
+            return False
+    
     

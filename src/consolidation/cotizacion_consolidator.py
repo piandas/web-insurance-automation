@@ -139,8 +139,10 @@ class CotizacionConsolidator:
         Para clientes usados: desde ClientConfig (ya extraído por Allianz)
         """
         try:
-            # Obtener valor desde ClientConfig (ya sea ingresado manualmente o extraído)
-            valor = ClientConfig.get_vehicle_insured_value()
+            # Usar directamente VEHICLE_INSURED_VALUE para evitar _load_gui_overrides()
+            # que podría sobrescribir el valor manual ingresado
+            valor = ClientConfig.VEHICLE_INSURED_VALUE
+            self.logger.info(f"💰 Obteniendo valor asegurado para consolidación: {valor}")
             
             if valor and valor.strip():
                 # Limpiar el valor (quitar caracteres no numéricos excepto comas y puntos)
@@ -264,12 +266,17 @@ class CotizacionConsolidator:
         return plans
     
     def extract_sura_plans_from_logs(self) -> Dict[str, str]:
-        """Extrae los valores de los planes de Sura desde los logs de la automatización, incluyendo Pérdida Parcial 10-1 SMLMV."""
-        self.logger.info("📊 Extrayendo valores de planes de Sura desde logs...")
+        """
+        Extrae los valores de los 3 planes de Sura desde los logs de la automatización:
+        1. Global Franquicia - Prima anual inicial
+        2. Autos Global - Prima tras seleccionar 1 SMLMV  
+        3. Autos Clásico - Prima del plan clásico
+        """
+        self.logger.info("📊 Extrayendo valores de los 3 planes de Sura desde logs...")
         plans = {
-            'Plan Autos Global': 'No encontrado',
-            'Pérdida Parcial 10-1 SMLMV': 'No encontrado',
-            'Plan Autos Clasico': 'No encontrado'
+            'Global Franquicia': 'No encontrado',
+            'Autos Global': 'No encontrado',
+            'Autos Clásico': 'No encontrado'
         }
         try:
             sura_log_path = self.base_path / "LOGS" / "sura" / "sura.log"
@@ -279,24 +286,32 @@ class CotizacionConsolidator:
             with open(sura_log_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             recent_lines = lines[-500:] if len(lines) > 500 else lines
-            # Patrones para buscar los valores en los logs
+            
+            # Patrones actualizados para la nueva nomenclatura
             patterns = {
-                'Plan Autos Global': [
-                    r'Global:\s*\$([0-9,.]+)',
-                    r'Prima Plan Global:\s*\$([0-9,.]+)',
-                    r'prima_global[\'\"]\s*:\s*([0-9,.]+)'
+                'Global Franquicia': [
+                    r'Prima Global Franquicia:\s*\$([0-9,.]+)',
+                    r'global_franquicia[\'\"]\s*:\s*([0-9,.]+)',
+                    r'Global Franquicia:\s*\$([0-9,.]+)'
                 ],
-                'Pérdida Parcial 10-1 SMLMV': [
+                'Autos Global': [
+                    r'Prima Autos Global:\s*\$([0-9,.]+)',
+                    r'autos_global[\'\"]\s*:\s*([0-9,.]+)',
+                    r'Autos Global:\s*\$([0-9,.]+)',
+                    # Patrones legacy para compatibilidad
                     r'tras 10-1 SMLMV:\s*\$([0-9,.]+)',
-                    r'Pérdida Parcial 10-1 SMLMV:\s*\$([0-9,.]+)',
-                    r'prima_10_1[\'\"]\s*:\s*([0-9,.]+)'
+                    r'Prima tras ambos 1 SMLMV:\s*\$([0-9,.]+)'
                 ],
-                'Plan Autos Clasico': [
-                    r'Clásico:\s*\$([0-9,.]+)',
+                'Autos Clásico': [
+                    r'Prima Autos Clásico:\s*\$([0-9,.]+)',
+                    r'autos_clasico[\'\"]\s*:\s*([0-9,.]+)',
+                    r'Autos Clásico:\s*\$([0-9,.]+)',
+                    # Patrones legacy para compatibilidad
                     r'Prima Plan Autos Clásico:\s*\$([0-9,.]+)',
-                    r'prima_clasico[\'\"]\s*:\s*([0-9,.]+)'
+                    r'Clásico:\s*\$([0-9,.]+)'
                 ]
             }
+            
             for plan_name, plan_patterns in patterns.items():
                 for line in reversed(recent_lines):
                     for pattern in plan_patterns:
@@ -309,6 +324,7 @@ class CotizacionConsolidator:
                                 break
                     if plans[plan_name] != 'No encontrado':
                         break
+            
             return plans
         except Exception as e:
             self.logger.error(f"Error extrayendo valores de Sura desde logs: {e}")
@@ -505,12 +521,12 @@ class CotizacionConsolidator:
                 # Sura exitosa: extraer desde logs
                 sura_plans = self.extract_sura_plans_from_logs()
             else:
-                # Sura falló: llenar con "FALLÓ"
+                # Sura falló: llenar con "FALLÓ" usando nueva nomenclatura
                 self.logger.warning("❌ Sura falló, llenando planes con 'FALLÓ'")
                 sura_plans = {
-                    'A TODO RIESGO C/D 15%': 'FALLÓ',
-                    'A TODO RIESGO C/D 10%': 'FALLÓ',
-                    'RESPONSABILIDAD CIVIL + PT + HU': 'FALLÓ'
+                    'Global Franquicia': 'FALLÓ',
+                    'Autos Global': 'FALLÓ',
+                    'Autos Clásico': 'FALLÓ'
                 }
             
             if automation_results.get('allianz', False):

@@ -159,6 +159,9 @@ Ejemplos de uso:
             print(f"🚀 Iniciando automatización para: {', '.join(companies_to_run)}")
             print(f"📋 Modo: {'Paralelo' if parsed_args.parallel else 'Secuencial'}")
             
+            # NOTA: La verificación del valor asegurado se hace ahora solo antes del consolidado
+            # ya que solo se necesita para Solidaria y Bolívar, no para navegadores (Allianz/Sura)
+            
             # Ejecutar automatizaciones
             if parsed_args.parallel:
                 results = await self.manager.run_parallel(
@@ -195,6 +198,17 @@ Ejemplos de uso:
                 if not all_success:
                     print("⚠️  Generando consolidado con datos parciales (fallos marcados como 'FALLÓ')")
                 print("="*50)
+                
+                # Verificar valor asegurado SOLO antes del consolidado (necesario para Solidaria y Bolívar)
+                from ..config.client_config import ClientConfig
+                print("\n💰 VERIFICANDO VALOR ASEGURADO PARA CONSOLIDADO...")
+                
+                if not ClientConfig.ensure_vehicle_insured_value():
+                    print("\n❌ No se puede crear el consolidado sin valor asegurado.")
+                    print("✅ Las cotizaciones de navegadores (Allianz/Sura) se completaron exitosamente.")
+                    return 0 if all_success else 1
+                
+                print("✅ Valor asegurado confirmado. Continuando con consolidado...\n")
                 
                 try:
                     consolidator = CotizacionConsolidator()

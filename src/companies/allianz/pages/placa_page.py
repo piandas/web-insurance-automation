@@ -305,14 +305,18 @@ class PlacaPage(BasePage):
                     self.logger.error("❌ Valor asegurado es obligatorio para vehículos nuevos")
                     return False
             else:
-                # Para vehículos usados: extraer el valor prellenado automáticamente
-                valor_prellenado = await self.get_valor_asegurado_from_iframe()
-                if valor_prellenado:
-                    self.logger.info(f"💰 Valor asegurado extraído para vehículo usado: {valor_prellenado}")
-                    # Actualizar el config con el valor extraído para usarlo en Sura
-                    ClientConfig.VEHICLE_INSURED_VALUE = valor_prellenado
+                # Para vehículos usados: verificar si ya hay valor manual, si no, extraer automáticamente
+                valor_actual = ClientConfig.VEHICLE_INSURED_VALUE
+                if valor_actual and valor_actual.strip():
+                    self.logger.info(f"💰 Usando valor asegurado ya configurado para vehículo usado: {valor_actual}")
                 else:
-                    self.logger.warning("⚠️ No se pudo extraer valor asegurado para vehículo usado")
+                    # Extraer el valor prellenado automáticamente solo si no hay valor manual
+                    valor_prellenado = await self.get_valor_asegurado_from_iframe()
+                    if valor_prellenado:
+                        self.logger.info(f"💰 Valor asegurado extraído automáticamente para vehículo usado: {valor_prellenado}")
+                        ClientConfig.VEHICLE_INSURED_VALUE = valor_prellenado
+                    else:
+                        self.logger.warning("⚠️ No se pudo extraer valor asegurado para vehículo usado")
             
             return True
         except Exception as e:

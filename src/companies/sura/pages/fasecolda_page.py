@@ -17,42 +17,53 @@ class FasecoldaPage(BasePage):
         """Selecciona '1 SMLMV' en el dropdown de 'Pérdida Parcial' en ambos contenedores (Daños y Hurto)."""
         self.logger.info("🔽 Seleccionando '1 SMLMV' en los dropdowns de 'Pérdida Parcial' (Daños y Hurto)...")
         try:
-            # Buscar todos los labels 'Pérdida Parcial'
-            label_els = await self.page.query_selector_all("label.style-scope.paper-input:has-text('Pérdida Parcial')")
-            if len(label_els) < 2:
-                self.logger.error(f"❌ No se encontraron dos labels 'Pérdida Parcial' (encontrados: {len(label_els)})")
+            # Buscar todos los dropdowns de "Pérdida Parcial" usando el ID exacto
+            dropdowns = await self.page.query_selector_all('dropdown-list[id="Pérdida Parcial"]')
+            
+            if len(dropdowns) < 2:
+                self.logger.error(f"❌ No se encontraron dos dropdowns 'Pérdida Parcial' (encontrados: {len(dropdowns)})")
                 return False
-            for idx, label_el in enumerate(label_els[:2]):
-                input_el = await label_el.evaluate_handle("el => el.parentElement.querySelector('input[is=\\'iron-input\\']')")
-                if not input_el:
-                    self.logger.error(f"❌ No se encontró el input para 'Pérdida Parcial' #{idx+1}")
-                    return False
-                await input_el.click()
+                
+            self.logger.info(f"✅ Encontrados {len(dropdowns)} dropdowns de 'Pérdida Parcial'")
+            
+            # Procesar los primeros 2 dropdowns
+            for idx in range(min(2, len(dropdowns))):
+                dropdown = dropdowns[idx]
+                
+                # Hacer clic en el paper-dropdown-menu dentro del dropdown-list
+                paper_dropdown = await dropdown.query_selector('paper-dropdown-menu')
+                if not paper_dropdown:
+                    self.logger.error(f"❌ No se encontró paper-dropdown-menu en dropdown #{idx+1}")
+                    continue
+                    
+                await paper_dropdown.click()
                 self.logger.info(f"✅ Desplegable 'Pérdida Parcial' #{idx+1} abierto")
                 
-                # Buscar opciones '1 SMLMV'
-                options = await self.page.query_selector_all("paper-item:has-text('1 SMLMV')")
-                
-                if not options:
-                    self.logger.error(f"❌ No se encontró opción '1 SMLMV' en 'Pérdida Parcial' #{idx+1}")
-                    return False
-                
-                # Para el segundo dropdown, elegir la opción que no esté aria-selected='true'
-                option_to_click = None
-                if idx == 0:
-                    option_to_click = options[0]
-                else:
-                    for opt in options:
-                        aria_selected = await opt.get_attribute('aria-selected')
-                        if aria_selected != 'true':
-                            option_to_click = opt
-                            break
-                    if not option_to_click:
-                        option_to_click = options[0]  # fallback
-                
-                await option_to_click.click()
-                self.logger.info(f"✅ Opción '1 SMLMV' seleccionada en 'Pérdida Parcial' #{idx+1}")
+                # Esperar un momento para que aparezcan las opciones
                 await self.page.wait_for_timeout(500)
+                
+                # Buscar la opción exacta "1 SMLMV" (no "10% - 1 SMLMV")
+                # Usar JavaScript para encontrar y hacer clic en el elemento correcto
+                selection_result = await self.page.evaluate("""
+                    () => {
+                        const items = document.querySelectorAll('paper-item');
+                        for (let item of items) {
+                            if (item.textContent.trim() === '1 SMLMV' && item.offsetParent !== null) {
+                                item.click();
+                                return { success: true, text: item.textContent.trim() };
+                            }
+                        }
+                        return { success: false, message: 'No encontrado' };
+                    }
+                """)
+                
+                if selection_result.get('success'):
+                    self.logger.info(f"✅ Opción '1 SMLMV' seleccionada en 'Pérdida Parcial' #{idx+1}")
+                else:
+                    self.logger.error(f"❌ No se pudo seleccionar '1 SMLMV' en dropdown #{idx+1}")
+                    
+                await self.page.wait_for_timeout(500)
+            
             return True
         except Exception as e:
             self.logger.error(f"❌ Error seleccionando '1 SMLMV' en dropdowns de 'Pérdida Parcial': {e}")
@@ -791,8 +802,33 @@ class FasecoldaPage(BasePage):
         self.logger.info("🔍 Verificando modal opcional específico antes del PDF...")
         
         try:
-            # Selectores más específicos para el modal antes del PDF
+            # Primero verificar si hay un iron-overlay-backdrop activo
+            backdrop_visible = await self.is_visible_safe("iron-overlay-backdrop.opened", timeout=1000)
+            if backdrop_visible:
+                self.logger.info("🎭 Detectado iron-overlay-backdrop activo, buscando modal...")
+                
+                # Verificar específicamente el modal de continuidad de placa
+                continuity_modal = await self.is_visible_safe(".dialog-content-base.info", timeout=1000)
+                if continuity_modal:
+                    self.logger.info("📋 Modal de continuidad de placa detectado")
+                    
+                    # Intentar hacer clic en el botón Aceptar específico
+                    if await self.safe_click("#btnOne", timeout=3000):
+                        self.logger.info("✅ Botón 'Aceptar' del modal de continuidad presionado")
+                        await self.page.wait_for_timeout(2000)
+                        return True
+            
+            # Selectores más específicos para el modal antes del PDF (en orden de prioridad)
             pdf_modal_selectors = [
+                # Primero probar el botón específico del modal de continuidad
+                "#btnOne",
+                "#btnOne:has-text('Aceptar')",
+                
+                # Luego otros botones específicos por ID
+                "#btnAceptar", 
+                "#accept-btn",
+                "#confirm-btn",
+                
                 # Botones de aceptar/confirmar genéricos
                 "paper-button:has-text('Aceptar')",
                 "paper-button:has-text('ACEPTAR')",
@@ -800,12 +836,6 @@ class FasecoldaPage(BasePage):
                 "paper-button:has-text('OK')",
                 "paper-button:has-text('Continuar')",
                 "paper-button:has-text('Sí')",
-                
-                # Por ID específicos
-                "#btnOne",
-                "#btnAceptar", 
-                "#accept-btn",
-                "#confirm-btn",
                 
                 # Por clases
                 "paper-button[class*='accent']",
@@ -819,19 +849,19 @@ class FasecoldaPage(BasePage):
                 "iron-overlay-backdrop ~ * paper-button:has-text('Aceptar')"
             ]
             
-            # Intentar con cada selector con timeouts más largos
+            # Intentar con cada selector
             for selector in pdf_modal_selectors:
                 try:
                     self.logger.info(f"🔍 Probando selector: {selector}")
                     
                     # Verificar visibilidad con timeout corto
-                    if await self.is_visible_safe(selector, timeout=2000):
+                    if await self.is_visible_safe(selector, timeout=1000):
                         self.logger.info(f"📋 Modal PDF específico encontrado: {selector}")
                         
                         # Hacer clic con timeout más largo
-                        if await self.safe_click(selector, timeout=8000):
+                        if await self.safe_click(selector, timeout=5000):
                             self.logger.info("✅ Modal PDF específico manejado exitosamente")
-                            await self.page.wait_for_timeout(3000)  # Esperar más tiempo después del clic
+                            await self.page.wait_for_timeout(2000)
                             return True
                         else:
                             self.logger.warning(f"⚠️ No se pudo hacer clic en modal PDF: {selector}")
@@ -858,15 +888,62 @@ class FasecoldaPage(BasePage):
             # Verificación específica para modal opcional antes del PDF
             await self._handle_optional_pdf_modal()
             
-            # Esperar por nueva pestaña y hacer clic en PDF
+            # Esperar 2 segundos para que se estabilice antes de descargar PDF
+            self.logger.info("⏳ Esperando 2 segundos para estabilización antes de descargar PDF...")
+            await asyncio.sleep(2)
+            
+            # Esperar por nueva pestaña y hacer clic en PDF (con reintento si es necesario)
             self.logger.info("🌐 Detectando nueva pestaña con el PDF...")
-            async with self.page.context.expect_page() as new_page_info:
-                if not await self.safe_click(self.SELECTORS['actions']['pdf_download'], timeout=10000):
-                    self.logger.error("❌ No se pudo hacer clic en el botón de descarga PDF")
-                    return False
-                self.logger.info("✅ Clic en botón PDF exitoso")
+            nuevo_popup = None
+            
+            # Primer intento
+            try:
+                # Verificación adicional de backdrop antes del clic
+                backdrop_check = await self.is_visible_safe("iron-overlay-backdrop.opened", timeout=500)
+                if backdrop_check:
+                    self.logger.warning("⚠️ Detectado backdrop activo antes del clic PDF, manejando modal...")
+                    await self._handle_optional_pdf_modal()
+                    await asyncio.sleep(1)
+                
+                async with self.page.context.expect_page(timeout=5000) as new_page_info:
+                    if not await self.safe_click(self.SELECTORS['actions']['pdf_download'], timeout=10000):
+                        self.logger.error("❌ No se pudo hacer clic en el botón de descarga PDF")
+                        return False
+                    self.logger.info("✅ Clic en botón PDF exitoso")
 
-            nuevo_popup = await new_page_info.value
+                nuevo_popup = await new_page_info.value
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ No se detectó nueva pestaña en 5 segundos, reintentando con modal opcional: {e}")
+                
+                # Intentar manejar modal opcional nuevamente y reintentar
+                await self._handle_optional_pdf_modal()
+                await asyncio.sleep(1)
+                
+                # Segundo intento
+                try:
+                    # Verificación adicional de backdrop en el reintento
+                    backdrop_check_retry = await self.is_visible_safe("iron-overlay-backdrop.opened", timeout=500)
+                    if backdrop_check_retry:
+                        self.logger.warning("⚠️ Backdrop sigue activo en reintento, manejando modal nuevamente...")
+                        await self._handle_optional_pdf_modal()
+                        await asyncio.sleep(1)
+                    
+                    async with self.page.context.expect_page(timeout=5000) as new_page_info_retry:
+                        if not await self.safe_click(self.SELECTORS['actions']['pdf_download'], timeout=10000):
+                            self.logger.error("❌ No se pudo hacer clic en el botón de descarga PDF en segundo intento")
+                            return False
+                        self.logger.info("✅ Clic en botón PDF exitoso (segundo intento)")
+
+                    nuevo_popup = await new_page_info_retry.value
+                    
+                except Exception as retry_e:
+                    self.logger.error(f"❌ Falló segundo intento de detección de pestaña PDF: {retry_e}")
+                    return False
+            
+            if not nuevo_popup:
+                self.logger.error("❌ No se pudo obtener la nueva pestaña con el PDF")
+                return False
             await nuevo_popup.wait_for_load_state("networkidle")
 
             # Esperar URL real del PDF (máximo 45 segundos)
@@ -935,59 +1012,91 @@ class FasecoldaPage(BasePage):
             return False
 
     async def process_prima_and_plan_selection(self) -> dict:
-        """Proceso completo para extraer primas y seleccionar plan clásico. En usados, selecciona 1 SMLMV y extrae 3 valores."""
-        self.logger.info("🔄 Procesando extracción de primas y selección de plan...")
-        results = {'prima_global': None, 'prima_10_1_1': None, 'prima_10_1_2': None, 'prima_clasico': None, 'success': False}
+        """
+        Proceso completo para extraer las 3 primas de Sura:
+        1. Global Franquicia - Prima anual inicial que aparece por defecto
+        2. Autos Global - Prima tras seleccionar '1 SMLMV' en ambos desplegables  
+        3. Autos Clásico - Prima del plan clásico
+        
+        SIEMPRE calcula las 3 opciones, tanto para vehículos nuevos como usados.
+        """
+        self.logger.info("🔄 Procesando extracción de las 3 primas de Sura...")
+        results = {
+            'global_franquicia': None, 
+            'autos_global': None, 
+            'autos_clasico': None, 
+            'success': False
+        }
+        
         try:
-            # 1. Extraer prima del Plan Global
-            self.logger.info("📊 Extrayendo prima del Plan Global...")
-            prima_global = await self.extract_prima_anual_value(max_wait_seconds=20)
-            if prima_global is None:
-                self.logger.error("❌ No se pudo extraer la prima del Plan Global")
+            # 1. Extraer prima "Global Franquicia" (la primera que aparece por defecto)
+            self.logger.info("📊 Extrayendo prima 'Global Franquicia' (prima anual inicial)...")
+            prima_global_franquicia = await self.extract_prima_anual_value(max_wait_seconds=20)
+            if prima_global_franquicia is None:
+                self.logger.error("❌ No se pudo extraer la prima 'Global Franquicia'")
                 return results
-            results['prima_global'] = prima_global
-            self.logger.info(f"✅ Prima Plan Global: ${prima_global:,.0f}")
-            # SOLO PARA USADOS: seleccionar 1 SMLMV en dos desplegables y extraer valor tras cada uno
-            if ClientConfig.VEHICLE_STATE == 'Usado':
-                if not await self.select_10_1_smlmv_in_dropdowns():
-                    self.logger.error("❌ No se pudo seleccionar '1 SMLMV' en los desplegables")
-                    return results
-                # Esperar y extraer valor solo después de actualizar ambos dropdowns
-                self.logger.info("📊 Esperando y extrayendo prima tras ambos cambios de 1 SMLMV...")
-                prima_10_1 = await self.extract_prima_anual_value(max_wait_seconds=20)
-                results['prima_10_1'] = prima_10_1
-                self.logger.info(f"✅ Prima tras ambos 1 SMLMV: ${prima_10_1 if prima_10_1 is not None else 'N/A'}")
-            # 2. Cambiar a Plan Autos Clásico
+            results['global_franquicia'] = prima_global_franquicia
+            self.logger.info(f"✅ Prima Global Franquicia: ${prima_global_franquicia:,.0f}")
+            
+            # 2. Seleccionar '1 SMLMV' en ambos desplegables y extraer prima "Autos Global"
+            self.logger.info("🔽 Seleccionando '1 SMLMV' para obtener prima 'Autos Global'...")
+            if not await self.select_10_1_smlmv_in_dropdowns():
+                self.logger.error("❌ No se pudo seleccionar '1 SMLMV' en los desplegables")
+                return results
+                
+            # Esperar y extraer prima "Autos Global" tras los cambios de desplegables
+            self.logger.info("📊 Extrayendo prima 'Autos Global' tras seleccionar 1 SMLMV...")
+            prima_autos_global = await self.extract_prima_anual_value(max_wait_seconds=20)
+            results['autos_global'] = prima_autos_global
+            if prima_autos_global:
+                self.logger.info(f"✅ Prima Autos Global: ${prima_autos_global:,.0f}")
+            else:
+                self.logger.warning("⚠️ No se pudo extraer prima 'Autos Global'")
+            
+            # 3. Cambiar a Plan Autos Clásico y extraer prima "Autos Clásico"
             self.logger.info("🎯 Cambiando a Plan Autos Clásico...")
             if not await self.click_plan_autos_clasico():
                 self.logger.error("❌ No se pudo seleccionar Plan Autos Clásico")
                 return results
-            # 3. Manejar modales
+                
+            # Manejar modales que pueden aparecer tras el cambio
             await self.check_and_handle_continuity_modal()
             await self.handle_optional_modal()
-            # 4. Extraer prima del Plan Clásico
-            self.logger.info("📊 Extrayendo prima del Plan Autos Clásico...")
-            prima_clasico = await self.extract_prima_anual_value(max_wait_seconds=20)
-            results['prima_clasico'] = prima_clasico
-            if prima_clasico is None:
-                self.logger.error("❌ No se pudo extraer la prima del Plan Autos Clásico")
+            
+            # Extraer prima "Autos Clásico"
+            self.logger.info("📊 Extrayendo prima 'Autos Clásico'...")
+            prima_autos_clasico = await self.extract_prima_anual_value(max_wait_seconds=20)
+            results['autos_clasico'] = prima_autos_clasico
+            if prima_autos_clasico is None:
+                self.logger.error("❌ No se pudo extraer la prima 'Autos Clásico'")
                 return results
+            self.logger.info(f"✅ Prima Autos Clásico: ${prima_autos_clasico:,.0f}")
+            
+            # Marcar como exitoso
             results['success'] = True
-            # Mostrar/exportar los 3 valores en usados, 2 en nuevos
-            if ClientConfig.VEHICLE_STATE == 'Usado':
-                self.logger.info(f"✅ Primas usadas - Global: ${prima_global:,.0f}, tras 10-1 SMLMV: ${results['prima_10_1'] if results['prima_10_1'] is not None else 'N/A'}, Clásico: ${prima_clasico:,.0f}")
-            else:
-                self.logger.info(f"✅ Primas diferentes - Global: ${prima_global:,.0f}, Clásico: ${prima_clasico:,.0f}")
-            self.logger.info("🎉 Proceso de extracción de primas completado exitosamente")
+            
+            # Log de resumen con las 3 primas
+            self.logger.info("🎉 Las 3 primas de Sura extraídas exitosamente:")
+            self.logger.info(f"   📈 Global Franquicia: ${prima_global_franquicia:,.0f}")
+            autos_global_str = f"${prima_autos_global:,.0f}" if prima_autos_global else "N/A"
+            self.logger.info(f"   📈 Autos Global: {autos_global_str}")
+            self.logger.info(f"   📈 Autos Clásico: ${prima_autos_clasico:,.0f}")
+            
             return results
+            
         except Exception as e:
-            self.logger.error(f"❌ Error procesando primas y selección de plan: {e}")
+            self.logger.error(f"❌ Error procesando las 3 primas de Sura: {e}")
             return results
 
     async def complete_vehicle_information_filling(self) -> dict:
         """Proceso completo para llenar la información adicional del vehículo después del Fasecolda."""
         self.logger.info("📋 Completando información del vehículo...")
-        results = {'prima_global': None, 'prima_clasico': None, 'success': False}
+        results = {
+            'global_franquicia': None, 
+            'autos_global': None, 
+            'autos_clasico': None, 
+            'success': False
+        }
         try:
             # Para usados, NO volver a llenar la placa (ya se hizo en el flujo especial)
             if ClientConfig.VEHICLE_STATE == 'Usado':
@@ -1025,7 +1134,13 @@ class FasecoldaPage(BasePage):
     async def process_fasecolda_filling(self) -> dict:
         """Proceso completo de obtención y llenado de códigos Fasecolda, información del vehículo y descarga de cotización."""
         self.logger.info("🔍 Procesando llenado de código Fasecolda, información del vehículo y descarga...")
-        results = {'prima_global': None, 'prima_clasico': None, 'success': False, 'pdf_downloaded': False}
+        results = {
+            'global_franquicia': None, 
+            'autos_global': None, 
+            'autos_clasico': None, 
+            'success': False, 
+            'pdf_downloaded': False
+        }
         try:
             if ClientConfig.VEHICLE_STATE == 'Usado':
                 self.logger.info("🚗 Vehículo USADO: solo se ingresa placa y lupa, sin fasecolda/modelo/clase...")

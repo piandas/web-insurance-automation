@@ -167,7 +167,18 @@ class SuraAutomation(BaseAutomation):
             results = await fasecolda_page.process_fasecolda_filling()
             
             if results['success']:
-                self.logger.info(f"✅ Primas extraídas - Global: ${results['prima_global']:,.0f}, Clásico: ${results['prima_clasico']:,.0f}")
+                # Usar nueva nomenclatura
+                global_franquicia = results.get('global_franquicia', 0)
+                autos_global = results.get('autos_global', 0) 
+                autos_clasico = results.get('autos_clasico', 0)
+                
+                self.logger.info("✅ Las 3 primas de Sura extraídas:")
+                if global_franquicia:
+                    self.logger.info(f"   📈 Global Franquicia: ${global_franquicia:,.0f}")
+                if autos_global:
+                    self.logger.info(f"   📈 Autos Global: ${autos_global:,.0f}")
+                if autos_clasico:
+                    self.logger.info(f"   📈 Autos Clásico: ${autos_clasico:,.0f}")
                 
                 if results.get('pdf_downloaded', False):
                     self.logger.info("📥 PDF descargado exitosamente")

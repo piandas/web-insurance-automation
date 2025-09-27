@@ -163,20 +163,23 @@ class TemplateHandler:
             'autos plus': ['autos plus'],
             'autos llave en mano': ['autos llave en mano'],
             
-            # Mapeos de Sura
-            'autos global': ['plan autos global'],
-            'plan autos global': ['autos global'],
-            'autos clasico': ['plan autos clasico'],
+            # Mapeos de Sura actualizados con nueva nomenclatura
+            'global franquicia': ['global franquicia', 'autos parcial', 'perdida parcial'],
+            'autos global': ['autos global', 'plan autos global', 'perdida parcial 10-1 smlmv'],
+            'autos clasico': ['autos clasico', 'plan autos clasico'],
+            
+            # Mapeos legacy para compatibilidad hacia atrás
+            'plan autos global': ['autos global', 'global franquicia'],
             'plan autos clasico': ['autos clasico'],
-            'autos parcial': ['global franquicia', 'perdida parcial'],
-            'global franquicia': ['autos parcial', 'perdida parcial'],
-            'perdida parcial': ['autos parcial', 'global franquicia'],
+            'perdida parcial 10-1 smlmv': ['autos global'],
+            'perdida parcial': ['global franquicia', 'autos global'],
+            'autos parcial': ['global franquicia'],
             
             # Variaciones adicionales
             'esencial': ['autos esencial'],
             'plus': ['autos plus'],
             'llave en mano': ['autos llave en mano'],
-            'global': ['autos global', 'plan autos global'],
+            'global': ['autos global', 'plan autos global', 'global franquicia'],
             'clasico': ['autos clasico', 'plan autos clasico']
         }
         
@@ -531,29 +534,19 @@ class TemplateHandler:
         
         self.logger.info(f"✅ Fila 'VALOR A PAGAR' encontrada: {valor_pagar_row}")
         
-        # 2. Determinar mapeo de planes según el estado del vehículo
-        vehicle_state = ClientConfig.VEHICLE_STATE.lower()
-        if vehicle_state == 'nuevo':
-            # Para nuevos: Sura (Autos Global, Autos Clasico), Allianz (4 planes)
-            plan_mapping = {
-                'sura': ['Autos Global', 'Autos Clasico'],
-                'allianz': ['Autos Esencial', 'Autos Esencial + Total', 'Autos Plus', 'Autos llave en mano']
-            }
-            sura_plan_map = {
-                'Autos Global': sura_plans.get('Plan Autos Global', 'No encontrado'),
-                'Autos Clasico': sura_plans.get('Plan Autos Clasico', 'No encontrado')
-            }
-        else:
-            # Para usados: Sura (Autos Global, Autos Parcial, Autos Clasico), Allianz (3 planes)
-            plan_mapping = {
-                'sura': ['Autos Global', 'Autos Parcial', 'Autos Clasico'],
-                'allianz': ['Autos Esencial', 'Autos Esencial + Total', 'Autos Plus']
-            }
-            sura_plan_map = {
-                'Autos Global': sura_plans.get('Plan Autos Global', 'No encontrado'),
-                'Autos Parcial': sura_plans.get('Pérdida Parcial 10-1 SMLMV', 'No encontrado'),
-                'Autos Clasico': sura_plans.get('Plan Autos Clasico', 'No encontrado')
-            }
+        # 2. Determinar mapeo de planes - SIEMPRE usar los 3 planes de Sura
+        # Nueva nomenclatura: Global Franquicia, Autos Global, Autos Clásico
+        plan_mapping = {
+            'sura': ['Global Franquicia', 'Autos Global', 'Autos Clásico'],
+            'allianz': ['Autos Esencial', 'Autos Esencial + Total', 'Autos Plus', 'Autos llave en mano']
+        }
+        
+        # Mapeo de planes de Sura con nueva nomenclatura
+        sura_plan_map = {
+            'Global Franquicia': sura_plans.get('Global Franquicia', 'No encontrado'),
+            'Autos Global': sura_plans.get('Autos Global', 'No encontrado'),
+            'Autos Clásico': sura_plans.get('Autos Clásico', 'No encontrado')
+        }
         
         # 3. Buscar columnas de SURA y llenar valores (si está permitida)
         if 'SURA' in aseguradoras_permitidas:
@@ -917,12 +910,13 @@ class TemplateHandler:
     def _get_valor_asegurado(self) -> Optional[str]:
         """Obtiene el valor asegurado desde la configuración."""
         try:
-            # Para vehículos nuevos: usar valor desde interfaz
-            if ClientConfig.VEHICLE_STATE.lower() == 'nuevo':
-                return ClientConfig.get_vehicle_insured_value()
-            else:
-                # Para vehículos usados: usar valor extraído de Allianz
-                return ClientConfig.get_vehicle_insured_value()
+            # Usar directamente VEHICLE_INSURED_VALUE para evitar _load_gui_overrides()
+            # que podría sobrescribir el valor manual ingresado tanto para nuevos como usados
+            valor = ClientConfig.VEHICLE_INSURED_VALUE
+            vehicle_state = ClientConfig.VEHICLE_STATE.lower()
+            self.logger.info(f"💰 Usando valor asegurado para vehículo {vehicle_state}: {valor}")
+            return valor
+            
         except Exception as e:
             self.logger.error(f"Error obteniendo valor asegurado: {e}")
             return None

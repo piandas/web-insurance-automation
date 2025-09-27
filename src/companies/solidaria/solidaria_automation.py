@@ -155,7 +155,10 @@ class SolidariaAutomation:
             Optional[str]: Valor asegurado limpio o None si no está disponible
         """
         try:
-            valor = ClientConfig.get_vehicle_insured_value()
+            # Usar directamente VEHICLE_INSURED_VALUE para evitar _load_gui_overrides()
+            # que podría sobrescribir el valor manual ingresado
+            valor = ClientConfig.VEHICLE_INSURED_VALUE
+            self.logger.info(f"💰 Obteniendo valor asegurado para Solidaria: {valor}")
             
             if valor and valor.strip():
                 # Limpiar el valor (quitar caracteres no numéricos excepto comas y puntos)
