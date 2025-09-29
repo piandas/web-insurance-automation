@@ -40,12 +40,26 @@ class AutomationManager:
         
         results = {}
         
+        # Esperar que termine la extracción de Fasecolda antes de proceder
+        try:
+            from ..shared.fasecolda_service import FasecoldaReferenceNotFoundError
+            self.logger.info("🔍 Esperando resultado de extracción Fasecolda...")
+            await fasecolda_task  # Esto puede lanzar FasecoldaReferenceNotFoundError
+            self.logger.info("✅ Extracción Fasecolda completada - Iniciando cotizaciones")
+        except FasecoldaReferenceNotFoundError as e:
+            # Si falla Fasecolda, marcar todas las compañías como fallidas y salir
+            self.logger.error(f"🚫 PROCESO COMPLETAMENTE DETENIDO - Error en Fasecolda: {e}")
+            self.logger.info("🚫 Los navegadores de Allianz y Sura NO se abrirán")
+            self.logger.info("📝 Verifique y actualice la referencia del vehículo en la edición del cliente")
+            return {company: False for company in filtered_companies}
+        
         try:
             for company in filtered_companies:
                 self.logger.info(f"📋 Procesando {company.upper()}...")
                 try:
                     # Importar dinámicamente la factory
                     from ..factory.automation_factory import AutomationFactory
+                    from ..shared.fasecolda_service import FasecoldaReferenceNotFoundError
                     
                     automation = AutomationFactory.create(company, **kwargs)
                     await automation.launch()
@@ -61,6 +75,18 @@ class AutomationManager:
                         self.logger.info(f"✅ {company.upper()} completado exitosamente")
                     else:
                         self.logger.error(f"❌ {company.upper()} falló")
+                        
+                except FasecoldaReferenceNotFoundError as e:
+                    # Referencia Fasecolda no encontrada - detener todo el proceso
+                    self.logger.error(f"🚫 PROCESO DETENIDO EN {company.upper()}: {e}")
+                    self.logger.info(f"🚫 Cancelando apertura de navegadores restantes: {[c.upper() for c in filtered_companies if c not in results]}")
+                    # Marcar todos los restantes como fallidos
+                    for remaining_company in filtered_companies:
+                        if remaining_company not in results:
+                            results[remaining_company] = False
+                            self.logger.info(f"❌ {remaining_company.upper()}: No iniciado debido a error Fasecolda")
+                    # Detener el bucle
+                    break
                         
                 except Exception as e:
                     self.logger.error(f"❌ Error en {company.upper()}: {e}")
@@ -96,6 +122,19 @@ class AutomationManager:
         # Iniciar extracción de códigos FASECOLDA en paralelo
         fasecolda_task = await start_global_fasecolda_extraction(headless=headless_mode)
         
+        # Esperar que termine la extracción de Fasecolda antes de proceder
+        try:
+            from ..shared.fasecolda_service import FasecoldaReferenceNotFoundError
+            self.logger.info("🔍 Esperando resultado de extracción Fasecolda...")
+            await fasecolda_task  # Esto puede lanzar FasecoldaReferenceNotFoundError
+            self.logger.info("✅ Extracción Fasecolda completada - Iniciando cotizaciones paralelas")
+        except FasecoldaReferenceNotFoundError as e:
+            # Si falla Fasecolda, marcar todas las compañías como fallidas y salir
+            self.logger.error(f"🚫 PROCESO COMPLETAMENTE DETENIDO - Error en Fasecolda: {e}")
+            self.logger.info("🚫 Los navegadores de Allianz y Sura NO se abrirán")
+            self.logger.info("📝 Verifique y actualice la referencia del vehículo en la edición del cliente")
+            return {company: False for company in filtered_companies}
+        
         # Crear tasks
         tasks = []
         automations = {}
@@ -115,11 +154,23 @@ class AutomationManager:
             
             # Procesar resultados
             results = {}
+            fasecolda_error_found = False
+            
             for i, company in enumerate(filtered_companies):
                 result = results_list[i]
                 if isinstance(result, Exception):
-                    self.logger.error(f"❌ Excepción en {company.upper()}: {result}")
-                    results[company] = False
+                    # Verificar si es una excepción específica de Fasecolda
+                    from ..shared.fasecolda_service import FasecoldaReferenceNotFoundError
+                    if isinstance(result, FasecoldaReferenceNotFoundError):
+                        self.logger.error(f"🚫 PROCESO DETENIDO - Referencia Fasecolda no encontrada: {result}")
+                        fasecolda_error_found = True
+                        # Marcar todas las compañías como fallidas cuando hay error de Fasecolda
+                        for company_name in filtered_companies:
+                            results[company_name] = False
+                        break
+                    else:
+                        self.logger.error(f"❌ Excepción en {company.upper()}: {result}")
+                        results[company] = False
                 else:
                     results[company] = result
                     if result:
@@ -146,6 +197,8 @@ class AutomationManager:
     async def _run_single_automation(self, company: str, automation) -> bool:
         """Ejecuta una sola automatización con manejo de pausas globales."""
         try:
+            from ..shared.fasecolda_service import FasecoldaReferenceNotFoundError
+            
             await automation.launch()
             self.active_automations[company] = automation
             
@@ -156,6 +209,19 @@ class AutomationManager:
             if company in self.active_automations:
                 del self.active_automations[company]
             return result
+            
+        except FasecoldaReferenceNotFoundError as e:
+            # Referencia Fasecolda no encontrada - propagar la excepción para detener todo
+            self.logger.error(f"🚫 FASECOLDA ERROR en {company}: {e}")
+            try:
+                await automation.close()
+            except:
+                pass
+            if company in self.active_automations:
+                del self.active_automations[company]
+            # Re-lanzar para que se maneje en el nivel superior
+            raise e
+            
         except Exception as e:
             self.logger.error(f"❌ Error en automatización {company}: {e}")
             try:

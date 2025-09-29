@@ -5,7 +5,7 @@ import asyncio
 from typing import Optional, Dict
 from playwright.async_api import async_playwright, Playwright, Browser, Page
 
-from .fasecolda_service import FasecoldaService
+from .fasecolda_service import FasecoldaService, FasecoldaReferenceNotFoundError
 from ..config.client_config import ClientConfig
 from ..config.base_config import BaseConfig
 from ..core.logger_factory import LoggerFactory
@@ -206,6 +206,12 @@ class FasecoldaExtractor:
             
             self.codes = codes
             return codes
+            
+        except FasecoldaReferenceNotFoundError as e:
+            # Excepción específica cuando no se encuentra la referencia
+            self.logger.error(f"🚫 Referencia Fasecolda no encontrada: {e}")
+            # Re-lanzar la excepción para que detenga todo el proceso
+            raise e
             
         except Exception as e:
             self.logger.error(f"❌ Error en extracción asíncrona FASECOLDA: {e}")

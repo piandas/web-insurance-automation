@@ -2,9 +2,21 @@
 
 import asyncio
 import logging
+import tkinter as tk
+from tkinter import messagebox
 from typing import Optional
 from playwright.async_api import Page
 from ..shared.global_pause_coordinator import request_pause_for_fasecolda_selection
+
+
+class FasecoldaReferenceNotFoundError(Exception):
+    """Excepción lanzada cuando no se encuentra la referencia en Fasecolda."""
+    
+    def __init__(self, brand: str, reference: str, message: str = None):
+        self.brand = brand
+        self.reference = reference
+        default_message = f"No se encontró la referencia '{reference}' para la marca '{brand}' en Fasecolda"
+        super().__init__(message or default_message)
 
 # Constantes para configuración
 FASECOLDA_URL = 'https://www.fasecolda.com/guia-de-valores-old/'
@@ -69,6 +81,9 @@ class FasecoldaService:
     def __init__(self, page: Page, logger: logging.Logger = None):
         self.page = page
         self.logger = logger or logging.getLogger(__name__)
+        # Rastrear búsqueda actual para manejo de errores
+        self._current_brand = None
+        self._current_reference = None
         
     async def get_cf_code_comprehensive(
         self,
@@ -94,6 +109,10 @@ class FasecoldaService:
             Diccionario con códigos CF y CH del vehículo seleccionado
         """
         try:
+            # Rastrear búsqueda actual
+            self._current_brand = brand
+            self._current_reference = reference
+            
             await self._navigate_to_fasecolda()
             
             # Llenar formulario hasta la marca
@@ -105,14 +124,18 @@ class FasecoldaService:
             
             if not all_references:
                 self.logger.error("❌ No se encontraron referencias para la marca especificada")
-                return None
+                # Mostrar popup informativo y lanzar excepción
+                self._show_reference_not_found_popup(brand, reference, "No se encontraron referencias para la marca especificada")
+                raise FasecoldaReferenceNotFoundError(brand, reference)
             
             # Buscar exhaustivamente en cada referencia
             all_options = await self._search_all_references(all_references, category, state, model_year, brand)
             
             if not all_options:
                 self.logger.error("❌ No se encontraron vehículos en ninguna referencia")
-                return None
+                # Mostrar popup informativo y lanzar excepción
+                self._show_reference_not_found_popup(brand, reference, "No se encontraron vehículos en ninguna referencia")
+                raise FasecoldaReferenceNotFoundError(brand, reference)
             
             # Mostrar diálogo de selección y obtener la opción elegida
             selected_option = await self._show_selection_dialog(all_options, brand, reference)
@@ -124,6 +147,10 @@ class FasecoldaService:
                 }
             
             return None
+            
+        except FasecoldaReferenceNotFoundError:
+            # Re-lanzar la excepción específica para que se propague correctamente
+            raise
             
         except Exception as e:
             self.logger.error(f"❌ Error en búsqueda exhaustiva de código Fasecolda: {e}")
@@ -154,6 +181,10 @@ class FasecoldaService:
             Formato: {'cf_code': 'xxxxx', 'ch_code': 'yyyyyyy'}
         """
         try:
+            # Rastrear búsqueda actual
+            self._current_brand = brand
+            self._current_reference = reference
+            
             await self._navigate_to_fasecolda()
             
             if not await self._fill_vehicle_form(category, state, model_year, brand, reference):
@@ -163,6 +194,10 @@ class FasecoldaService:
                 return None
                 
             return await self._extract_codes(full_reference)
+            
+        except FasecoldaReferenceNotFoundError:
+            # Re-lanzar la excepción específica para que se propague correctamente
+            raise
             
         except Exception as e:
             self.logger.error(f"❌ Error obteniendo códigos CF/CH: {e}")
@@ -453,7 +488,11 @@ class FasecoldaService:
             
             if len(result_containers) == 0:
                 self.logger.error("❌ No se encontraron resultados")
-                return None
+                # Mostrar popup y lanzar excepción
+                brand = self._current_brand or 'Desconocida'
+                reference = self._current_reference or 'Desconocida'
+                self._show_reference_not_found_popup(brand, reference, "No se encontraron resultados para la búsqueda")
+                raise FasecoldaReferenceNotFoundError(brand, reference)
             
             if len(result_containers) == 1:
                 # Solo un resultado, extraer ambos códigos directamente
@@ -996,6 +1035,60 @@ class FasecoldaService:
                 return False
         
         return True
+
+    def _show_reference_not_found_popup(self, brand: str, reference: str, details: str = "") -> None:
+        """
+        Muestra un popup informativo cuando no se encuentra la referencia en Fasecolda.
+        
+        Args:
+            brand: Marca del vehículo
+            reference: Referencia buscada
+            details: Detalles adicionales del error
+        """
+        try:
+            # Crear ventana temporal para mostrar el popup
+            root = tk.Tk()
+            root.withdraw()  # Ocultar la ventana principal
+            
+            # Configurar ventana para que aparezca en primer plano
+            root.attributes('-topmost', True)  # Siempre encima
+            root.lift()  # Elevar la ventana
+            root.focus_force()  # Forzar el foco
+            
+            # En Windows, traer al frente
+            try:
+                root.wm_attributes('-topmost', 1)
+                root.after(100, lambda: root.wm_attributes('-topmost', 0))  # Quitar topmost después de 100ms
+            except:
+                pass  # Si falla en otros sistemas operativos
+            
+            # Configurar el mensaje del popup
+            title = "⚠️ Referencia Fasecolda No Encontrada"
+            
+            message = f"No se encontró la referencia en Fasecolda:\n\n"
+            message += f"🚗 Marca: {brand}\n"
+            message += f"🔍 Referencia: {reference}\n\n"
+            
+            if details:
+                message += f"📋 Detalle: {details}\n\n"
+            
+            message += "❗ El proceso se ha detenido completamente.\n\n"
+            message += "🚫 Los navegadores de cotización NO se abrirán.\n\n"
+            message += "📝 Para continuar:\n"
+            message += "• Verifica los datos del vehículo\n"
+            message += "• Actualiza la referencia en la edición del cliente\n"
+            message += "• O ingresa manualmente los códigos CF y CH"
+            
+            # Mostrar popup modal que se mantenga en primer plano
+            messagebox.showerror(title, message, parent=root)
+            
+            # Limpiar recursos de tkinter
+            root.destroy()
+            
+            self.logger.info(f"💬 Popup mostrado: Referencia {reference} no encontrada para {brand}")
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error mostrando popup de referencia no encontrada: {e}")
 
     async def _show_selection_dialog(self, all_options: list, brand: str, reference: str) -> dict:
         """Muestra un diálogo de selección en la interfaz GUI."""
