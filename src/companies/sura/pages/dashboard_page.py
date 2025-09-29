@@ -245,8 +245,14 @@ class DashboardPage(BasePage):
         
         return await self._navigate_sequence()
 
-    async def select_document_type(self, document_type: str = "C") -> bool:
+    async def select_document_type(self, document_type: str = None) -> bool:
         """Selecciona el tipo de documento usando Material Design dropdown."""
+        # Si no se proporciona tipo de documento, usar la configuración del cliente
+        if document_type is None:
+            from ....config.client_config import ClientConfig
+            ClientConfig._load_gui_overrides()
+            document_type = ClientConfig.CLIENT_DOCUMENT_TYPE_SURA
+        
         self.logger.info(f"📄 Seleccionando tipo de documento: {document_type}")
         
         # Usar el mapeo de la clase base
@@ -367,8 +373,14 @@ class DashboardPage(BasePage):
                 self.logger.warning(f"⚠️ Mensaje de error detectado: {error_text}")
                 return True
         return False
-    async def input_document_number(self, document_number: str = "1020422674") -> bool:
+    async def input_document_number(self, document_number: str = None) -> bool:
         """Ingresa el número de documento en el campo correspondiente."""
+        # Si no se proporciona número de documento, usar la configuración del cliente
+        if document_number is None:
+            from ....config.client_config import ClientConfig
+            ClientConfig._load_gui_overrides()
+            document_number = ClientConfig.CLIENT_DOCUMENT_NUMBER
+        
         self.logger.info(f"📄 Ingresando número de documento: {document_number}")
         
         # Usar función optimizada de la clase base para buscar y llenar
@@ -408,17 +420,25 @@ class DashboardPage(BasePage):
 
     async def complete_navigation_flow(
         self,
-        document_number: str = "1020422674",
-        document_type: str = "C"
+        document_number: str = None,
+        document_type: str = None
     ) -> tuple[bool, Optional['Page']]:
         """Completa el flujo completo de navegación en Sura."""
         from playwright.async_api import Page
+        from ....config.client_config import ClientConfig
         
-        self.logger.info("🚀 Iniciando flujo completo de navegación Sura...")
+        # Cargar configuración del cliente desde GUI si no se especifican parámetros
+        if document_number is None or document_type is None:
+            ClientConfig._load_gui_overrides()
+            document_number = document_number or ClientConfig.CLIENT_DOCUMENT_NUMBER
+            document_type = document_type or ClientConfig.CLIENT_DOCUMENT_TYPE_SURA
+        
+        self.logger.info(f"🚀 Iniciando flujo completo de navegación Sura con documento: {document_number}")
         steps = [
             self.navigate_to_cotizador,
             self.click_main_dropdown,
-            lambda: self.select_document_type(document_type),            lambda: self.input_document_number(document_number),
+            lambda: self.select_document_type(document_type),
+            lambda: self.input_document_number(document_number),
             self.accept_form,
         ]
         for step in steps:

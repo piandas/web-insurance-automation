@@ -102,12 +102,8 @@ class SuraAutomation(BaseAutomation):
             try:
                 self.logger.info(f"🔄 Intento de navegación {intento}/{max_intentos}")
                 
-                # Usar los valores desde la configuración
-                document_number = getattr(self.config, 'CLIENT_DOCUMENT_NUMBER', '1020422674')
-                document_type = getattr(self.config, 'CLIENT_DOCUMENT_TYPE', 'C')
-                
-                # Ejecutar flujo completo de navegación
-                success, new_page = await self.dashboard_page.complete_navigation_flow(document_number, document_type)
+                # Ejecutar flujo completo de navegación (usa configuración del cliente automáticamente)
+                success, new_page = await self.dashboard_page.complete_navigation_flow()
                 
                 if success and new_page:
                     # Actualizar la referencia de la página en la automatización
