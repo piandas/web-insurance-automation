@@ -68,6 +68,114 @@ class FasecoldaPage(BasePage):
         except Exception as e:
             self.logger.error(f"❌ Error seleccionando '1 SMLMV' en dropdowns de 'Pérdida Parcial': {e}")
             return False
+
+    async def select_limite_3040(self) -> bool:
+        """Selecciona '3.040.000.000' en el dropdown de 'Limite' con reintentos."""
+        self.logger.info("🔽 Seleccionando '3.040.000.000' en el dropdown de 'Limite'...")
+        
+        max_attempts = 5
+        wait_time = 2000  # 2 segundos
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self.logger.info(f"🔄 Intento {attempt}/{max_attempts} para encontrar dropdown 'Limite'...")
+                
+                # Buscar el dropdown de "Limite" usando el ID exacto
+                limite_dropdown = await self.page.query_selector('dropdown-list[id="Limite"]')
+                
+                if not limite_dropdown:
+                    self.logger.warning(f"⚠️ Intento {attempt}: No se encontró el dropdown 'Limite'")
+                    if attempt < max_attempts:
+                        self.logger.info(f"⏳ Esperando {wait_time/1000} segundos antes del siguiente intento...")
+                        await self.page.wait_for_timeout(wait_time)
+                        continue
+                    else:
+                        self.logger.error("❌ No se encontró el dropdown 'Limite' después de todos los intentos")
+                        return False
+                    
+                self.logger.info(f"✅ Intento {attempt}: Encontrado dropdown de 'Limite'")
+                
+                # Hacer clic en el paper-dropdown-menu dentro del dropdown-list
+                paper_dropdown = await limite_dropdown.query_selector('paper-dropdown-menu')
+                if not paper_dropdown:
+                    self.logger.warning(f"⚠️ Intento {attempt}: No se encontró paper-dropdown-menu en dropdown 'Limite'")
+                    if attempt < max_attempts:
+                        await self.page.wait_for_timeout(wait_time)
+                        continue
+                    else:
+                        self.logger.error("❌ No se encontró paper-dropdown-menu después de todos los intentos")
+                        return False
+                    
+                await paper_dropdown.click()
+                self.logger.info("✅ Desplegable 'Limite' abierto")
+                
+                # Esperar un momento para que aparezcan las opciones
+                await self.page.wait_for_timeout(500)
+                
+                # Buscar y seleccionar la opción exacta "3.040.000.000"
+                selection_result = await self.page.evaluate("""
+                    () => {
+                        const items = document.querySelectorAll('paper-item');
+                        for (let item of items) {
+                            if (item.textContent.trim() === '3.040.000.000' && item.offsetParent !== null) {
+                                item.click();
+                                return { success: true, text: item.textContent.trim() };
+                            }
+                        }
+                        return { success: false, message: 'No encontrado' };
+                    }
+                """)
+                
+                if selection_result.get('success'):
+                    self.logger.info("✅ Opción '3.040.000.000' seleccionada en 'Limite'")
+                    
+                    # Verificar que se mantenga seleccionado (la página puede cambiar el valor)
+                    await self.page.wait_for_timeout(1000)
+                    
+                    # Verificar el valor actual del dropdown
+                    current_value = await self.page.evaluate("""
+                        () => {
+                            const dropdown = document.querySelector('dropdown-list[id="Limite"]');
+                            if (dropdown) {
+                                const input = dropdown.querySelector('paper-input input');
+                                return input ? input.value : null;
+                            }
+                            return null;
+                        }
+                    """)
+                    
+                    if current_value and '3.040.000.000' in current_value:
+                        self.logger.info(f"✅ Límite confirmado y mantenido: {current_value}")
+                        return True
+                    else:
+                        self.logger.warning(f"⚠️ Intento {attempt}: El valor cambió a '{current_value}', reintentando...")
+                        if attempt < max_attempts:
+                            await self.page.wait_for_timeout(wait_time)
+                            continue
+                        else:
+                            self.logger.error("❌ No se pudo mantener el valor seleccionado después de todos los intentos")
+                            return False
+                else:
+                    self.logger.warning(f"⚠️ Intento {attempt}: No se pudo seleccionar '3.040.000.000' en dropdown 'Limite'")
+                    if attempt < max_attempts:
+                        await self.page.wait_for_timeout(wait_time)
+                        continue
+                    else:
+                        self.logger.error("❌ No se pudo seleccionar la opción después de todos los intentos")
+                        return False
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️ Error en intento {attempt} seleccionando dropdown 'Limite': {e}")
+                if attempt < max_attempts:
+                    await self.page.wait_for_timeout(wait_time)
+                    continue
+                else:
+                    self.logger.error(f"❌ Error persistente después de {max_attempts} intentos: {e}")
+                    return False
+        
+        self.logger.error("❌ Se agotaron todos los intentos para seleccionar el dropdown 'Limite'")
+        return False
+
     async def process_used_vehicle_plate(self) -> bool:
         """Flujo especial para vehículos usados: solo ingresar placa y dar clic en la lupa."""
         self.logger.info("🔄 Proceso especial para vehículo USADO: solo placa y lupa...")
@@ -144,7 +252,8 @@ class FasecoldaPage(BasePage):
         'dropdowns': {
             'vehicle_category': "#clase",
             'model_year': "#modelo", 
-            'service_type': "#tipoServicio"
+            'service_type': "#tipoServicio",
+            'limite': 'dropdown-list[id="Limite"]'
         },
         'form_fields': {
             'city': "input[aria-label='Ciudad']",
@@ -171,7 +280,8 @@ class FasecoldaPage(BasePage):
         'vehicle_category': "paper-item:has-text('AUTOMÓVILES')",
         'service_type': "paper-item:has-text('Particular')",
         'city': "vaadin-combo-box-item:has-text('Medellin - (Antioquia)')",
-        'model_year_template': "paper-item:has-text('{year}')"
+        'model_year_template': "paper-item:has-text('{year}')",
+        'limite': "paper-item:has-text('3.040.000.000')"
     }
 
     def __init__(self, page: Page):
@@ -366,6 +476,11 @@ class FasecoldaPage(BasePage):
                 'dropdown': self.SELECTORS['dropdowns']['service_type'],
                 'option': self.OPTIONS['service_type'],
                 'description': "tipo de servicio: Particular"
+            },
+            'limite': {
+                'dropdown': self.SELECTORS['dropdowns']['limite'],
+                'option': self.OPTIONS['limite'],
+                'description': "límite: 3.040.000.000"
             }
         }
         
@@ -575,10 +690,79 @@ class FasecoldaPage(BasePage):
             await self.page.click("body")
             await self.page.wait_for_timeout(3000)
             self.logger.info("✅ Cálculo de cotización activado")
+            
+            # Verificar y reseleccionar límite si cambió (máximo 3 intentos cada 2 segundos)
+            await self._verify_and_reselect_limite()
+            
             return True
         except Exception as e:
             self.logger.error(f"❌ Error activando cálculo de cotización: {e}")
             return False
+
+    async def _verify_and_reselect_limite(self) -> bool:
+        """Verifica que el límite siga en 3.040.000.000 y lo reselecciona si cambió."""
+        max_attempts = 3
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                await self.page.wait_for_timeout(2000)  # Esperar 2 segundos
+                
+                # Verificar el valor actual del dropdown
+                current_value = await self.page.evaluate("""
+                    () => {
+                        const dropdown = document.querySelector('dropdown-list[id="Limite"]');
+                        if (dropdown) {
+                            const input = dropdown.querySelector('paper-input input');
+                            return input ? input.value : null;
+                        }
+                        return null;
+                    }
+                """)
+                
+                if current_value and '3.040.000.000' in current_value:
+                    self.logger.info(f"✅ Verificación {attempt}/3: Límite mantenido - {current_value}")
+                    return True
+                else:
+                    self.logger.warning(f"⚠️ Verificación {attempt}/3: Límite cambió a '{current_value}', reseleccionando...")
+                    
+                    # Intentar reseleccionar rápidamente
+                    limite_dropdown = await self.page.query_selector('dropdown-list[id="Limite"]')
+                    if limite_dropdown:
+                        paper_dropdown = await limite_dropdown.query_selector('paper-dropdown-menu')
+                        if paper_dropdown:
+                            await paper_dropdown.click()
+                            await self.page.wait_for_timeout(500)
+                            
+                            # Seleccionar la opción correcta
+                            selection_result = await self.page.evaluate("""
+                                () => {
+                                    const items = document.querySelectorAll('paper-item');
+                                    for (let item of items) {
+                                        if (item.textContent.trim() === '3.040.000.000' && item.offsetParent !== null) {
+                                            item.click();
+                                            return true;
+                                        }
+                                    }
+                                    return false;
+                                }
+                            """)
+                            
+                            if selection_result:
+                                self.logger.info(f"✅ Límite reseleccionado exitosamente en intento {attempt}")
+                                continue  # Verificar en la siguiente iteración
+                            else:
+                                self.logger.warning(f"⚠️ No se pudo reseleccionar límite en intento {attempt}")
+                    
+                    if attempt == max_attempts:
+                        self.logger.warning("⚠️ No se pudo mantener el límite después de 3 intentos, continuando...")
+                        return False
+                        
+            except Exception as e:
+                self.logger.warning(f"⚠️ Error en verificación {attempt}: {e}")
+                if attempt == max_attempts:
+                    return False
+        
+        return True
 
     async def extract_prima_anual_value(self, max_wait_seconds: int = 20) -> Optional[float]:
         """Extrae el valor numérico de la prima anual esperando hasta que aparezca."""
@@ -591,20 +775,49 @@ class FasecoldaPage(BasePage):
                     if element:
                         text_content = await element.text_content()
                         if text_content and text_content.strip():
-                            # ⏱️ ESPERA ADICIONAL DE 2 SEGUNDOS PARA COMPUTADORES LENTOS
-                            self.logger.info("✅ Valor detectado, esperando 2 segundos adicionales para estabilización...")
-                            await self.page.wait_for_timeout(2000)  # Espera 2 segundos
+                            # ⏱️ VERIFICAR ESTABILIDAD DEL VALOR (3 intentos de 1 segundo)
+                            self.logger.info("✅ Valor detectado, verificando estabilidad...")
                             
-                            # Volver a extraer el texto después de la espera para asegurar estabilidad
-                            text_content = await element.text_content()
-                            if text_content and text_content.strip():
-                                # Extraer solo los números del texto
-                                import re
-                                numbers = re.sub(r'[^\d]', '', text_content)
-                                if numbers:
-                                    value = float(numbers)
-                                    self.logger.info(f"✅ Prima anual extraída: ${value:,.0f} (texto original: '{text_content.strip()}')")
-                                    return value
+                            import re
+                            
+                            # Obtener valor inicial
+                            initial_numbers = re.sub(r'[^\d]', '', text_content)
+                            if not initial_numbers:
+                                continue
+                            
+                            stable_value = None
+                            
+                            # 3 reintentos de 1 segundo para verificar estabilidad
+                            for stability_check in range(1, 4):
+                                await self.page.wait_for_timeout(1000)  # Esperar 1 segundo
+                                
+                                # Volver a extraer el valor
+                                element = await self.page.query_selector(self.SELECTORS['plans']['prima_anual'])
+                                if element:
+                                    current_text = await element.text_content()
+                                    if current_text and current_text.strip():
+                                        current_numbers = re.sub(r'[^\d]', '', current_text)
+                                        
+                                        if current_numbers == initial_numbers:
+                                            self.logger.info(f"🔄 Estabilidad {stability_check}/3: Valor mantenido - {current_numbers}")
+                                            stable_value = current_numbers
+                                        else:
+                                            self.logger.info(f"🔄 Estabilidad {stability_check}/3: Valor cambió de {initial_numbers} a {current_numbers}")
+                                            initial_numbers = current_numbers  # Actualizar para el siguiente check
+                                            stable_value = current_numbers
+                                    else:
+                                        self.logger.warning(f"⚠️ Estabilidad {stability_check}/3: No se pudo leer el valor")
+                                        break
+                                else:
+                                    self.logger.warning(f"⚠️ Estabilidad {stability_check}/3: Elemento no encontrado")
+                                    break
+                            
+                            if stable_value and stable_value.isdigit():
+                                value = float(stable_value)
+                                self.logger.info(f"✅ Prima anual estabilizada extraída: ${value:,.0f}")
+                                return value
+                            else:
+                                self.logger.warning("⚠️ No se pudo estabilizar el valor de prima anual")
                     
                     await self.page.wait_for_timeout(1000)
                     
@@ -1102,6 +1315,7 @@ class FasecoldaPage(BasePage):
             if ClientConfig.VEHICLE_STATE == 'Usado':
                 vehicle_steps = [
                     (self._select_dropdown_option, ['service_type'], "tipo de servicio"),
+                    (self.select_limite_3040, [], "límite 3.040.000.000"),  # Paso adicional ANTES de ciudad
                     (self.fill_city, [], "ciudad"),
                     (self.fill_valor_asegurado, [], "valor asegurado"),  # Nuevo paso
                     # No fill_plate ni select_zero_kilometers aquí
@@ -1114,6 +1328,7 @@ class FasecoldaPage(BasePage):
                     (self.fill_valor_asegurado, [], "valor asegurado"),  # Nuevo paso
                     (self.fill_plate, [], "placa"),
                     (self.select_zero_kilometers, [], "cero kilómetros"),
+                    (self.select_limite_3040, [], "límite 3.040.000.000"),  # Paso adicional DESPUÉS de cero kilómetros
                     (self.trigger_quote_calculation, [], "cálculo de cotización")
                 ]
             for step_func, step_args, step_desc in vehicle_steps:
@@ -1182,6 +1397,7 @@ class FasecoldaPage(BasePage):
             final_steps = [
                 (self.click_plan_autos_global, [], "regresar a Plan Autos Global"),
                 (lambda: self.page.wait_for_timeout(3000), [], "esperar carga del Plan Global"),
+                (self.select_limite_3040, [], "límite 3.040.000.000"),  # Paso adicional ANTES de ver cotización
                 (self.click_ver_cotizacion, [], "hacer clic en 'Ver cotización'"),
                 (self.activate_menu_toggle, [], "activar menú flotante"),
                 (self.download_pdf_quote, [], "descargar PDF")
@@ -1196,7 +1412,7 @@ class FasecoldaPage(BasePage):
                     await step_func(*step_args)
                 
                 # Manejar modales después de pasos específicos
-                if step_desc in ["regresar a Plan Autos Global", "hacer clic en 'Ver cotización'"]:
+                if step_desc in ["regresar a Plan Autos Global", "límite 3.040.000.000", "hacer clic en 'Ver cotización'"]:
                     await self.check_and_handle_continuity_modal()
                     await self.handle_optional_modal()
             
