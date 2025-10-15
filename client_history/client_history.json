@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-10-15T10:35:17.889736",
+  "last_updated": "2025-10-15T12:08:31.095310",
   "clients": [
     {
       "id": "20251014_164614",
@@ -22,13 +22,13 @@
         "vehicle_full_reference": "FORD FIESTA",
         "vehicle_state": "Usado",
         "vehicle_insured_value": "",
-        "manual_cf_code": "03001138",
-        "manual_ch_code": "03032019",
+        "manual_cf_code": "",
+        "manual_ch_code": "",
         "policy_number": "900001250624",
         "policy_number_allianz": "23688722",
         "selected_fondo": "EPM"
       },
-      "updated_at": "2025-10-15T10:35:17.889733"
+      "updated_at": "2025-10-15T12:08:31.095306"
     },
     {
       "id": "20251014_161639",
@@ -73,17 +73,17 @@
         "vehicle_plate": "",
         "vehicle_model_year": "2026",
         "vehicle_brand": "NISSAN",
-        "vehicle_reference": "X TRAIL",
-        "vehicle_full_reference": "NISSAN X TRAIL",
+        "vehicle_reference": "VERSA",
+        "vehicle_full_reference": "NISSAN VERSA",
         "vehicle_state": "Nuevo",
         "vehicle_insured_value": "169990000",
-        "manual_cf_code": "6436101",
-        "manual_ch_code": "06406159",
+        "manual_cf_code": "",
+        "manual_ch_code": "",
         "policy_number": "900001250624",
         "policy_number_allianz": "23688722",
         "selected_fondo": "EPM"
       },
-      "updated_at": "2025-10-14T16:21:10.966433"
+      "updated_at": "2025-10-15T11:48:49.530232"
     },
     {
       "id": "20250927_134703",

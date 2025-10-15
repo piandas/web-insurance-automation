@@ -18,20 +18,22 @@ class FasecoldaReferenceNotFoundError(Exception):
         default_message = f"No se encontró la referencia '{reference}' para la marca '{brand}' en Fasecolda"
         super().__init__(message or default_message)
 
-# Constantes para configuración
-FASECOLDA_URL = 'https://www.fasecolda.com/guia-de-valores-old/'
+# Constantes para configuración - NUEVA PÁGINA DE FASECOLDA
+# Usar directamente la URL del contenido (CloudFront) para evitar iframe
+FASECOLDA_URL = 'https://d2eqscyubtix40.cloudfront.net/'
 SELECTORS = {
-    'category': '#fe-categoria',
-    'state': '#fe-estado', 
-    'model': '#fe-modelo',
-    'brand': '#fe-marca',
-    'reference': '#fe-refe1',
-    'search_button': 'button.btn.btn-red.fe-submit',
-    'result_container': '.car-result-container',
-    'cf_code': '.car-code',
-    'car_brand': '.car-brand',
-    'car_reference_2': '.car-reference-2',
-    'car_reference_3': '.car-reference-3'
+    'basic_search_link': 'text=Búsqueda básica',
+    'category': 'select[aria-label="Select category"]',
+    'state_button_new': 'button:has-text("Nuevo")',
+    'state_button_used': 'button:has-text("Usado")',
+    'model': 'select[aria-label="Select model"]',
+    'brand': 'select[aria-label="Select marca"]',
+    'reference': 'select[aria-label="Select referencia"]',
+    'search_button': 'button.bg-btn-primary:has-text("Buscar")',
+    'vehicle_card': 'div.px-4.py-4',
+    'vehicle_name': 'div.font-bold.items-center.text-base',
+    'vehicle_codes': 'p.text-gray-700.text-sm.mt-1.border-b',
+    'vehicle_price': 'p.text-gray-700.text-base.font-bold.mt-1'
 }
 
 TIMEOUTS = {
@@ -204,7 +206,7 @@ class FasecoldaService:
             return None
     
     async def _navigate_to_fasecolda(self):
-        """Navega a la página de Fasecolda con reintentos."""
+        """Navega a la página de Fasecolda con reintentos y accede a búsqueda básica."""
         self.logger.info("🌐 Navegando a Fasecolda...")
         
         for attempt in range(1, TIMEOUTS['max_retries'] + 1):
@@ -213,11 +215,24 @@ class FasecoldaService:
                 
                 await self.page.goto(FASECOLDA_URL, timeout=TIMEOUTS['page_load'])
                 await self.page.wait_for_load_state('networkidle', timeout=TIMEOUTS['page_load'])
+                await asyncio.sleep(1)
                 
-                # Verificar que la página cargó correctamente buscando el selector de categoría
-                await self.page.wait_for_selector(SELECTORS['category'], timeout=5000)
+                # Hacer clic en "Búsqueda básica"
+                self.logger.info("🔍 Accediendo a búsqueda básica...")
                 
-                self.logger.info("✅ Página de Fasecolda cargada correctamente")
+                # Esperar a que el link esté visible y hacer clic
+                await self.page.click(SELECTORS['basic_search_link'], timeout=10000)
+                
+                self.logger.info("✅ Clic en búsqueda básica realizado")
+                
+                # Esperar navegación
+                await self.page.wait_for_load_state('networkidle', timeout=TIMEOUTS['page_load'])
+                await asyncio.sleep(1)
+                
+                # Verificar que el formulario cargó correctamente buscando el selector de categoría
+                await self.page.wait_for_selector(SELECTORS['category'], timeout=10000)
+                
+                self.logger.info("✅ Formulario de búsqueda básica cargado correctamente")
                 return
                 
             except Exception as e:
@@ -238,44 +253,49 @@ class FasecoldaService:
         brand: str,
         reference: str
     ) -> bool:
-        """Llena el formulario con los datos del vehículo usando el método optimizado con reintentos."""
+        """Llena el formulario con los datos del vehículo usando los nuevos selectores."""
         self.logger.info("📝 Llenando formulario de vehículo...")
         
         try:
-            # Configuración de campos: (nombre, emoji, selector, valor, wait_enabled, is_category)
-            fields = [
-                ("categoría", "📋", SELECTORS['category'], category, False, True),
-                ("estado", "🏷️", SELECTORS['state'], state, True, False),
-                ("modelo", "📅", SELECTORS['model'], model_year, True, False),
-                ("marca", "🚗", SELECTORS['brand'], brand, True, False),
-                ("referencia", "🔍", SELECTORS['reference'], reference, True, False),
-            ]
+            # 1. Seleccionar categoría - Automóvil (value="1")
+            self.logger.info("🚗 Seleccionando categoría: Automóvil...")
+            await self.page.select_option(SELECTORS['category'], value='1')
+            await asyncio.sleep(0.5)
+            self.logger.info("✅ Categoría seleccionada")
             
-            for field_name, emoji, selector, value, wait_enabled, is_category in fields:
-                self.logger.info(f"{emoji} Seleccionando {field_name}: {value}")
-                
-                # Para la categoría, usar reintentos especiales
-                if is_category:
-                    success = await self._select_category_with_retries(selector, value, field_name)
-                    if not success:
-                        self.logger.error(f"❌ No se pudo seleccionar {field_name} después de múltiples intentos")
-                        return False
-                else:
-                    # Para otros campos, usar lógica normal
-                    if wait_enabled:
-                        await self._wait_for_field_enabled(selector)
-                    
-                    # Obtener el valor para el select
-                    field_value = await self._get_select_value(selector, value, field_name)
-                    
-                    if field_value is None:
-                        self.logger.warning(f"⚠️ No se encontró {field_name}: {value} - continuando...")
-                        continue  # Continuar con el siguiente campo en lugar de fallar
-                    
-                    # Seleccionar el valor
-                    await self._select_by_value(selector, field_value)
-                
-                await asyncio.sleep(SLEEP_DURATION)
+            # 2. Seleccionar estado - Nuevo o Usado (botones, no select)
+            self.logger.info(f"📋 Seleccionando estado: {state}...")
+            if state.lower() == 'nuevo':
+                await self.page.click(SELECTORS['state_button_new'])
+            else:
+                await self.page.click(SELECTORS['state_button_used'])
+            await asyncio.sleep(0.5)
+            self.logger.info(f"✅ Estado '{state}' seleccionado")
+            
+            # 3. Seleccionar año del modelo
+            self.logger.info(f"📅 Seleccionando modelo: {model_year}...")
+            await self.page.select_option(SELECTORS['model'], label=model_year)
+            await asyncio.sleep(0.5)
+            self.logger.info(f"✅ Modelo '{model_year}' seleccionado")
+            
+            # 4. Seleccionar marca
+            self.logger.info(f"🏭 Seleccionando marca: {brand}...")
+            brand_normalized = brand.title()  # Capitalizar primera letra
+            await self.page.select_option(SELECTORS['brand'], label=brand_normalized)
+            await asyncio.sleep(1)  # Esperar a que se carguen las referencias
+            self.logger.info(f"✅ Marca '{brand}' seleccionada")
+            
+            # 5. Seleccionar referencia
+            self.logger.info(f"🔍 Seleccionando referencia: {reference}...")
+            # Buscar la referencia que mejor coincida
+            ref_value = await self._find_matching_reference(reference)
+            if ref_value:
+                await self.page.select_option(SELECTORS['reference'], value=ref_value)
+                await asyncio.sleep(0.5)
+                self.logger.info(f"✅ Referencia seleccionada")
+            else:
+                self.logger.warning(f"⚠️ No se encontró referencia exacta para: {reference}")
+                # Continuar de todas formas, se manejará en la búsqueda
             
             self.logger.info("✅ Formulario llenado correctamente")
             return True
@@ -285,6 +305,56 @@ class FasecoldaService:
             import traceback
             traceback.print_exc()
             return False
+    
+    async def _find_matching_reference(self, reference: str) -> Optional[str]:
+        """
+        Busca la referencia que mejor coincida con el texto proporcionado.
+        
+        Args:
+            reference: Texto de referencia a buscar
+            
+        Returns:
+            Value del option que mejor coincida, o None
+        """
+        try:
+            # Obtener todas las opciones del select de referencias
+            options = await self.page.evaluate("""
+                (selector) => {
+                    const select = document.querySelector(selector);
+                    if (!select) return [];
+                    
+                    return Array.from(select.options)
+                        .filter(opt => opt.value && opt.value !== '')
+                        .map(opt => ({
+                            value: opt.value,
+                            text: opt.text
+                        }));
+                }
+            """, SELECTORS['reference'])
+            
+            if not options:
+                return None
+            
+            # Normalizar el texto de búsqueda
+            ref_lower = reference.lower()
+            
+            # Buscar coincidencia exacta primero
+            for opt in options:
+                if opt['text'].lower() == ref_lower:
+                    return opt['value']
+            
+            # Buscar coincidencia parcial (contiene)
+            for opt in options:
+                if ref_lower in opt['text'].lower():
+                    return opt['value']
+            
+            # Si no se encuentra, retornar la primera opción
+            self.logger.warning(f"⚠️ No se encontró coincidencia para '{reference}', usando primera opción")
+            return options[0]['value'] if options else None
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error buscando referencia: {e}")
+            return None
     
     async def _select_field_with_retry(self, selector: str, value: str, field_name: str) -> bool:
         """Selecciona un campo con reintentos."""
@@ -474,19 +544,19 @@ class FasecoldaService:
             return False
     
     async def _extract_codes(self, full_reference: str = None) -> Optional[dict]:
-        """Extrae los códigos CF y CH basado en la referencia completa usando scoring de similitud."""
+        """Extrae los códigos CF y CH basado en la nueva estructura HTML."""
         self.logger.info("📊 Extrayendo códigos CF y CH...")
         
         try:
-            # Esperar a que aparezcan los resultados
-            await self.page.wait_for_selector('text=CF:', timeout=TIMEOUTS['cf_search'])
+            # Esperar a que aparezcan las tarjetas de vehículos
+            await asyncio.sleep(2)  # Dar tiempo para que carguen los resultados
             
-            # Buscar todos los contenedores de resultados
-            result_containers = await self.page.query_selector_all(SELECTORS['result_container'])
+            # Buscar todas las tarjetas de vehículos
+            vehicle_cards = await self.page.query_selector_all(SELECTORS['vehicle_card'])
             
-            self.logger.info(f"📋 Encontrados {len(result_containers)} resultados")
+            self.logger.info(f"📋 Encontradas {len(vehicle_cards)} tarjetas de vehículos")
             
-            if len(result_containers) == 0:
+            if len(vehicle_cards) == 0:
                 self.logger.error("❌ No se encontraron resultados")
                 # Mostrar popup y lanzar excepción
                 brand = self._current_brand or 'Desconocida'
@@ -494,101 +564,120 @@ class FasecoldaService:
                 self._show_reference_not_found_popup(brand, reference, "No se encontraron resultados para la búsqueda")
                 raise FasecoldaReferenceNotFoundError(brand, reference)
             
-            if len(result_containers) == 1:
+            if len(vehicle_cards) == 1:
                 # Solo un resultado, extraer ambos códigos directamente
-                codes = await self._extract_codes_from_container(result_containers[0])
+                codes = await self._extract_codes_from_card(vehicle_cards[0])
                 ch_info = f" - CH: {codes['ch_code']}" if codes['ch_code'] else ""
                 self.logger.info(f"✅ Un solo resultado encontrado - CF: {codes['cf_code']}{ch_info}")
                 return codes
             
             # Múltiples resultados, procesar y encontrar la mejor coincidencia
-            return await self._process_multiple_codes_results(result_containers, full_reference)
+            return await self._process_multiple_codes_results_new(vehicle_cards, full_reference)
                 
         except Exception as e:
             self.logger.error(f"❌ Error extrayendo códigos CF/CH: {e}")
             return None
     
-    async def _extract_cf_from_container(self, container) -> str:
-        """Extrae el código CF de un contenedor de resultado."""
-        cf_element = await container.query_selector(SELECTORS['cf_code'])
-        cf_text = await cf_element.inner_text()
-        return cf_text.replace('CF: ', '').strip()
-    
-    async def _extract_ch_from_container(self, container) -> str:
-        """Extrae el código CH de un contenedor de resultado."""
+    async def _extract_codes_from_card(self, card_element) -> dict:
+        """Extrae códigos CF y CH de una tarjeta de vehículo de la nueva estructura."""
         try:
-            # Buscar div con clase car-code que contenga CH:
-            ch_element = await container.query_selector('div.car-code[data-original-title="Código Homólogo"]')
-            if ch_element:
-                ch_text = await ch_element.inner_text()
-                return ch_text.replace('CH: ', '').strip()
-            return None
-        except Exception as e:
-            self.logger.warning(f"⚠️ Error extrayendo código CH: {e}")
-            return None
-    
-    async def _extract_codes_from_container(self, container) -> dict:
-        """Extrae tanto CF como CH de un contenedor de resultado."""
-        try:
-            cf_code = await self._extract_cf_from_container(container)
-            ch_code = await self._extract_ch_from_container(container)
+            import re
+            
+            # Extraer códigos CF y CH del elemento de códigos
+            codes_element = await card_element.query_selector(SELECTORS['vehicle_codes'])
+            if not codes_element:
+                return {'cf_code': None, 'ch_code': None}
+            
+            codes_text = await codes_element.text_content()
+            codes_text = codes_text.strip()
+            
+            # Extraer CF y CH con regex
+            # Formato esperado: "CF - 03033048 CH - 03001135"
+            cf_match = re.search(r'CF\s*-\s*(\d+)', codes_text)
+            ch_match = re.search(r'CH\s*-\s*(\d+)', codes_text)
+            
+            cf_code = cf_match.group(1) if cf_match else None
+            ch_code = ch_match.group(1) if ch_match else cf_code
             
             return {
                 'cf_code': cf_code,
                 'ch_code': ch_code
             }
         except Exception as e:
-            self.logger.warning(f"⚠️ Error extrayendo códigos: {e}")
+            self.logger.warning(f"⚠️ Error extrayendo códigos de tarjeta: {e}")
             return {'cf_code': None, 'ch_code': None}
     
-    async def _extract_result_data(self, container, index: int, full_reference: str = None) -> dict:
-        """Extrae toda la información de un contenedor de resultado."""
+    async def _extract_result_data_from_card(self, card_element, index: int, full_reference: str = None) -> dict:
+        """Extrae toda la información de una tarjeta de vehículo."""
         try:
-            # Extraer ambos códigos CF y CH
-            codes = await self._extract_codes_from_container(container)
+            import re
+            
+            # Extraer códigos CF y CH
+            codes = await self._extract_codes_from_card(card_element)
             cf_code = codes['cf_code']
             ch_code = codes['ch_code']
             
-            # Extraer las referencias del resultado
-            brand_element = await container.query_selector(SELECTORS['car_brand'])
-            ref2_element = await container.query_selector(SELECTORS['car_reference_2'])
-            ref3_element = await container.query_selector(SELECTORS['car_reference_3'])
+            # Extraer nombre del vehículo
+            name_element = await card_element.query_selector(SELECTORS['vehicle_name'])
+            vehicle_name = await name_element.text_content() if name_element else ""
+            vehicle_name = vehicle_name.strip()
             
-            brand = await brand_element.inner_text() if brand_element else ""
-            ref2 = await ref2_element.inner_text() if ref2_element else ""
-            ref3 = await ref3_element.inner_text() if ref3_element else ""
-            
-            # Extraer el valor asegurado del h3 dentro de car-value
-            insured_value = ""
-            try:
-                value_element = await container.query_selector('.car-value h3')
-                if value_element:
-                    insured_value = await value_element.inner_text()
-                    insured_value = insured_value.strip()
-            except Exception as e:
-                self.logger.debug(f"⚠️ No se pudo extraer valor asegurado para resultado {index + 1}: {e}")
-                insured_value = "No disponible"
-            
-            # Construir referencia completa: BRAND + REF2 + REF3
-            result_full_ref = f"{brand} {ref2} {ref3}".strip()
+            # Extraer precio
+            price_element = await card_element.query_selector(SELECTORS['vehicle_price'])
+            insured_value = await price_element.text_content() if price_element else "No disponible"
+            insured_value = insured_value.strip()
             
             # Calcular score de similitud si tenemos referencia de configuración
             score = 0
             if full_reference:
-                score = self._calculate_similarity_score(full_reference, result_full_ref)
+                score = self._calculate_similarity_score(full_reference, vehicle_name)
             
             return {
                 'index': index + 1,
                 'cf_code': cf_code,
                 'ch_code': ch_code,
-                'full_reference': result_full_ref,
+                'full_reference': vehicle_name,
                 'insured_value': insured_value,
                 'score': score
             }
             
         except Exception as e:
-            self.logger.warning(f"⚠️ Error procesando resultado {index + 1}: {e}")
+            self.logger.warning(f"⚠️ Error procesando tarjeta {index + 1}: {e}")
             return None
+    
+    async def _process_multiple_codes_results_new(self, vehicle_cards, full_reference: str = None) -> Optional[dict]:
+        """Procesa múltiples tarjetas de vehículos con opción de selección manual."""
+        self.logger.info(f"🔍 Múltiples resultados, analizando similitudes...")
+        
+        # Extraer datos de todas las tarjetas
+        all_results = []
+        best_match = None
+        best_score = -1
+        
+        for i, card in enumerate(vehicle_cards):
+            result_data = await self._extract_result_data_from_card(card, i, full_reference)
+            
+            if result_data:
+                all_results.append(result_data)
+                ch_info = f" - CH: {result_data['ch_code']}" if result_data['ch_code'] else ""
+                value_info = f" - Valor: {result_data['insured_value']}" if result_data.get('insured_value') else ""
+                self.logger.info(f"📝 Resultado {result_data['index']}: CF: {result_data['cf_code']}{ch_info}{value_info} - {result_data['full_reference']} (Score: {result_data['score']:.2f})")
+                
+                # Verificar si es la mejor coincidencia hasta ahora
+                if result_data['score'] > best_score:
+                    best_score = result_data['score']
+                    best_match = result_data
+        
+        # Si hay múltiples resultados, permitir selección manual
+        if len(all_results) > 1:
+            return await self._show_selection_dialog(all_results, self._current_brand, self._current_reference)
+        elif all_results:
+            return {
+                'cf_code': all_results[0]['cf_code'],
+                'ch_code': all_results[0]['ch_code']
+            }
+        
+        return None
     
     async def _process_multiple_results(self, result_containers, full_reference: str = None) -> Optional[str]:
         """Procesa múltiples resultados y encuentra la mejor coincidencia."""
@@ -777,57 +866,69 @@ class FasecoldaService:
     async def _fill_vehicle_form_to_brand(self, category: str, state: str, model_year: str, brand: str) -> bool:
         """Llena el formulario hasta la marca (sin seleccionar referencia específica)."""
         try:
-            # Seleccionar categoría
-            if not await self._select_field_with_retry(SELECTORS['category'], category, "categoría"):
-                return False
+            # 1. Seleccionar categoría - Automóvil (value="1")
+            self.logger.info("🚗 Seleccionando categoría: Automóvil...")
+            await self.page.select_option(SELECTORS['category'], value='1')
+            await asyncio.sleep(0.5)
             
-            await asyncio.sleep(SLEEP_DURATION)
+            # 2. Seleccionar estado - Nuevo o Usado (botones, no select)
+            self.logger.info(f"📋 Seleccionando estado: {state}...")
+            if state.lower() == 'nuevo':
+                await self.page.click(SELECTORS['state_button_new'])
+            else:
+                await self.page.click(SELECTORS['state_button_used'])
+            await asyncio.sleep(0.5)
             
-            # Seleccionar estado
-            if not await self._select_field_with_retry(SELECTORS['state'], state, "estado"):
-                return False
+            # 3. Seleccionar año del modelo
+            self.logger.info(f"📅 Seleccionando modelo: {model_year}...")
+            await self.page.select_option(SELECTORS['model'], label=model_year)
+            await asyncio.sleep(0.5)
             
-            await asyncio.sleep(SLEEP_DURATION)
+            # 4. Seleccionar marca
+            self.logger.info(f"🏭 Seleccionando marca: {brand}...")
+            brand_normalized = brand.title()
+            await self.page.select_option(SELECTORS['brand'], label=brand_normalized)
+            await asyncio.sleep(1)  # Esperar a que se carguen las referencias
             
-            # Seleccionar modelo (año)
-            if not await self._select_field_with_retry(SELECTORS['model'], model_year, "modelo"):
-                return False
-            
-            await asyncio.sleep(SLEEP_DURATION)
-            
-            # Seleccionar marca
-            if not await self._select_field_with_retry(SELECTORS['brand'], brand, "marca"):
-                return False
-            
-            await asyncio.sleep(SLEEP_DURATION)
-            
+            self.logger.info("✅ Formulario llenado hasta marca correctamente")
             return True
             
         except Exception as e:
             self.logger.error(f"❌ Error llenando formulario hasta marca: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     async def _get_all_references_for_brand(self, reference_filter: str = None) -> list:
         """Obtiene todas las referencias disponibles para la marca seleccionada."""
         try:
-            await self._wait_for_field_enabled(SELECTORS['reference'])
+            # Esperar a que el select de referencias esté disponible
+            await self.page.wait_for_selector(SELECTORS['reference'], timeout=5000)
+            await asyncio.sleep(0.5)
             
-            # Obtener todas las opciones del dropdown de referencias
-            options = await self.page.query_selector_all(f"{SELECTORS['reference']} option")
+            # Obtener todas las opciones del dropdown de referencias usando JavaScript
+            options_data = await self.page.evaluate("""
+                (selector) => {
+                    const select = document.querySelector(selector);
+                    if (!select) return [];
+                    
+                    return Array.from(select.options)
+                        .filter(opt => opt.value && opt.value !== '')
+                        .map(opt => ({
+                            value: opt.value,
+                            text: opt.text
+                        }));
+                }
+            """, SELECTORS['reference'])
             
             all_references = []
-            for option in options:
-                text = await option.inner_text()
-                value = await option.get_attribute('value')
-                
-                # Filtrar opciones válidas (excluir "Elija una opción")
-                if value and value != "false" and text.strip():
-                    # Si hay filtro, solo incluir referencias que contengan el filtro
-                    if not reference_filter or reference_filter.lower() in text.lower():
-                        all_references.append({
-                            'text': text.strip(),
-                            'value': value
-                        })
+            for opt_data in options_data:
+                # Si hay filtro, solo incluir referencias que contengan el filtro
+                if not reference_filter or reference_filter.lower() in opt_data['text'].lower():
+                    all_references.append({
+                        'text': opt_data['text'].strip(),
+                        'value': opt_data['value']
+                    })
             
             self.logger.info(f"🔍 Encontradas {len(all_references)} referencias disponibles")
             for i, ref in enumerate(all_references[:5]):  # Mostrar solo las primeras 5 en el log
@@ -843,7 +944,7 @@ class FasecoldaService:
             return []
 
     async def _search_all_references(self, references: list, category: str, state: str, model_year: str, brand: str) -> list:
-        """Busca exhaustivamente en todas las referencias y recopila todos los resultados (OPTIMIZADO Y CORREGIDO)."""
+        """Busca exhaustivamente en todas las referencias y recopila todos los resultados."""
         all_options = []
         option_counter = 1
         
@@ -853,91 +954,63 @@ class FasecoldaService:
             self.logger.info(f"🎯 Procesando referencia {ref_index + 1}/{len(references)}: {reference['text']}")
             
             try:
-                # OPTIMIZACIÓN: Solo cambiar la referencia en lugar de recargar todo el formulario
-                await self._select_by_value(SELECTORS['reference'], reference['value'])
-                await asyncio.sleep(SLEEP_DURATION)
+                # Seleccionar esta referencia
+                await self.page.select_option(SELECTORS['reference'], value=reference['value'])
+                await asyncio.sleep(0.5)
                 
                 # Hacer clic en buscar
                 self.logger.info(f"🔍 Ejecutando búsqueda para: {reference['text']}")
                 await self.page.click(SELECTORS['search_button'])
+                await asyncio.sleep(2)  # Esperar a que carguen los resultados
                 
-                # Esperar resultados con timeout más largo
-                try:
-                    await self.page.wait_for_selector(SELECTORS['result_container'], timeout=TIMEOUTS['cf_search'])
-                    await asyncio.sleep(1)  # Esperar adicional para que carguen completamente
-                except:
-                    self.logger.warning(f"⚠️ No se encontraron resultados para: {reference['text']}")
-                    # OPTIMIZACIÓN: Si no hay resultados, volver al formulario sin recargar página
-                    await self._return_to_search_form()
-                    await self._restore_form_state(category, state, model_year, brand)
-                    continue
+                # Buscar tarjetas de vehículos
+                vehicle_cards = await self.page.query_selector_all(SELECTORS['vehicle_card'])
                 
-                # Extraer todos los resultados de esta referencia
-                result_containers = await self.page.query_selector_all(SELECTORS['result_container'])
-                
-                if result_containers:
-                    self.logger.info(f"✅ Encontrados {len(result_containers)} resultado(s) en: {reference['text']}")
+                if vehicle_cards:
+                    self.logger.info(f"✅ Encontradas {len(vehicle_cards)} tarjeta(s) en: {reference['text']}")
                     
-                    # Verificar que los resultados son únicos y válidos
+                    # Procesar cada tarjeta
                     reference_results = []
-                    for container_index, container in enumerate(result_containers):
-                        result_data = await self._extract_complete_result_data(container, option_counter, reference['text'])
+                    for card_index, card in enumerate(vehicle_cards):
+                        result_data = await self._extract_complete_result_data_from_card(card, option_counter, reference['text'])
                         if result_data and self._is_valid_unique_result(result_data, all_options):
                             reference_results.append(result_data)
                             all_options.append(result_data)
                             option_counter += 1
-                            self.logger.info(f"📊 Resultado {container_index + 1}: CF={result_data['cf_code']}, CH={result_data['ch_code']}")
+                            self.logger.info(f"📊 Resultado {card_index + 1}: CF={result_data['cf_code']}, CH={result_data['ch_code']}")
                     
                     self.logger.info(f"🎯 Agregados {len(reference_results)} resultados únicos de la referencia: {reference['text']}")
                 else:
-                    self.logger.warning(f"⚠️ No se encontraron contenedores de resultados para: {reference['text']}")
-                
-                # OPTIMIZACIÓN: Volver al formulario sin recargar página (solo si no es la última búsqueda)
-                if ref_index < len(references) - 1:  # No volver en la última iteración
-                    await self._return_to_search_form()
-                    await self._restore_form_state(category, state, model_year, brand)
+                    self.logger.warning(f"⚠️ No se encontraron tarjetas de vehículos para: {reference['text']}")
                 
             except Exception as e:
                 self.logger.error(f"❌ Error buscando en referencia {reference['text']}: {e}")
-                # En caso de error, intentar volver al formulario
-                try:
-                    await self._return_to_search_form()
-                    await self._restore_form_state(category, state, model_year, brand)
-                except:
-                    # Si falla, recargar página como último recurso
-                    self.logger.warning("🔄 Recargando página debido a error crítico")
-                    await self.page.goto(FASECOLDA_URL)
-                    await self._fill_vehicle_form_to_brand(category, state, model_year, brand)
                 continue
         
         self.logger.info(f"🎉 Búsqueda comprensiva completada: {len(all_options)} opciones únicas encontradas")
         return all_options
 
-    async def _extract_complete_result_data(self, container, option_number: int, reference_group: str) -> dict:
-        """Extrae datos completos de un resultado incluyendo agrupación por referencia."""
+    async def _extract_complete_result_data_from_card(self, card_element, option_number: int, reference_group: str) -> dict:
+        """Extrae datos completos de una tarjeta de vehículo."""
         try:
+            import re
+            
             # Extraer códigos CF y CH
-            codes = await self._extract_codes_from_container(container)
+            codes = await self._extract_codes_from_card(card_element)
             cf_code = codes['cf_code']
             ch_code = codes['ch_code']
             
-            # Extraer descripción completa
-            brand_element = await container.query_selector(SELECTORS['car_brand'])
-            ref2_element = await container.query_selector(SELECTORS['car_reference_2'])
-            ref3_element = await container.query_selector(SELECTORS['car_reference_3'])
+            # Extraer nombre del vehículo (descripción completa)
+            name_element = await card_element.query_selector(SELECTORS['vehicle_name'])
+            full_description = await name_element.text_content() if name_element else ""
+            full_description = full_description.strip()
             
-            brand = await brand_element.inner_text() if brand_element else ""
-            ref2 = await ref2_element.inner_text() if ref2_element else ""
-            ref3 = await ref3_element.inner_text() if ref3_element else ""
-            
-            full_description = f"{brand} {ref2} {ref3}".strip()
-            
-            # Extraer valor asegurado
+            # Extraer valor asegurado (precio)
             insured_value = "No disponible"
             try:
-                value_element = await container.query_selector('.car-value h3')
-                if value_element:
-                    insured_value = await value_element.inner_text()
+                price_element = await card_element.query_selector(SELECTORS['vehicle_price'])
+                if price_element:
+                    insured_value = await price_element.text_content()
                     insured_value = insured_value.strip()
             except:
                 pass
@@ -952,7 +1025,7 @@ class FasecoldaService:
             }
             
         except Exception as e:
-            self.logger.error(f"❌ Error extrayendo datos del resultado: {e}")
+            self.logger.error(f"❌ Error extrayendo datos de la tarjeta: {e}")
             return None
 
     async def _return_to_search_form(self):

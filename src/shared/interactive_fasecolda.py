@@ -36,21 +36,22 @@ class InteractiveFasecoldaSelector:
         self.page = None
         self.headless = headless
         
-        # URLs y selectores
-        self.fasecolda_url = 'https://www.fasecolda.com/guia-de-valores-old/'
+        # URLs y selectores para la NUEVA página de Fasecolda
+        # Usar directamente la URL del contenido (CloudFront) para evitar iframe
+        self.fasecolda_url = 'https://d2eqscyubtix40.cloudfront.net/'
         self.selectors = {
-            'category': '#fe-categoria',
-            'state': '#fe-estado', 
-            'model': '#fe-modelo',
-            'brand': '#fe-marca',
-            'reference': '#fe-refe1',
-            'search_button': '.btn.btn-red.fe-submit',
-            'results_container': '#view-container',
-            'car_items': '.car-item',
-            'cf_code': '.car-code', 
-            'ch_code': '.car-ch-code',
-            'car_name': '.car-name',
-            'car_price': '.car-price'
+            'basic_search_link': 'text=Búsqueda básica',
+            'category_select': 'select[aria-label="Select category"]',
+            'state_button_new': 'button:has-text("Nuevo")',
+            'state_button_used': 'button:has-text("Usado")',
+            'model_select': 'select[aria-label="Select model"]',
+            'brand_select': 'select[aria-label="Select marca"]',
+            'reference_select': 'select[aria-label="Select referencia"]',
+            'search_button': 'button.bg-btn-primary:has-text("Buscar")',
+            'vehicle_card': 'div.px-4.py-4',
+            'vehicle_name': 'div.font-bold.items-center.text-base',
+            'vehicle_codes': 'p.text-gray-700.text-sm.mt-1.border-b',
+            'vehicle_price': 'p.text-gray-700.text-base.font-bold.mt-1'
         }
     
     async def __aenter__(self):
@@ -151,36 +152,65 @@ class InteractiveFasecoldaSelector:
             return None
     
     async def _navigate_to_fasecolda(self):
-        """Navega a la página de Fasecolda."""
+        """Navega a la página de Fasecolda y accede a búsqueda básica."""
         self.logger.info("🌐 Navegando a Fasecolda...")
         await self.page.goto(self.fasecolda_url)
         await self.page.wait_for_load_state('networkidle')
+        await asyncio.sleep(1)
         self.logger.info("✅ Página de Fasecolda cargada")
+        
+        # Hacer clic en "Búsqueda básica"
+        self.logger.info("🔍 Accediendo a búsqueda básica...")
+        
+        # Hacer clic usando el selector text=
+        await self.page.click(self.selectors['basic_search_link'], timeout=10000)
+        
+        self.logger.info("✅ Clic en búsqueda básica realizado")
+        
+        # Esperar navegación
+        await self.page.wait_for_load_state('networkidle')
+        await asyncio.sleep(1)
+        
+        # Verificar que el formulario cargó
+        await self.page.wait_for_selector(self.selectors['category'], timeout=10000)
+        self.logger.info("✅ Formulario de búsqueda básica cargado")
     
     async def _configure_search_form(self):
         """Configura el formulario de búsqueda con los datos del cliente."""
         self.logger.info("📝 Configurando formulario de búsqueda...")
         
         try:
-            # Seleccionar categoría (ya viene seleccionado "Liviano pasajeros")
-            if ClientConfig.VEHICLE_CATEGORY == 'Liviano pasajeros':
-                self.logger.info("✅ Categoría 'Liviano pasajeros' ya seleccionada")
+            # 1. Seleccionar categoría - Automóvil (value="1")
+            self.logger.info("🚗 Seleccionando categoría: Automóvil...")
+            await self.page.select_option(self.selectors['category_select'], value='1')
+            await asyncio.sleep(0.5)
+            self.logger.info("✅ Categoría seleccionada")
             
-            # Seleccionar estado (ya viene seleccionado "Nuevo")  
-            if ClientConfig.VEHICLE_STATE == 'Nuevo':
-                self.logger.info("✅ Estado 'Nuevo' ya seleccionado")
+            # 2. Seleccionar estado - Nuevo o Usado
+            vehicle_state = ClientConfig.VEHICLE_STATE
+            self.logger.info(f"📋 Seleccionando estado: {vehicle_state}...")
+            if vehicle_state.lower() == 'nuevo':
+                await self.page.click(self.selectors['state_button_new'])
+            else:
+                await self.page.click(self.selectors['state_button_used'])
+            await asyncio.sleep(0.5)
+            self.logger.info(f"✅ Estado '{vehicle_state}' seleccionado")
             
-            # Seleccionar año del modelo (ya viene seleccionado "2026")
-            if ClientConfig.VEHICLE_MODEL_YEAR == '2026':
-                self.logger.info("✅ Modelo '2026' ya seleccionado")
+            # 3. Seleccionar año del modelo
+            model_year = ClientConfig.VEHICLE_MODEL_YEAR
+            self.logger.info(f"📅 Seleccionando modelo: {model_year}...")
+            await self.page.select_option(self.selectors['model_select'], label=model_year)
+            await asyncio.sleep(0.5)
+            self.logger.info(f"✅ Modelo '{model_year}' seleccionado")
             
-            # Seleccionar marca (ya viene seleccionado "Mazda")
-            if ClientConfig.VEHICLE_BRAND.lower() == 'mazda':
-                self.logger.info("✅ Marca 'Mazda' ya seleccionada")
-            
-            # Seleccionar referencia (ya viene seleccionado "Cx50 - utilitario deportivo 4x4")
-            if 'cx50' in ClientConfig.VEHICLE_REFERENCE.lower():
-                self.logger.info("✅ Referencia 'Cx50' ya seleccionada")
+            # 4. Seleccionar marca
+            brand = ClientConfig.VEHICLE_BRAND
+            self.logger.info(f"🏭 Seleccionando marca: {brand}...")
+            # Normalizar nombre de marca para que coincida con las opciones del select
+            brand_normalized = brand.title()  # Capitalizar primera letra de cada palabra
+            await self.page.select_option(self.selectors['brand_select'], label=brand_normalized)
+            await asyncio.sleep(1)  # Esperar a que se carguen las referencias
+            self.logger.info(f"✅ Marca '{brand}' seleccionada")
             
             self.logger.info("✅ Formulario configurado correctamente")
             
@@ -189,22 +219,97 @@ class InteractiveFasecoldaSelector:
             raise
     
     async def _perform_search(self):
-        """Realiza la búsqueda haciendo clic en el botón buscar."""
-        self.logger.info("🔍 Realizando búsqueda...")
+        """
+        Realiza búsquedas iterativas para cada opción de referencia disponible.
+        Extrae todos los resultados de todas las referencias relacionadas.
+        """
+        all_results = []
         
         try:
-            # Hacer clic en buscar
-            await self.page.click(self.selectors['search_button'])
+            # Obtener todas las opciones de referencia disponibles
+            reference_options = await self._get_reference_options()
             
-            # Esperar a que aparezcan los resultados
-            await self.page.wait_for_selector('#view-container', timeout=15000)
-            await asyncio.sleep(2)  # Esperar un poco más para que carguen completamente
+            if not reference_options:
+                self.logger.warning("⚠️ No se encontraron opciones de referencia")
+                return all_results
             
-            self.logger.info("✅ Búsqueda completada, resultados cargados")
+            self.logger.info(f"� Se encontraron {len(reference_options)} opciones de referencia")
+            
+            # Iterar sobre cada opción de referencia
+            for idx, ref_option in enumerate(reference_options, 1):
+                ref_value = ref_option['value']
+                ref_text = ref_option['text']
+                
+                self.logger.info(f"🔍 [{idx}/{len(reference_options)}] Buscando: {ref_text}")
+                
+                try:
+                    # Seleccionar esta referencia
+                    await self.page.select_option(self.selectors['reference_select'], value=ref_value)
+                    await asyncio.sleep(0.5)
+                    
+                    # Hacer clic en buscar
+                    await self.page.click(self.selectors['search_button'])
+                    await asyncio.sleep(2)  # Esperar a que carguen los resultados
+                    
+                    # Extraer resultados de esta búsqueda
+                    results = await self._extract_search_results()
+                    
+                    if results:
+                        self.logger.info(f"✅ Encontrados {len(results)} resultados para '{ref_text}'")
+                        all_results.extend(results)
+                    else:
+                        self.logger.info(f"ℹ️ No se encontraron resultados para '{ref_text}'")
+                    
+                    # Volver al formulario si no es la última búsqueda
+                    if idx < len(reference_options):
+                        # Esperar un poco antes de la siguiente búsqueda
+                        await asyncio.sleep(1)
+                    
+                except Exception as e:
+                    self.logger.error(f"❌ Error buscando referencia '{ref_text}': {e}")
+                    continue
+            
+            self.logger.info(f"✅ Búsqueda completada. Total de resultados: {len(all_results)}")
+            
+            # Guardar los resultados para uso posterior
+            self._all_results = all_results
             
         except Exception as e:
-            self.logger.error(f"❌ Error realizando búsqueda: {e}")
+            self.logger.error(f"❌ Error en proceso de búsqueda: {e}")
             raise
+    
+    async def _get_reference_options(self) -> List[Dict[str, str]]:
+        """
+        Obtiene todas las opciones disponibles del select de referencias.
+        
+        Returns:
+            Lista de diccionarios con 'value' y 'text' de cada opción
+        """
+        try:
+            # Esperar a que el select de referencias esté disponible
+            await self.page.wait_for_selector(self.selectors['reference_select'], timeout=5000)
+            
+            # Extraer las opciones usando JavaScript
+            options = await self.page.evaluate("""
+                (selector) => {
+                    const select = document.querySelector(selector);
+                    if (!select) return [];
+                    
+                    const options = Array.from(select.options);
+                    return options
+                        .filter(opt => opt.value && opt.value !== '')  // Filtrar la opción "Elija una opción"
+                        .map(opt => ({
+                            value: opt.value,
+                            text: opt.text
+                        }));
+                }
+            """, self.selectors['reference_select'])
+            
+            return options
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error obteniendo opciones de referencia: {e}")
+            return []
     
     async def _get_results_and_select(self) -> Optional[Dict[str, str]]:
         """
@@ -214,28 +319,55 @@ class InteractiveFasecoldaSelector:
             Dict con códigos CF y CH seleccionados
         """
         try:
-            # Obtener todos los resultados
-            results = await self._extract_search_results()
+            # Usar los resultados ya extraídos en _perform_search
+            results = getattr(self, '_all_results', [])
             
             if not results:
                 self.logger.warning("⚠️ No se encontraron resultados")
                 return None
             
-            if len(results) == 1:
+            # Eliminar duplicados basados en código CF
+            unique_results = self._remove_duplicate_results(results)
+            
+            if len(unique_results) == 1:
                 # Si solo hay un resultado, seleccionarlo automáticamente
                 self.logger.info("✅ Solo un resultado encontrado, seleccionando automáticamente")
-                return results[0]
+                return {
+                    'cf_code': unique_results[0]['cf_code'],
+                    'ch_code': unique_results[0]['ch_code']
+                }
             
             # Mostrar opciones al usuario y permitir selección
-            return await self._show_options_and_get_selection(results)
+            return await self._show_options_and_get_selection(unique_results)
             
         except Exception as e:
             self.logger.error(f"❌ Error obteniendo resultados: {e}")
             return None
     
+    def _remove_duplicate_results(self, results: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """
+        Elimina resultados duplicados basándose en el código CF.
+        
+        Args:
+            results: Lista de resultados
+            
+        Returns:
+            Lista de resultados sin duplicados
+        """
+        seen_cf = set()
+        unique_results = []
+        
+        for result in results:
+            cf_code = result.get('cf_code')
+            if cf_code and cf_code not in seen_cf:
+                seen_cf.add(cf_code)
+                unique_results.append(result)
+        
+        return unique_results
+    
     async def _extract_search_results(self) -> List[Dict[str, str]]:
         """
-        Extrae los resultados de la búsqueda de la página.
+        Extrae los resultados de la búsqueda de la página usando la nueva estructura HTML.
         
         Returns:
             Lista de diccionarios con información de cada vehículo
@@ -243,94 +375,77 @@ class InteractiveFasecoldaSelector:
         results = []
         
         try:
-            # Buscar elementos que contengan los códigos CF y CH
-            cf_elements = await self.page.query_selector_all('text=CF:')
+            # Esperar a que aparezcan las tarjetas de vehículos
+            await asyncio.sleep(1)
             
-            for i, cf_element in enumerate(cf_elements):
+            # Buscar todas las tarjetas de vehículos
+            vehicle_cards = await self.page.query_selector_all(self.selectors['vehicle_card'])
+            
+            if not vehicle_cards:
+                self.logger.debug("No se encontraron tarjetas de vehículos")
+                return []
+            
+            self.logger.debug(f"Encontradas {len(vehicle_cards)} tarjetas de vehículos")
+            
+            # Extraer información de cada tarjeta
+            for idx, card in enumerate(vehicle_cards, 1):
                 try:
-                    # Obtener el contenedor padre del resultado
-                    parent = await cf_element.locator('xpath=ancestor::div[contains(@class, "car-item") or contains(@class, "col-")]').first.element_handle()
-                    if not parent:
-                        # Intentar obtener un contenedor más amplio
-                        parent = await cf_element.locator('xpath=ancestor::div[3]').first.element_handle()
-                    
-                    if parent:
-                        # Extraer información del resultado
-                        result_info = await self._extract_vehicle_info_from_element(parent, i + 1)
-                        if result_info:
-                            results.append(result_info)
-                
+                    result_info = await self._extract_vehicle_info_from_card(card, idx)
+                    if result_info:
+                        results.append(result_info)
                 except Exception as e:
-                    self.logger.debug(f"Error extrayendo información del elemento {i}: {e}")
+                    self.logger.debug(f"Error extrayendo info de tarjeta {idx}: {e}")
                     continue
             
-            # Si no se encontraron resultados con el método anterior, intentar método alternativo
-            if not results:
-                results = await self._extract_results_alternative_method()
-            
-            self.logger.info(f"📋 Se encontraron {len(results)} resultados")
             return results
             
         except Exception as e:
             self.logger.error(f"❌ Error extrayendo resultados: {e}")
             return []
     
-    async def _extract_vehicle_info_from_element(self, element, index: int) -> Optional[Dict[str, str]]:
+    async def _extract_vehicle_info_from_card(self, card_element, index: int) -> Optional[Dict[str, str]]:
         """
-        Extrae información de un elemento específico de vehículo.
+        Extrae información de una tarjeta de vehículo de la nueva página.
         
         Args:
-            element: Elemento DOM del vehículo
+            card_element: Elemento DOM de la tarjeta del vehículo
             index: Índice del vehículo
             
         Returns:
             Dict con información del vehículo
         """
         try:
-            # Obtener texto completo del elemento
-            text_content = await element.text_content()
-            
-            if not text_content:
-                return None
-            
-            # Extraer códigos CF y CH usando expresiones regulares
             import re
             
-            cf_match = re.search(r'CF:\s*(\d+)', text_content)
-            ch_match = re.search(r'CH:\s*(\d+)', text_content)
+            # Extraer el nombre del vehículo
+            name_element = await card_element.query_selector(self.selectors['vehicle_name'])
+            vehicle_name = await name_element.text_content() if name_element else f"Vehículo {index}"
+            vehicle_name = vehicle_name.strip()
+            
+            # Extraer códigos CF y CH
+            codes_element = await card_element.query_selector(self.selectors['vehicle_codes'])
+            if not codes_element:
+                return None
+            
+            codes_text = await codes_element.text_content()
+            codes_text = codes_text.strip()
+            
+            # Extraer CF y CH con regex
+            # Formato esperado: "CF - 03033048 CH - 03001135"
+            cf_match = re.search(r'CF\s*-\s*(\d+)', codes_text)
+            ch_match = re.search(r'CH\s*-\s*(\d+)', codes_text)
             
             if not cf_match:
+                self.logger.debug(f"No se encontró código CF en: {codes_text}")
                 return None
             
             cf_code = cf_match.group(1)
             ch_code = ch_match.group(1) if ch_match else cf_code
             
-            # Extraer nombre del vehículo y precio
-            lines = text_content.split('\n')
-            vehicle_name = ''
-            price = ''
-            
-            for line in lines:
-                line = line.strip()
-                if 'MAZDA' in line.upper() and not vehicle_name:
-                    # Buscar líneas que contengan información del vehículo
-                    for i, l in enumerate(lines):
-                        if 'MAZDA' in l.upper():
-                            # Combinar líneas para obtener el nombre completo
-                            name_parts = []
-                            for j in range(i, min(i + 4, len(lines))):
-                                part = lines[j].strip()
-                                if part and not part.startswith('CF:') and not part.startswith('CH:') and '$' not in part:
-                                    if any(keyword in part.upper() for keyword in ['MAZDA', 'TOURING', 'GRAND', 'SIGNATURE', 'AT', 'CC', '4X4']):
-                                        name_parts.append(part)
-                            vehicle_name = ' '.join(name_parts[:3])  # Tomar las primeras 3 partes más relevantes
-                            break
-                
-                if '$' in line and not price:
-                    price = line.strip()
-            
-            if not vehicle_name:
-                vehicle_name = f"MAZDA CX50 Opción {index}"
+            # Extraer precio
+            price_element = await card_element.query_selector(self.selectors['vehicle_price'])
+            price = await price_element.text_content() if price_element else "Precio no disponible"
+            price = price.strip()
             
             return {
                 'cf_code': cf_code,
@@ -341,103 +456,10 @@ class InteractiveFasecoldaSelector:
             }
             
         except Exception as e:
-            self.logger.debug(f"Error extrayendo info del elemento: {e}")
+            self.logger.debug(f"Error extrayendo info de tarjeta {index}: {e}")
             return None
     
-    async def _extract_results_alternative_method(self) -> List[Dict[str, str]]:
-        """
-        Método alternativo para extraer resultados usando JavaScript.
-        
-        Returns:
-            Lista de diccionarios con información de vehículos
-        """
-        try:
-            # Usar JavaScript para extraer la información
-            results_data = await self.page.evaluate("""
-                () => {
-                    const results = [];
-                    
-                    // Buscar todos los elementos que contienen "CF:"
-                    const cfElements = Array.from(document.querySelectorAll('*')).filter(el => 
-                        el.textContent && el.textContent.includes('CF:')
-                    );
-                    
-                    cfElements.forEach((el, index) => {
-                        const text = el.textContent;
-                        
-                        // Extraer códigos CF y CH
-                        const cfMatch = text.match(/CF:\\s*(\\d+)/);
-                        const chMatch = text.match(/CH:\\s*(\\d+)/);
-                        
-                        if (cfMatch) {
-                            const cfCode = cfMatch[1];
-                            const chCode = chMatch ? chMatch[1] : cfCode;
-                            
-                            // Buscar el nombre del vehículo en el elemento o elementos cercanos
-                            let vehicleName = 'MAZDA CX50 Opción ' + (index + 1);
-                            let price = '';
-                            
-                            // Buscar en el elemento padre
-                            const parent = el.closest('div');
-                            if (parent) {
-                                const parentText = parent.textContent;
-                                
-                                // Extraer precio
-                                const priceMatch = parentText.match(/\\$[\\d,\\.]+/);
-                                if (priceMatch) {
-                                    price = priceMatch[0];
-                                }
-                                
-                                // Extraer nombre del vehículo
-                                const lines = parentText.split('\\n').map(l => l.trim()).filter(l => l);
-                                for (let i = 0; i < lines.length; i++) {
-                                    const line = lines[i];
-                                    if (line.includes('MAZDA') || line.includes('TOURING') || line.includes('GRAND')) {
-                                        const nameParts = [];
-                                        for (let j = i; j < Math.min(i + 3, lines.length); j++) {
-                                            const part = lines[j];
-                                            if (part && !part.startsWith('CF:') && !part.startsWith('CH:') && !part.includes('$')) {
-                                                if (/MAZDA|TOURING|GRAND|SIGNATURE|AT|CC|4X4/i.test(part)) {
-                                                    nameParts.push(part);
-                                                }
-                                            }
-                                        }
-                                        if (nameParts.length > 0) {
-                                            vehicleName = nameParts.join(' ');
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
-                            
-                            results.push({
-                                cf_code: cfCode,
-                                ch_code: chCode,
-                                name: vehicleName,
-                                price: price,
-                                index: index + 1
-                            });
-                        }
-                    });
-                    
-                    return results;
-                }
-            """)
-            
-            # Filtrar duplicados basados en CF code
-            unique_results = []
-            seen_cf_codes = set()
-            
-            for result in results_data:
-                if result['cf_code'] not in seen_cf_codes:
-                    seen_cf_codes.add(result['cf_code'])
-                    unique_results.append(result)
-            
-            return unique_results
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error en método alternativo: {e}")
-            return []
+
     
     async def _show_options_and_get_selection(self, results: List[Dict[str, str]]) -> Optional[Dict[str, str]]:
         """
@@ -450,10 +472,10 @@ class InteractiveFasecoldaSelector:
             Dict con códigos CF y CH seleccionados
         """
         try:
-            print("\n" + "="*60)
+            print("\n" + "="*80)
             print("🚗 SELECCIÓN DE VEHÍCULO FASECOLDA")
-            print("="*60)
-            print("Se encontraron múltiples opciones. Por favor, seleccione una:")
+            print("="*80)
+            print(f"Se encontraron {len(results)} opciones. Por favor, seleccione una:")
             print()
             
             # Mostrar opciones
@@ -463,15 +485,17 @@ class InteractiveFasecoldaSelector:
                 cf_code = result.get('cf_code', 'N/A')
                 ch_code = result.get('ch_code', 'N/A')
                 
-                print(f"[{i}] {name}")
-                print(f"    💰 Valor: {price}")
-                print(f"    🔢 CF: {cf_code} | CH: {ch_code}")
+                print(f"[{i:2d}] {name}")
+                print(f"      💰 Valor: {price}")
+                print(f"      🔢 CF: {cf_code} | CH: {ch_code}")
                 print()
+            
+            print("="*80)
             
             # Obtener selección del usuario
             while True:
                 try:
-                    print(f"👆 Seleccione una opción (1-{len(results)}) o 'q' para cancelar: ", end="", flush=True)
+                    print(f"\n👆 Seleccione una opción (1-{len(results)}) o 'q' para cancelar: ", end="", flush=True)
                     selection = input().strip().lower()
                     
                     if selection == 'q':
@@ -482,7 +506,9 @@ class InteractiveFasecoldaSelector:
                     if 0 <= index < len(results):
                         selected = results[index]
                         print(f"\n✅ Seleccionado: {selected.get('name', 'Opción')}")
-                        print(f"🔢 Códigos - CF: {selected['cf_code']}, CH: {selected['ch_code']}")
+                        print(f"   � Valor: {selected.get('price', 'N/A')}")
+                        print(f"   🔢 CF: {selected['cf_code']} | CH: {selected['ch_code']}")
+                        print()
                         return {
                             'cf_code': selected['cf_code'],
                             'ch_code': selected['ch_code']

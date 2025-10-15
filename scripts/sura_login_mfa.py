@@ -34,6 +34,9 @@ class SuraMFAWindow:
         self.root.geometry("400x200")
         self.root.resizable(False, False)
         
+        # Mantener ventana al frente
+        self.root.attributes("-topmost", True)
+        
         # Centrar ventana
         self.center_window()
         

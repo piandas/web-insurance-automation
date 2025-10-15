@@ -1320,9 +1320,9 @@ class FasecoldaPage(BasePage):
             if ClientConfig.VEHICLE_STATE == 'Usado':
                 vehicle_steps = [
                     (self._select_dropdown_option, ['service_type'], "tipo de servicio"),
-                    (self.select_limite_3040, [], "límite 3.040.000.000"),  # Paso adicional ANTES de ciudad
-                    (self.fill_city, [], "ciudad"),
-                    (self.fill_valor_asegurado, [], "valor asegurado"),  # Nuevo paso
+                    (self.fill_city, [], "ciudad"),  # CIUDAD PRIMERO en usados
+                    (self.fill_valor_asegurado, [], "valor asegurado"),  # Valor asegurado después de ciudad
+                    (self.select_limite_3040, [], "límite 3.040.000.000"),  # Límite después de valor asegurado
                     # No fill_plate ni select_zero_kilometers aquí
                     (self.trigger_quote_calculation, [], "cálculo de cotización")
                 ]

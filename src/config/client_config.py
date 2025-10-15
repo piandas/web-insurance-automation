@@ -181,8 +181,8 @@ class ClientConfig:
     # Configuración de login para Sura (tipo de documento del asesor/agente)
     SURA_LOGIN_DOCUMENT_TYPE: str = 'C'  # C = CEDULA DE CIUDADANIA para el asesor
     
-    # URLs y configuraciones técnicas
-    FASECOLDA_URL: str = 'https://www.fasecolda.com/guia-de-valores-old/'
+    # URLs y configuraciones técnicas - ACTUALIZADO A NUEVA PÁGINA (CloudFront directo)
+    FASECOLDA_URL: str = 'https://d2eqscyubtix40.cloudfront.net/'
     
     # Configuraciones específicas por aseguradora
     SURA_SPECIFIC = {
