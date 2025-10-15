@@ -1,6 +1,61 @@
 {
-  "last_updated": "2025-09-29T17:22:16.077286",
+  "last_updated": "2025-10-15T10:35:17.889736",
   "clients": [
+    {
+      "id": "20251014_164614",
+      "name": "YESSICA TOVAR",
+      "created_at": "2025-10-14T16:46:14.649440",
+      "data": {
+        "client_document_number": "1017173036",
+        "client_first_name": "YESSICA",
+        "client_second_name": "",
+        "client_first_lastname": "TOVAR",
+        "client_second_lastname": "",
+        "client_birth_date": "1989-07-18",
+        "client_gender": "F",
+        "client_city": "MEDELLIN",
+        "client_department": "ANTIOQUIA",
+        "vehicle_plate": "JBK117",
+        "vehicle_model_year": "2016",
+        "vehicle_brand": "FORD",
+        "vehicle_reference": "FIESTA",
+        "vehicle_full_reference": "FORD FIESTA",
+        "vehicle_state": "Usado",
+        "vehicle_insured_value": "",
+        "manual_cf_code": "03001138",
+        "manual_ch_code": "03032019",
+        "policy_number": "900001250624",
+        "policy_number_allianz": "23688722",
+        "selected_fondo": "EPM"
+      },
+      "updated_at": "2025-10-15T10:35:17.889733"
+    },
+    {
+      "id": "20251014_161639",
+      "name": "SERGIO AREIZA - Ejecución 2025-10-14 16:16 (Con errores)",
+      "created_at": "2025-10-14T16:16:39.380347",
+      "data": {
+        "client_document_number": "71750823",
+        "client_first_name": "SERGIO",
+        "client_second_name": "ALEXIS",
+        "client_first_lastname": "AREIZA",
+        "client_second_lastname": "LOAIZA",
+        "client_birth_date": "1974-07-06",
+        "client_gender": "M",
+        "client_city": "MEDELLIN",
+        "client_department": "ANTIOQUIA",
+        "vehicle_plate": "",
+        "vehicle_model_year": "2026",
+        "vehicle_brand": "MAZDA",
+        "vehicle_reference": "CX50 - UTILITARIO DEPORTIVO 4X4",
+        "vehicle_full_reference": "MAZDA CX-50 GRAND TOURING",
+        "vehicle_state": "Nuevo",
+        "manual_cf_code": "20900024001",
+        "manual_ch_code": "20900024001",
+        "policy_number": "040007325677",
+        "policy_number_allianz": "23541048"
+      }
+    },
     {
       "id": "20250929_171140",
       "name": "ENYI BERRIO",
@@ -22,13 +77,13 @@
         "vehicle_full_reference": "NISSAN X TRAIL",
         "vehicle_state": "Nuevo",
         "vehicle_insured_value": "169990000",
-        "manual_cf_code": "",
-        "manual_ch_code": "",
+        "manual_cf_code": "6436101",
+        "manual_ch_code": "06406159",
         "policy_number": "900001250624",
         "policy_number_allianz": "23688722",
         "selected_fondo": "EPM"
       },
-      "updated_at": "2025-09-29T17:22:16.077278"
+      "updated_at": "2025-10-14T16:21:10.966433"
     },
     {
       "id": "20250927_134703",
@@ -247,7 +302,7 @@
         "policy_number_allianz": "23541048",
         "selected_fondo": "EPM"
       },
-      "updated_at": "2025-09-17T18:08:37.371128"
+      "updated_at": "2025-10-14T16:16:31.229891"
     }
   ]
 }

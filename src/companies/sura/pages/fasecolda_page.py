@@ -301,8 +301,9 @@ class FasecoldaPage(BasePage):
             
             # Verificar configuración específica de Sura
             if not ClientConfig.should_use_fasecolda_for_company('sura'):
-                self.logger.info("⏭️ Búsqueda automática de Fasecolda deshabilitada para Sura")
-                return None
+                manual_codes = ClientConfig.get_manual_fasecolda_codes()
+                self.logger.info(f"⏭️ Búsqueda automática de Fasecolda deshabilitada para Sura - usando códigos manuales - CF: {manual_codes['cf_code']}, CH: {manual_codes['ch_code']}")
+                return manual_codes
             
             if ClientConfig.VEHICLE_STATE != 'Nuevo':
                 self.logger.info(f"⏭️ Vehículo '{ClientConfig.VEHICLE_STATE}' - no requiere código Fasecolda")
@@ -316,12 +317,16 @@ class FasecoldaPage(BasePage):
                 self.logger.info(f"✅ Códigos Fasecolda obtenidos del extractor global - CF: {codes['cf_code']}{ch_info}")
                 return codes
             else:
-                self.logger.warning("⚠️ No se pudieron obtener códigos Fasecolda del extractor global")
-                return None
+                # Fallback: usar códigos manuales cuando la búsqueda automática falla
+                manual_codes = ClientConfig.get_manual_fasecolda_codes()
+                self.logger.warning(f"⚠️ No se pudieron obtener códigos Fasecolda del extractor global - usando códigos manuales como fallback - CF: {manual_codes['cf_code']}, CH: {manual_codes['ch_code']}")
+                return manual_codes
                 
         except Exception as e:
-            self.logger.error(f"❌ Error obteniendo códigos Fasecolda: {e}")
-            return None
+            # Fallback: usar códigos manuales cuando hay errores
+            manual_codes = ClientConfig.get_manual_fasecolda_codes()
+            self.logger.error(f"❌ Error obteniendo códigos Fasecolda: {e} - usando códigos manuales como fallback - CF: {manual_codes['cf_code']}, CH: {manual_codes['ch_code']}")
+            return manual_codes
 
     async def fill_fasecolda_code(self, cf_code: str) -> bool:
         """Llena el campo del código Fasecolda buscando dinámicamente por etiqueta."""

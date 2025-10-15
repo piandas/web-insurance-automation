@@ -177,7 +177,31 @@ class QuotePage(BasePage):
             ocupacion_esperada = ClientConfig.CLIENT_OCCUPATION
             self.logger.info(f"📋 Ocupación esperada desde config: {ocupacion_esperada}")
             
-            # Buscar el elemento específico de ocupación con placeholder
+            # Primero verificar si ya hay una ocupación seleccionada en cualquier mat-select
+            all_selects = await self.page.locator("mat-select").all()
+            
+            for mat_select in all_selects:
+                try:
+                    # Buscar el valor seleccionado dentro del mat-select
+                    value_element = mat_select.locator(".mat-select-value-text span")
+                    if await value_element.count() > 0:
+                        current_value = await value_element.first.text_content()
+                        if current_value and current_value.strip() and current_value.strip() != "":
+                            # Verificar si este mat-select parece ser el de ocupación
+                            # Buscar elementos relacionados que indiquen que es ocupación
+                            parent_container = mat_select.locator("..")
+                            container_text = await parent_container.text_content() or ""
+                            
+                            if "Ocupación" in container_text or "ocupación" in container_text:
+                                self.logger.info(f"✅ Ocupación ya seleccionada: '{current_value.strip()}'. Continuando sin modificar...")
+                                return True
+                except Exception as e:
+                    continue
+            
+            # Si llegamos aquí, no hay ocupación seleccionada, intentar seleccionar
+            self.logger.info("👔 No hay ocupación seleccionada, intentando seleccionar desde config...")
+            
+            # Buscar el elemento específico de ocupación
             ocupacion_selectors = [
                 "mat-select:has(span:text('Ocupación *'))",
                 "mat-select .mat-select-placeholder:text('Ocupación *')",
@@ -201,14 +225,8 @@ class QuotePage(BasePage):
                     continue
             
             if not ocupacion_element:
-                self.logger.error("❌ No se encontró el elemento de ocupación")
-                return False
-            
-            # Verificar si ya está seleccionada
-            current_text = await ocupacion_element.text_content()
-            if ocupacion_esperada in current_text:
-                self.logger.info(f"✅ Ocupación ya seleccionada: {ocupacion_esperada}")
-                return True
+                self.logger.warning("⚠️ No se encontró el elemento de ocupación para seleccionar. Puede que ya esté seleccionada.")
+                return True  # Continuar en lugar de fallar
             
             # Usar función optimizada de la clase base para seleccionar
             return await self.select_from_material_dropdown(
