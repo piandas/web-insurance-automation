@@ -90,7 +90,7 @@ MCP/
 ### 1. Dependencias
 ```bash
 # Instalar dependencias
-pip install -r requirements.txt
+pip install -r Varios/requirements.txt
 
 # Instalar navegadores de Playwright
 playwright install
