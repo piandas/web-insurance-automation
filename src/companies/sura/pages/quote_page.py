@@ -177,29 +177,60 @@ class QuotePage(BasePage):
             ocupacion_esperada = ClientConfig.CLIENT_OCCUPATION
             self.logger.info(f"📋 Ocupación esperada desde config: {ocupacion_esperada}")
             
-            # Primero verificar si ya hay una ocupación seleccionada en cualquier mat-select
-            all_selects = await self.page.locator("mat-select").all()
+            # Buscar específicamente el mat-select de ocupación
+            # Primero intentar encontrarlo por placeholder o aria-label
+            ocupacion_select = None
             
-            for mat_select in all_selects:
+            # Estrategia 1: Buscar por aria-label
+            try:
+                ocupacion_select = await self.page.locator("mat-select[aria-label*='Ocupación']").first.element_handle()
+                if ocupacion_select:
+                    self.logger.info("✅ mat-select de ocupación encontrado por aria-label")
+            except:
+                pass
+            
+            # Estrategia 2: Buscar por placeholder
+            if not ocupacion_select:
                 try:
-                    # Buscar el valor seleccionado dentro del mat-select
-                    value_element = mat_select.locator(".mat-select-value-text span")
-                    if await value_element.count() > 0:
-                        current_value = await value_element.first.text_content()
-                        if current_value and current_value.strip() and current_value.strip() != "":
-                            # Verificar si este mat-select parece ser el de ocupación
-                            # Buscar elementos relacionados que indiquen que es ocupación
-                            parent_container = mat_select.locator("..")
-                            container_text = await parent_container.text_content() or ""
-                            
-                            if "Ocupación" in container_text or "ocupación" in container_text:
-                                self.logger.info(f"✅ Ocupación ya seleccionada: '{current_value.strip()}'. Continuando sin modificar...")
-                                return True
-                except Exception as e:
-                    continue
+                    ocupacion_select = await self.page.locator("mat-select[ng-reflect-placeholder*='Ocupación']").first.element_handle()
+                    if ocupacion_select:
+                        self.logger.info("✅ mat-select de ocupación encontrado por ng-reflect-placeholder")
+                except:
+                    pass
             
-            # Si llegamos aquí, no hay ocupación seleccionada, intentar seleccionar
-            self.logger.info("👔 No hay ocupación seleccionada, intentando seleccionar desde config...")
+            if not ocupacion_select:
+                self.logger.warning("⚠️ No se encontró el mat-select de ocupación")
+                return False
+            
+            # Verificar si el mat-select está vacío o tiene un valor
+            # Comprobar la clase mat-empty o mat-form-field-empty
+            ocupacion_locator = self.page.locator("mat-select[aria-label*='Ocupación']").first
+            
+            # Verificar si tiene placeholder visible (indica que está vacío)
+            has_placeholder = await ocupacion_locator.locator(".mat-select-placeholder").count() > 0
+            
+            # Verificar si tiene valor seleccionado
+            has_value = await ocupacion_locator.locator(".mat-select-value-text span:not(.mat-select-placeholder)").count() > 0
+            
+            if has_value and not has_placeholder:
+                # Hay un valor seleccionado, verificar si es el correcto
+                try:
+                    current_value = await ocupacion_locator.locator(".mat-select-value-text span").first.text_content()
+                    if current_value and current_value.strip():
+                        current_value_clean = current_value.strip().upper()
+                        ocupacion_esperada_clean = ocupacion_esperada.strip().upper()
+                        
+                        if current_value_clean == ocupacion_esperada_clean:
+                            self.logger.info(f"✅ Ocupación correcta ya seleccionada: '{current_value.strip()}'")
+                            return True
+                        else:
+                            self.logger.warning(f"⚠️ Ocupación incorrecta seleccionada: '{current_value.strip()}' (esperada: '{ocupacion_esperada}'). Reseleccionando...")
+                except Exception as e:
+                    self.logger.debug(f"Error verificando valor actual: {e}")
+            else:
+                self.logger.info("👔 Campo de ocupación está vacío, procediendo a seleccionar...")
+            
+            # Si llegamos aquí, necesitamos seleccionar la ocupación
             
             # Buscar el elemento específico de ocupación
             ocupacion_selectors = [
