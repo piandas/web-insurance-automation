@@ -119,13 +119,13 @@ class FormulasConfig:
                     "Quindio, Caldas y Risaralda": {
                         "0_1": 3.70, "2_6": 3.91, "7_10": 4.81, "11_15": 5.92, "16_30": 5.92
                     },
-                    "Tolima, Nariño, Meta, Boyacá y Cauca": {
+                    "Nariño, Meta, Boyacá y Cauca": {
                         "0_1": 3.18, "2_6": 3.36, "7_10": 4.14, "11_15": 5.09, "16_30": 5.09
                     },
                     "Córdoba, Cesar, Bolívar y Atlántico": {
                         "0_1": 3.39, "2_6": 3.58, "7_10": 4.41, "11_15": 5.42, "16_30": 5.42
                     },
-                    "Huila, Santander y Norte de Santander": {
+                    "Tolima, Huila, Santander y Norte de Santander": {
                         "0_1": 3.29, "2_6": 3.47, "7_10": 4.27, "11_15": 5.26, "16_30": 5.26
                     }
                 },
@@ -373,11 +373,10 @@ class FormulasConfig:
                 'QUINDIO': 'Quindio, Caldas y Risaralda',
                 'CALDAS': 'Quindio, Caldas y Risaralda',
                 'RISARALDA': 'Quindio, Caldas y Risaralda',
-                'TOLIMA': 'Tolima, Nariño, Meta, Boyacá y Cauca',
-                'NARIÑO': 'Tolima, Nariño, Meta, Boyacá y Cauca',
-                'META': 'Tolima, Nariño, Meta, Boyacá y Cauca',
-                'BOYACA': 'Tolima, Nariño, Meta, Boyacá y Cauca',
-                'CAUCA': 'Tolima, Nariño, Meta, Boyacá y Cauca',
+                'NARIÑO': 'Nariño, Meta, Boyacá y Cauca',
+                'META': 'Nariño, Meta, Boyacá y Cauca',
+                'BOYACA': 'Nariño, Meta, Boyacá y Cauca',
+                'CAUCA': 'Nariño, Meta, Boyacá y Cauca',
                 'CORDOBA': 'Córdoba, Cesar, Bolívar y Atlántico',
                 'CÓRDOBA': 'Córdoba, Cesar, Bolívar y Atlántico',
                 'CESAR': 'Córdoba, Cesar, Bolívar y Atlántico',
@@ -385,9 +384,10 @@ class FormulasConfig:
                 'BOLÍVAR': 'Córdoba, Cesar, Bolívar y Atlántico',
                 'ATLANTICO': 'Córdoba, Cesar, Bolívar y Atlántico',
                 'ATLÁNTICO': 'Córdoba, Cesar, Bolívar y Atlántico',
-                'HUILA': 'Huila, Santander y Norte de Santander',
-                'SANTANDER': 'Huila, Santander y Norte de Santander',
-                'NORTE DE SANTANDER': 'Huila, Santander y Norte de Santander'
+                'TOLIMA': 'Tolima, Huila, Santander y Norte de Santander',
+                'HUILA': 'Tolima, Huila, Santander y Norte de Santander',
+                'SANTANDER': 'Tolima, Huila, Santander y Norte de Santander',
+                'NORTE DE SANTANDER': 'Tolima, Huila, Santander y Norte de Santander'
             }
             
             # Buscar en el mapeo

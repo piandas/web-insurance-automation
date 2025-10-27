@@ -181,9 +181,9 @@ Rangos: 0-1 años • 2-6 años • 7-10 años • 11-15 años • 16-30 años
             "Antioquia", 
             "Valle",
             "Quindio, Caldas y Risaralda",
-            "Tolima, Nariño, Meta, Boyacá y Cauca",
+            "Nariño, Meta, Boyacá y Cauca",
             "Córdoba, Cesar, Bolívar y Atlántico",
-            "Huila, Santander y Norte de Santander"
+            "Tolima, Huila, Santander y Norte de Santander"
         ]
         
         # Rangos de antigüedad
